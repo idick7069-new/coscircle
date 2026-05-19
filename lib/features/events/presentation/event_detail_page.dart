@@ -232,7 +232,7 @@ String _statusText(EventStatus status) {
   };
 }
 
-class _ParticipantsSection extends ConsumerWidget {
+class _ParticipantsSection extends ConsumerStatefulWidget {
   const _ParticipantsSection({
     required this.eventId,
     required this.participants,
@@ -242,9 +242,29 @@ class _ParticipantsSection extends ConsumerWidget {
   final AsyncValue<List<EventParticipant>> participants;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return participants.when(
+  ConsumerState<_ParticipantsSection> createState() =>
+      _ParticipantsSectionState();
+}
+
+class _ParticipantsSectionState extends ConsumerState<_ParticipantsSection> {
+  final _searchController = TextEditingController();
+  String _roleFilter = 'all';
+  String? _tagFilter;
+  bool _openOnly = false;
+  bool _followedOnly = false;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.participants.when(
       data: (items) {
+        final filtered = _applyFilters(items);
+        final tags = _availableTags(items);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -260,6 +280,97 @@ class _ParticipantsSection extends ConsumerWidget {
                   const Chip(label: Text('已有關注者參加')),
               ],
             ),
+            if (items.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _searchController,
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search),
+                  labelText: '搜尋暱稱、作品或角色',
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  ChoiceChip(
+                    label: const Text('全部'),
+                    selected: _roleFilter == 'all',
+                    onSelected: (_) => setState(() => _roleFilter = 'all'),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Coser'),
+                    selected: _roleFilter == 'coser',
+                    onSelected: (_) => setState(() => _roleFilter = 'coser'),
+                  ),
+                  ChoiceChip(
+                    label: const Text('攝影'),
+                    selected: _roleFilter == 'photographer',
+                    onSelected: (_) =>
+                        setState(() => _roleFilter = 'photographer'),
+                  ),
+                  ChoiceChip(
+                    label: const Text('本體'),
+                    selected: _roleFilter == 'self',
+                    onSelected: (_) => setState(() => _roleFilter = 'self'),
+                  ),
+                  FilterChip(
+                    avatar: Icon(
+                      _openOnly
+                          ? Icons.check_box
+                          : Icons.check_box_outline_blank,
+                      size: 18,
+                    ),
+                    label: const Text('只看可互動'),
+                    selected: _openOnly,
+                    onSelected: (value) => setState(() => _openOnly = value),
+                  ),
+                  FilterChip(
+                    avatar: Icon(
+                      _followedOnly
+                          ? Icons.check_box
+                          : Icons.check_box_outline_blank,
+                      size: 18,
+                    ),
+                    label: const Text('只看關注'),
+                    selected: _followedOnly,
+                    onSelected: (value) =>
+                        setState(() => _followedOnly = value),
+                  ),
+                ],
+              ),
+              if (tags.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final tag in tags)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: FilterChip(
+                            label: Text(tag),
+                            selected: _tagFilter == tag,
+                            onSelected: (selected) => setState(
+                              () => _tagFilter = selected ? tag : null,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Text(
+                filtered.length == items.length
+                    ? '顯示全部 ${items.length} 人'
+                    : '符合條件 ${filtered.length} / ${items.length} 人',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
             const SizedBox(height: 12),
             if (items.isEmpty)
               const Card(
@@ -268,10 +379,25 @@ class _ParticipantsSection extends ConsumerWidget {
                   child: Text('目前還沒有人發布出席宣告'),
                 ),
               )
+            else if (filtered.isEmpty)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      const Expanded(child: Text('沒有符合條件的參加者')),
+                      TextButton(
+                        onPressed: _clearFilters,
+                        child: const Text('清除篩選'),
+                      ),
+                    ],
+                  ),
+                ),
+              )
             else
               Column(
                 children: [
-                  for (final participant in items)
+                  for (final participant in filtered)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: _ParticipantCard(
@@ -290,6 +416,47 @@ class _ParticipantsSection extends ConsumerWidget {
     );
   }
 
+  List<EventParticipant> _applyFilters(List<EventParticipant> items) {
+    final query = _searchController.text.trim().toLowerCase();
+    return items.where((participant) {
+      final matchesQuery =
+          query.isEmpty ||
+          participant.nickname.toLowerCase().contains(query) ||
+          participant.workName.toLowerCase().contains(query) ||
+          participant.characterName.toLowerCase().contains(query);
+      final matchesRole =
+          _roleFilter == 'all' || participant.role == _roleFilter;
+      final matchesTag =
+          _tagFilter == null ||
+          participant.interactionTags.contains(_tagFilter);
+      final matchesOpen = !_openOnly || participant.presenceStatus == 'open';
+      final matchesFollowed = !_followedOnly || participant.isFollowed;
+      return matchesQuery &&
+          matchesRole &&
+          matchesTag &&
+          matchesOpen &&
+          matchesFollowed;
+    }).toList();
+  }
+
+  List<String> _availableTags(List<EventParticipant> items) {
+    final tags = <String>{};
+    for (final item in items) {
+      tags.addAll(item.interactionTags);
+    }
+    return tags.toList()..sort();
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _searchController.clear();
+      _roleFilter = 'all';
+      _tagFilter = null;
+      _openOnly = false;
+      _followedOnly = false;
+    });
+  }
+
   Future<void> _showParticipantSheet(
     BuildContext context,
     WidgetRef ref,
@@ -297,13 +464,17 @@ class _ParticipantsSection extends ConsumerWidget {
   ) async {
     await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       builder: (context) {
+        final mediaQuery = MediaQuery.of(context);
         return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: mediaQuery.size.height * 0.86,
+            ),
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.all(16),
               children: [
                 Row(
                   children: [
@@ -393,7 +564,7 @@ class _ParticipantsSection extends ConsumerWidget {
                                       .followUser(participant.userId);
                                 }
                                 ref.invalidate(
-                                  eventParticipantsProvider(eventId),
+                                  eventParticipantsProvider(widget.eventId),
                                 );
                                 if (context.mounted) Navigator.pop(context);
                               },
@@ -493,11 +664,19 @@ class _ParticipantCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      _roleText(participant),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _roleText(participant),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _StatusPill(status: participant.presenceStatus),
+                      ],
                     ),
                     if (participant.availableTime.isNotEmpty) ...[
                       const SizedBox(height: 4),
@@ -542,6 +721,45 @@ class _ParticipantCard extends StatelessWidget {
       ].join(' / '),
       'self' => '本體',
       _ => '參加者',
+    };
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final isOpen = status == 'open';
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: isOpen
+            ? colors.primaryContainer
+            : colors.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        child: Text(
+          _statusText(status),
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: isOpen ? colors.onPrimaryContainer : colors.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _statusText(String status) {
+    return switch (status) {
+      'moving' => '移動中',
+      'resting' => '休息',
+      'quiet' => '暫不互動',
+      'left' => '離場',
+      _ => '可互動',
     };
   }
 }
