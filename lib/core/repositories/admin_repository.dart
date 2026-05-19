@@ -117,17 +117,24 @@ class AdminRepository {
 
   String _describeError(Object error) {
     final base = 'API=${_apiClient.baseUrl}';
-    if (error is TimeoutException) {
-      return '連線逾時，請確認 backend 是否啟動。$base';
-    }
-    if (error is DioException) {
-      final statusCode = error.response?.statusCode;
-      if (statusCode != null) {
-        return 'HTTP $statusCode。$base';
+    try {
+      if (error is TimeoutException) {
+        return '連線逾時，請確認 backend 是否啟動。$base';
       }
-      final message = error.message ?? error.type.name;
-      return '$message。$base';
+      if (error is DioException) {
+        final statusCode = error.response?.statusCode;
+        if (statusCode != null) {
+          return 'HTTP $statusCode。$base';
+        }
+        final detail = error.error?.toString();
+        if (detail != null && detail.isNotEmpty) {
+          return '${error.type.name}：$detail。$base';
+        }
+        return '${error.type.name}。$base';
+      }
+      return '$error。$base';
+    } catch (_) {
+      return '未知錯誤。$base';
     }
-    return '$error。$base';
   }
 }

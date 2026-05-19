@@ -31,6 +31,7 @@ class AdminStats {
 }
 
 int _asInt(Object? value) {
+  if (value == null) return 0;
   if (value is int) return value;
-  return int.parse(value.toString());
+  return int.tryParse(value.toString()) ?? 0;
 }
