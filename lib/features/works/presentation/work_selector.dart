@@ -24,6 +24,7 @@ class _WorkMultiSelectorState extends ConsumerState<WorkMultiSelector> {
   final _controller = TextEditingController();
   List<WorkTag> _suggestions = const [];
   bool _loading = false;
+  String? _errorText;
 
   @override
   void dispose() {
@@ -81,10 +82,22 @@ class _WorkMultiSelectorState extends ConsumerState<WorkMultiSelector> {
             ],
           ),
         ],
+        if (_errorText != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            _errorText!,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.error,
+              fontSize: 12,
+            ),
+          ),
+        ],
         if (_controller.text.trim().isNotEmpty &&
             !_suggestions.any((work) => work.name == _controller.text.trim()))
           TextButton.icon(
-            onPressed: () => _createAndSelect(_controller.text),
+            onPressed: _loading
+                ? null
+                : () => _createAndSelect(_controller.text),
             icon: const Icon(Icons.add),
             label: Text('新增「${_controller.text.trim()}」'),
           ),
@@ -95,10 +108,16 @@ class _WorkMultiSelectorState extends ConsumerState<WorkMultiSelector> {
   Future<void> _search(String query) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) {
-      setState(() => _suggestions = const []);
+      setState(() {
+        _suggestions = const [];
+        _errorText = null;
+      });
       return;
     }
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _errorText = null;
+    });
     try {
       final results = await ref
           .read(workRepositoryProvider)
@@ -109,6 +128,12 @@ class _WorkMultiSelectorState extends ConsumerState<WorkMultiSelector> {
             .where((work) => !widget.selected.contains(work))
             .toList();
       });
+    } catch (_) {
+      if (!mounted || _controller.text.trim() != trimmed) return;
+      setState(() {
+        _suggestions = const [];
+        _errorText = '作品搜尋失敗，請稍後再試';
+      });
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -117,8 +142,19 @@ class _WorkMultiSelectorState extends ConsumerState<WorkMultiSelector> {
   Future<void> _createAndSelect(String value) async {
     final name = value.trim();
     if (name.isEmpty) return;
-    final work = await ref.read(workRepositoryProvider).createWork(name);
-    _select(work);
+    setState(() {
+      _loading = true;
+      _errorText = null;
+    });
+    try {
+      final work = await ref.read(workRepositoryProvider).createWork(name);
+      _select(work);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _errorText = '作品新增失敗，請稍後再試');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   void _select(WorkTag work) {
@@ -128,6 +164,7 @@ class _WorkMultiSelectorState extends ConsumerState<WorkMultiSelector> {
     setState(() {
       _controller.clear();
       _suggestions = const [];
+      _errorText = null;
     });
   }
 }
@@ -152,6 +189,7 @@ class _WorkSingleSelectorState extends ConsumerState<WorkSingleSelector> {
   final _controller = TextEditingController();
   List<WorkTag> _suggestions = const [];
   bool _loading = false;
+  String? _errorText;
 
   @override
   void dispose() {
@@ -201,10 +239,22 @@ class _WorkSingleSelectorState extends ConsumerState<WorkSingleSelector> {
             ],
           ),
         ],
+        if (_errorText != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            _errorText!,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.error,
+              fontSize: 12,
+            ),
+          ),
+        ],
         if (_controller.text.trim().isNotEmpty &&
             !_suggestions.any((work) => work.name == _controller.text.trim()))
           TextButton.icon(
-            onPressed: () => _createAndSelect(_controller.text),
+            onPressed: _loading
+                ? null
+                : () => _createAndSelect(_controller.text),
             icon: const Icon(Icons.add),
             label: Text('新增「${_controller.text.trim()}」'),
           ),
@@ -215,16 +265,28 @@ class _WorkSingleSelectorState extends ConsumerState<WorkSingleSelector> {
   Future<void> _search(String query) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) {
-      setState(() => _suggestions = const []);
+      setState(() {
+        _suggestions = const [];
+        _errorText = null;
+      });
       return;
     }
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _errorText = null;
+    });
     try {
       final results = await ref
           .read(workRepositoryProvider)
           .searchWorks(trimmed);
       if (!mounted || _controller.text.trim() != trimmed) return;
       setState(() => _suggestions = results);
+    } catch (_) {
+      if (!mounted || _controller.text.trim() != trimmed) return;
+      setState(() {
+        _suggestions = const [];
+        _errorText = '作品搜尋失敗，請稍後再試';
+      });
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -233,8 +295,19 @@ class _WorkSingleSelectorState extends ConsumerState<WorkSingleSelector> {
   Future<void> _createAndSelect(String value) async {
     final name = value.trim();
     if (name.isEmpty) return;
-    final work = await ref.read(workRepositoryProvider).createWork(name);
-    _select(work);
+    setState(() {
+      _loading = true;
+      _errorText = null;
+    });
+    try {
+      final work = await ref.read(workRepositoryProvider).createWork(name);
+      _select(work);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _errorText = '作品新增失敗，請稍後再試');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   void _select(WorkTag work) {
@@ -242,6 +315,7 @@ class _WorkSingleSelectorState extends ConsumerState<WorkSingleSelector> {
     setState(() {
       _controller.clear();
       _suggestions = const [];
+      _errorText = null;
     });
   }
 }
