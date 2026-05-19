@@ -45,7 +45,7 @@ class AdminDashboardPage extends ConsumerWidget {
           ),
           IconButton(
             tooltip: '重新整理',
-            onPressed: () => _refresh(ref),
+            onPressed: () async => _refresh(ref),
             icon: const Icon(Icons.refresh),
           ),
         ],
@@ -57,7 +57,7 @@ class AdminDashboardPage extends ConsumerWidget {
       ),
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: () async => _refresh(ref),
+          onRefresh: () => _refresh(ref),
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
             children: [
@@ -65,7 +65,7 @@ class AdminDashboardPage extends ConsumerWidget {
                 data: (value) => _StatsGrid(stats: value),
                 error: (error, stack) =>
                     _ErrorPanel(message: '資料庫狀態載入失敗：$error'),
-                loading: () => const Center(child: CircularProgressIndicator()),
+                loading: () => const _LoadingPanel(message: '載入資料庫狀態...'),
               ),
               const SizedBox(height: 20),
               Text(
@@ -92,10 +92,7 @@ class AdminDashboardPage extends ConsumerWidget {
                   ),
                 ),
                 error: (error, stack) => _ErrorPanel(message: '投稿載入失敗：$error'),
-                loading: () => const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Center(child: CircularProgressIndicator()),
-                ),
+                loading: () => const _LoadingPanel(message: '載入投稿資料...'),
               ),
               const SizedBox(height: 20),
               Text(
@@ -116,10 +113,7 @@ class AdminDashboardPage extends ConsumerWidget {
                   ],
                 ),
                 error: (error, stack) => _ErrorPanel(message: '活動載入失敗：$error'),
-                loading: () => const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Center(child: CircularProgressIndicator()),
-                ),
+                loading: () => const _LoadingPanel(message: '載入活動資料...'),
               ),
             ],
           ),
@@ -133,7 +127,7 @@ class AdminDashboardPage extends ConsumerWidget {
     messenger.showSnackBar(const SnackBar(content: Text('正在同步同人誌中心活動...')));
     try {
       final count = await ref.read(adminRepositoryProvider).syncDoujinEvents();
-      _refresh(ref);
+      await _refresh(ref);
       if (!context.mounted) return;
       messenger.showSnackBar(SnackBar(content: Text('同人誌中心同步完成：$count 筆活動')));
     } catch (error) {
@@ -142,10 +136,12 @@ class AdminDashboardPage extends ConsumerWidget {
     }
   }
 
-  void _refresh(WidgetRef ref) {
-    ref.invalidate(adminStatsProvider);
-    ref.invalidate(adminEventsProvider);
-    ref.invalidate(adminSubmissionsProvider);
+  Future<void> _refresh(WidgetRef ref) async {
+    await Future.wait([
+      ref.refresh(adminStatsProvider.future),
+      ref.refresh(adminEventsProvider.future),
+      ref.refresh(adminSubmissionsProvider.future),
+    ]);
   }
 
   Future<void> _reviewSubmission(
@@ -159,7 +155,7 @@ class AdminDashboardPage extends ConsumerWidget {
     } else {
       await ref.read(adminRepositoryProvider).rejectSubmission(submission.id);
     }
-    _refresh(ref);
+    await _refresh(ref);
     if (!context.mounted) return;
     ScaffoldMessenger.of(
       context,
@@ -191,7 +187,7 @@ class AdminDashboardPage extends ConsumerWidget {
     if (confirmed != true) return;
 
     await ref.read(adminRepositoryProvider).deleteEvent(event.id);
-    _refresh(ref);
+    await _refresh(ref);
     if (!context.mounted) return;
     ScaffoldMessenger.of(
       context,
@@ -552,6 +548,31 @@ class _ErrorPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(padding: const EdgeInsets.all(16), child: Text(message)),
+    );
+  }
+}
+
+class _LoadingPanel extends StatelessWidget {
+  const _LoadingPanel({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            const SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+      ),
     );
   }
 }

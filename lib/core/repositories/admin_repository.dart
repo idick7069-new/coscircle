@@ -14,26 +14,45 @@ class AdminRepository {
   AdminRepository({required ApiClient apiClient}) : _apiClient = apiClient;
 
   final ApiClient _apiClient;
+  static const _adminTimeout = Duration(seconds: 8);
 
   Future<AdminStats> fetchStats() async {
-    final response = await _apiClient.get('/admin/stats');
-    return AdminStats.fromJson(response.data as Map<String, dynamic>);
+    try {
+      final response = await _apiClient
+          .get('/admin/stats')
+          .timeout(_adminTimeout);
+      return AdminStats.fromJson(response.data as Map<String, dynamic>);
+    } catch (error) {
+      throw Exception('後台統計載入逾時，請確認 backend 是否在 8080 執行');
+    }
   }
 
   Future<List<CosEvent>> fetchEvents() async {
-    final response = await _apiClient.get('/admin/events');
-    final rows = response.data as List<dynamic>;
-    return rows
-        .map((row) => CosEvent.fromJson(row as Map<String, dynamic>))
-        .toList();
+    try {
+      final response = await _apiClient
+          .get('/admin/events')
+          .timeout(_adminTimeout);
+      final rows = response.data as List<dynamic>;
+      return rows
+          .map((row) => CosEvent.fromJson(row as Map<String, dynamic>))
+          .toList();
+    } catch (error) {
+      throw Exception('活動資料載入失敗，請確認後端 API 與資料庫連線');
+    }
   }
 
   Future<List<EventSubmission>> fetchSubmissions() async {
-    final response = await _apiClient.get('/admin/event-submissions');
-    final rows = response.data as List<dynamic>;
-    return rows
-        .map((row) => EventSubmission.fromJson(row as Map<String, dynamic>))
-        .toList();
+    try {
+      final response = await _apiClient
+          .get('/admin/event-submissions')
+          .timeout(_adminTimeout);
+      final rows = response.data as List<dynamic>;
+      return rows
+          .map((row) => EventSubmission.fromJson(row as Map<String, dynamic>))
+          .toList();
+    } catch (error) {
+      throw Exception('投稿資料載入失敗，請確認後端 API 與資料庫連線');
+    }
   }
 
   Future<void> createEvent({
