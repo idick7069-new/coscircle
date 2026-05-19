@@ -10,7 +10,8 @@ final apiClientProvider = Provider<ApiClient>((ref) {
 
 class ApiClient {
   ApiClient({required String baseUrl})
-    : _dio = Dio(
+    : baseUrl = baseUrl.isEmpty ? _defaultBaseUrl() : baseUrl,
+      _dio = Dio(
         BaseOptions(
           baseUrl: baseUrl.isEmpty ? _defaultBaseUrl() : baseUrl,
           connectTimeout: const Duration(seconds: 10),
@@ -18,6 +19,7 @@ class ApiClient {
         ),
       );
 
+  final String baseUrl;
   final Dio _dio;
 
   Future<Response<dynamic>> get(String path, {Map<String, dynamic>? query}) {

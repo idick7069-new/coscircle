@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -16,6 +18,8 @@ class AdminRepository {
   final ApiClient _apiClient;
   static const _adminTimeout = Duration(seconds: 8);
 
+  String get apiBaseUrl => _apiClient.baseUrl;
+
   Future<AdminStats> fetchStats() async {
     try {
       final response = await _apiClient
@@ -23,7 +27,7 @@ class AdminRepository {
           .timeout(_adminTimeout);
       return AdminStats.fromJson(response.data as Map<String, dynamic>);
     } catch (error) {
-      throw Exception('後台統計載入逾時，請確認 backend 是否在 8080 執行');
+      throw Exception('後台統計載入失敗：${_describeError(error)}');
     }
   }
 
@@ -37,7 +41,7 @@ class AdminRepository {
           .map((row) => CosEvent.fromJson(row as Map<String, dynamic>))
           .toList();
     } catch (error) {
-      throw Exception('活動資料載入失敗，請確認後端 API 與資料庫連線');
+      throw Exception('活動資料載入失敗：${_describeError(error)}');
     }
   }
 
@@ -51,7 +55,7 @@ class AdminRepository {
           .map((row) => EventSubmission.fromJson(row as Map<String, dynamic>))
           .toList();
     } catch (error) {
-      throw Exception('投稿資料載入失敗，請確認後端 API 與資料庫連線');
+      throw Exception('投稿資料載入失敗：${_describeError(error)}');
     }
   }
 
@@ -109,5 +113,21 @@ class AdminRepository {
     final month = date.month.toString().padLeft(2, '0');
     final day = date.day.toString().padLeft(2, '0');
     return '${date.year}-$month-$day';
+  }
+
+  String _describeError(Object error) {
+    final base = 'API=${_apiClient.baseUrl}';
+    if (error is TimeoutException) {
+      return '連線逾時，請確認 backend 是否啟動。$base';
+    }
+    if (error is DioException) {
+      final statusCode = error.response?.statusCode;
+      if (statusCode != null) {
+        return 'HTTP $statusCode。$base';
+      }
+      final message = error.message ?? error.type.name;
+      return '$message。$base';
+    }
+    return '$error。$base';
   }
 }

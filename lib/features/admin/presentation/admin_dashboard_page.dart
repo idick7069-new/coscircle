@@ -39,6 +39,11 @@ class AdminDashboardPage extends ConsumerWidget {
         title: const Text('後台管理'),
         actions: [
           IconButton(
+            tooltip: 'API 位址',
+            onPressed: () => _showApiInfo(context, ref),
+            icon: const Icon(Icons.link),
+          ),
+          IconButton(
             tooltip: '同步同人誌中心',
             onPressed: () => _syncDoujinEvents(context, ref),
             icon: const Icon(Icons.cloud_sync_outlined),
@@ -134,6 +139,23 @@ class AdminDashboardPage extends ConsumerWidget {
       if (!context.mounted) return;
       messenger.showSnackBar(SnackBar(content: Text('同步失敗：$error')));
     }
+  }
+
+  void _showApiInfo(BuildContext context, WidgetRef ref) {
+    final apiUrl = ref.read(adminRepositoryProvider).apiBaseUrl;
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('後台 API 位址'),
+        content: Text(apiUrl),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('關閉'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _refresh(WidgetRef ref) async {
