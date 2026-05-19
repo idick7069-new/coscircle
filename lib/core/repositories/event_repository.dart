@@ -77,6 +77,9 @@ class ApiEventRepository implements EventRepository {
           'characterName': booking.characterName,
           'workId': booking.workId,
           'outfitImageUrl': booking.outfitImagePath,
+          'interactionTags': booking.interactionTags,
+          'availableTime': booking.availableTime,
+          'presenceStatus': booking.presenceStatus,
           'message': booking.message,
         },
       );
@@ -225,6 +228,9 @@ final _seedParticipants = <String, List<EventParticipant>>{
       characterName: '瑪琳',
       outfitImageUrl:
           'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?w=700',
+      interactionTags: ['認親', '拍照', '交換無料'],
+      availableTime: '13:00 - 16:00',
+      presenceStatus: 'open',
       message: '下午會在光復校區周邊出沒。',
       isFollowed: true,
     ),
@@ -232,6 +238,8 @@ final _seedParticipants = <String, List<EventParticipant>>{
       userId: 'u2',
       nickname: '阿哲',
       role: 'photographer',
+      interactionTags: ['拍照', '聊天'],
+      availableTime: '午後',
       message: '可協助合照。',
     ),
     EventParticipant(userId: 'u3', nickname: 'Rin', role: 'self', isMe: true),

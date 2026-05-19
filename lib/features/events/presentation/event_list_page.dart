@@ -249,15 +249,28 @@ class _BookingSheet extends ConsumerStatefulWidget {
 }
 
 class _BookingSheetState extends ConsumerState<_BookingSheet> {
+  static const _interactionOptions = ['認親', '拍照', '交換無料', '聊天', '一起逛', '找同作品'];
+  static const _statusOptions = [
+    ('open', '可來找我'),
+    ('moving', '移動中'),
+    ('resting', '休息中'),
+    ('quiet', '暫不互動'),
+    ('left', '已離場'),
+  ];
+
   ParticipantRole _role = ParticipantRole.coser;
   final _characterController = TextEditingController();
+  final _availableTimeController = TextEditingController();
   final _messageController = TextEditingController();
+  final Set<String> _interactionTags = {};
+  String _presenceStatus = 'open';
   String? _outfitImagePath;
   WorkTag? _selectedWork;
 
   @override
   void dispose() {
     _characterController.dispose();
+    _availableTimeController.dispose();
     _messageController.dispose();
     super.dispose();
   }
@@ -280,8 +293,13 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
             children: [
               Text(
-                event.isJoined ? '修改預訂' : '新增預訂',
+                event.isJoined ? '修改出席宣告' : '發布出席宣告',
                 style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '讓同好知道你會去、當天扮什麼、以及歡迎怎麼互動。',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 12),
               SegmentedButton<ParticipantRole>(
@@ -320,10 +338,53 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
                 ),
               ],
               const SizedBox(height: 12),
+              TextField(
+                controller: _availableTimeController,
+                decoration: const InputDecoration(
+                  labelText: '預計出沒時間',
+                  hintText: '例如 13:00 - 16:00、午後、整天',
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text('歡迎互動方式', style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final option in _interactionOptions)
+                    FilterChip(
+                      label: Text(option),
+                      selected: _interactionTags.contains(option),
+                      onSelected: (selected) {
+                        setState(() {
+                          if (selected) {
+                            _interactionTags.add(option);
+                          } else {
+                            _interactionTags.remove(option);
+                          }
+                        });
+                      },
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _presenceStatus,
+                decoration: const InputDecoration(labelText: '現場狀態'),
+                items: [
+                  for (final option in _statusOptions)
+                    DropdownMenuItem(value: option.$1, child: Text(option.$2)),
+                ],
+                onChanged: (value) {
+                  if (value != null) setState(() => _presenceStatus = value);
+                },
+              ),
+              const SizedBox(height: 12),
               OutlinedButton.icon(
                 onPressed: _pickOutfitImage,
                 icon: const Icon(Icons.image_outlined),
-                label: Text(_outfitImagePath == null ? '上傳當天預計穿著' : '已選擇當天穿著'),
+                label: Text(_outfitImagePath == null ? '上傳當天穿搭照片' : '已選擇當天穿搭'),
               ),
               if (_outfitImagePath != null) ...[
                 const SizedBox(height: 8),
@@ -337,7 +398,10 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
               const SizedBox(height: 12),
               TextField(
                 controller: _messageController,
-                decoration: const InputDecoration(labelText: '想說的話'),
+                decoration: const InputDecoration(
+                  labelText: '備註',
+                  hintText: '例如 看到我可以打招呼、社恐請先私訊',
+                ),
                 maxLines: 3,
               ),
               const SizedBox(height: 16),
@@ -353,7 +417,7 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
                           ref.invalidate(eventsProvider);
                           if (context.mounted) Navigator.pop(context);
                         },
-                        child: const Text('移除預訂'),
+                        child: const Text('取消出席'),
                       ),
                     ),
                   if (event.isJoined) const SizedBox(width: 12),
@@ -371,13 +435,17 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
                                     : null,
                                 characterName: _characterController.text,
                                 outfitImagePath: _outfitImagePath,
+                                interactionTags: _interactionTags.toList(),
+                                availableTime: _availableTimeController.text
+                                    .trim(),
+                                presenceStatus: _presenceStatus,
                                 message: _messageController.text,
                               ),
                             );
                         ref.invalidate(eventsProvider);
                         if (context.mounted) Navigator.pop(context);
                       },
-                      child: Text(event.isJoined ? '儲存修改' : '加入活動'),
+                      child: Text(event.isJoined ? '儲存出席' : '我會去'),
                     ),
                   ),
                 ],

@@ -13,6 +13,14 @@ const eventScraperTimeZone = process.env.EVENT_SCRAPER_TIME_ZONE ?? 'Asia/Taipei
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
+function encodeInteractionTags(value) {
+  if (!Array.isArray(value)) return null;
+  const tags = value
+    .map((item) => String(item).trim())
+    .filter((item) => item.length > 0);
+  return tags.length === 0 ? null : tags.join(',');
+}
+
 if (eventScraperEnabled) {
   scheduleDailyEventImport();
 }
@@ -479,14 +487,29 @@ app.post('/api/events/submissions', async (req, res, next) => {
 
 app.post('/api/events/:eventId/bookings', async (req, res, next) => {
   try {
-    const { role, workId, characterName, outfitImageUrl, message } = req.body;
+    const {
+      role,
+      workId,
+      characterName,
+      outfitImageUrl,
+      interactionTags,
+      availableTime,
+      presenceStatus,
+      message,
+    } = req.body;
     await pool.execute(
-      `INSERT INTO event_bookings (event_id, user_id, role, work_id, character_name, outfit_image_url, message)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO event_bookings (
+         event_id, user_id, role, work_id, character_name, outfit_image_url,
+         interaction_tags, available_time, presence_status, message
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE role = VALUES(role),
          work_id = VALUES(work_id),
          character_name = VALUES(character_name),
          outfit_image_url = VALUES(outfit_image_url),
+         interaction_tags = VALUES(interaction_tags),
+         available_time = VALUES(available_time),
+         presence_status = VALUES(presence_status),
          message = VALUES(message)`,
       [
         req.params.eventId,
@@ -495,6 +518,9 @@ app.post('/api/events/:eventId/bookings', async (req, res, next) => {
         workId || null,
         characterName ?? null,
         outfitImageUrl ?? null,
+        encodeInteractionTags(interactionTags),
+        availableTime ?? null,
+        presenceStatus ?? 'open',
         message ?? null,
       ]
     );
@@ -531,6 +557,9 @@ app.get('/api/events/:eventId/participants', async (req, res, next) => {
               works.name AS workName,
               event_bookings.character_name AS characterName,
               event_bookings.outfit_image_url AS outfitImageUrl,
+              event_bookings.interaction_tags AS interactionTags,
+              event_bookings.available_time AS availableTime,
+              event_bookings.presence_status AS presenceStatus,
               event_bookings.message,
               CASE WHEN users.id = ? THEN TRUE ELSE FALSE END AS isMe,
               CASE WHEN follows.followed_user_id IS NULL THEN FALSE ELSE TRUE END AS isFollowed
@@ -594,6 +623,9 @@ app.get('/api/events/:eventId/locations', async (req, res, next) => {
               works.name AS workName,
               event_bookings.character_name AS characterName,
               event_bookings.outfit_image_url AS outfitImageUrl,
+              event_bookings.interaction_tags AS interactionTags,
+              event_bookings.available_time AS availableTime,
+              event_bookings.presence_status AS presenceStatus,
               shared_locations.latitude,
               shared_locations.longitude,
               DATE_FORMAT(shared_locations.shared_at, '%Y-%m-%dT%H:%i:%s') AS sharedAt,

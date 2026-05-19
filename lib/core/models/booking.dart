@@ -7,6 +7,9 @@ class EventBooking {
     this.characterName = '',
     this.workId,
     this.outfitImagePath,
+    this.interactionTags = const [],
+    this.availableTime = '',
+    this.presenceStatus = 'open',
     this.message = '',
   });
 
@@ -15,5 +18,8 @@ class EventBooking {
   final String characterName;
   final String? workId;
   final String? outfitImagePath;
+  final List<String> interactionTags;
+  final String availableTime;
+  final String presenceStatus;
   final String message;
 }

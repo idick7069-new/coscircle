@@ -400,13 +400,28 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                           Text(
-                            '${_roleText(location)} · ${_elapsedText(location, now: now)}',
+                            '${_roleText(location)} · ${_statusText(location.presenceStatus)} · ${_elapsedText(location, now: now)}',
                           ),
                         ],
                       ),
                     ),
                   ],
                 ),
+                if (location.availableTime.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text('出沒時間：${location.availableTime}'),
+                ],
+                if (location.interactionTags.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final tag in location.interactionTags)
+                        Chip(label: Text(tag)),
+                    ],
+                  ),
+                ],
                 if (location.characterName.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Text('角色：${location.characterName}'),
@@ -449,6 +464,16 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
             : 'Coser / ${location.characterName}',
       'self' => '本體',
       _ => '參加者',
+    };
+  }
+
+  String _statusText(String status) {
+    return switch (status) {
+      'moving' => '移動中',
+      'resting' => '休息中',
+      'quiet' => '暫不互動',
+      'left' => '已離場',
+      _ => '可來找我',
     };
   }
 }

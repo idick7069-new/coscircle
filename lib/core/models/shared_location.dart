@@ -8,7 +8,11 @@ class SharedLocation {
     required this.sharedAt,
     this.avatarUrl = '',
     this.characterName = '',
+    this.workName = '',
     this.outfitImageUrl = '',
+    this.interactionTags = const [],
+    this.availableTime = '',
+    this.presenceStatus = 'open',
     this.isMe = false,
     this.isFollowed = false,
     this.isCircleMember = false,
@@ -22,7 +26,11 @@ class SharedLocation {
   final DateTime sharedAt;
   final String avatarUrl;
   final String characterName;
+  final String workName;
   final String outfitImageUrl;
+  final List<String> interactionTags;
+  final String availableTime;
+  final String presenceStatus;
   final bool isMe;
   final bool isFollowed;
   final bool isCircleMember;
@@ -37,7 +45,11 @@ class SharedLocation {
       sharedAt: DateTime.parse(json['sharedAt'].toString()),
       avatarUrl: json['avatarUrl']?.toString() ?? '',
       characterName: json['characterName']?.toString() ?? '',
+      workName: json['workName']?.toString() ?? '',
       outfitImageUrl: json['outfitImageUrl']?.toString() ?? '',
+      interactionTags: _stringList(json['interactionTags']),
+      availableTime: json['availableTime']?.toString() ?? '',
+      presenceStatus: json['presenceStatus']?.toString() ?? 'open',
       isMe: json['isMe'] == true || json['isMe'] == 1,
       isFollowed: json['isFollowed'] == true || json['isFollowed'] == 1,
       isCircleMember:
@@ -48,4 +60,20 @@ class SharedLocation {
   int minutesAgo(DateTime now) {
     return now.difference(sharedAt).inMinutes.clamp(0, 99999);
   }
+}
+
+List<String> _stringList(Object? value) {
+  if (value is List) {
+    return value
+        .map((item) => item.toString().trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+  }
+  final text = value?.toString().trim() ?? '';
+  if (text.isEmpty) return const [];
+  return text
+      .split(',')
+      .map((item) => item.trim())
+      .where((item) => item.isNotEmpty)
+      .toList();
 }

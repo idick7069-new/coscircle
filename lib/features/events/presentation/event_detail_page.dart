@@ -252,7 +252,7 @@ class _ParticipantsSection extends ConsumerWidget {
               children: [
                 Expanded(
                   child: Text(
-                    '參加者 ${items.length}',
+                    '今天誰會去 ${items.length}',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
@@ -265,19 +265,20 @@ class _ParticipantsSection extends ConsumerWidget {
               const Card(
                 child: Padding(
                   padding: EdgeInsets.all(16),
-                  child: Text('目前還沒有人公開預訂'),
+                  child: Text('目前還沒有人發布出席宣告'),
                 ),
               )
             else
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
+              Column(
                 children: [
                   for (final participant in items)
-                    _ParticipantAvatar(
-                      participant: participant,
-                      onTap: () =>
-                          _showParticipantSheet(context, ref, participant),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _ParticipantCard(
+                        participant: participant,
+                        onTap: () =>
+                            _showParticipantSheet(context, ref, participant),
+                      ),
                     ),
                 ],
               ),
@@ -331,11 +332,27 @@ class _ParticipantsSection extends ConsumerWidget {
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                           Text(_roleText(participant)),
+                          Text(_presenceStatusText(participant.presenceStatus)),
                         ],
                       ),
                     ),
                   ],
                 ),
+                if (participant.availableTime.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text('出沒時間：${participant.availableTime}'),
+                ],
+                if (participant.interactionTags.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final tag in participant.interactionTags)
+                        Chip(label: Text(tag)),
+                    ],
+                  ),
+                ],
                 if (participant.message.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Text(participant.message),
@@ -418,10 +435,20 @@ class _ParticipantsSection extends ConsumerWidget {
       _ => '參加者',
     };
   }
+
+  String _presenceStatusText(String status) {
+    return switch (status) {
+      'moving' => '移動中',
+      'resting' => '休息中',
+      'quiet' => '暫不互動',
+      'left' => '已離場',
+      _ => '可來找我',
+    };
+  }
 }
 
-class _ParticipantAvatar extends StatelessWidget {
-  const _ParticipantAvatar({required this.participant, required this.onTap});
+class _ParticipantCard extends StatelessWidget {
+  const _ParticipantCard({required this.participant, required this.onTap});
 
   final EventParticipant participant;
   final VoidCallback onTap;
@@ -430,39 +457,91 @@ class _ParticipantAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: EdgeInsets.all(participant.isFollowed ? 3 : 0),
-            decoration: BoxDecoration(
-              color: participant.isFollowed
-                  ? Theme.of(context).colorScheme.secondary
-                  : Colors.transparent,
-              shape: BoxShape.circle,
-            ),
-            child: CircleAvatar(
-              radius: 28,
-              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-              backgroundImage: pickedImageProvider(participant.avatarUrl),
-              child: participant.avatarUrl.isEmpty
-                  ? Text(participant.nickname.characters.firstOrNull ?? '?')
-                  : null,
-            ),
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                backgroundImage: pickedImageProvider(participant.avatarUrl),
+                child: participant.avatarUrl.isEmpty
+                    ? Text(participant.nickname.characters.firstOrNull ?? '?')
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            participant.nickname,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        if (participant.isFollowed)
+                          const Icon(Icons.star, size: 18),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _roleText(participant),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    if (participant.availableTime.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        participant.availableTime,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                    if (participant.interactionTags.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final tag in participant.interactionTags.take(4))
+                            Chip(
+                              visualDensity: VisualDensity.compact,
+                              label: Text(tag),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
-          SizedBox(
-            width: 72,
-            child: Text(
-              participant.nickname,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
-        ],
+        ),
       ),
     );
+  }
+
+  String _roleText(EventParticipant participant) {
+    return switch (participant.role) {
+      'photographer' => '攝影',
+      'coser' => [
+        'Coser',
+        if (participant.workName.isNotEmpty) participant.workName,
+        if (participant.characterName.isNotEmpty) participant.characterName,
+      ].join(' / '),
+      'self' => '本體',
+      _ => '參加者',
+    };
   }
 }
