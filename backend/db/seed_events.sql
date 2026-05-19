@@ -1,0 +1,8 @@
+-- Deprecated fallback file.
+-- Event data should be imported from the live Taiwan Doujin event list:
+--
+--   cd backend
+--   node scripts/scrape-events.js --import
+--
+-- Keeping this file as a no-op prevents old hand-written sample data from
+-- being reinserted and duplicated with scraped source data.

@@ -1,0 +1,65 @@
+# CosCircle（Cos小圈圈）
+
+CosCircle 是一個 Flutter Android / iOS 專案，用於大型 Cosplay / 同人活動中快速找人、分享位置、管理活動預訂與小圈圈社交。
+
+## 架構
+
+- Flutter 前端：MVVM 取向、Riverpod 狀態管理、feature-based 頁面資料夾。
+- API：`backend/` Express REST API。
+- Database：MySQL，schema 在 `backend/db/schema.sql`。
+- 資料來源：台灣同人誌中心活動列表，匯入腳本在 `backend/scripts/scrape-events.js`。
+
+## 前端啟動
+
+```sh
+flutter pub get
+flutter run --dart-define=API_BASE_URL=http://localhost:8080/api
+```
+
+Android Emulator 連本機後端時請使用：
+
+```sh
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8080/api
+```
+
+Google Map 需要在 Android / iOS 原生設定 API key 後才能正常顯示地圖。
+
+## 後端啟動
+
+```sh
+cd backend
+npm install
+cp .env.example .env
+npm run dev
+```
+
+建立資料庫後依序執行：
+
+```sh
+mysql -u coscircle -p coscircle < db/schema.sql
+node scripts/scrape-events.js --import
+```
+
+既有資料庫若已建立過 `events` 表，先補活動來源、原始網址與圖片欄位：
+
+```sh
+mysql -u coscircle -p coscircle < db/migrate_event_media.sql
+```
+
+若要啟用作品搜尋、坑單與預訂作品欄位，再執行：
+
+```sh
+mysql -u coscircle -p coscircle < db/migrate_works.sql
+```
+
+同人誌中心爬蟲會在 API server 執行期間，每天中午 12:00（預設 `Asia/Taipei`）自動匯入一次。可用環境變數調整：
+
+- `EVENT_SCRAPER_ENABLED=false`：停用每日自動爬蟲。
+- `EVENT_SCRAPER_TIME_ZONE=Asia/Taipei`：指定每日 12:00 使用的時區。
+
+也可以手動執行：
+
+```sh
+cd backend
+npm run scrape:events -- --import
+```
