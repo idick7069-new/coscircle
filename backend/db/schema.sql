@@ -6,6 +6,7 @@ CREATE TABLE users (
   email VARCHAR(191) NULL,
   password_hash TEXT NULL,
   session_token VARCHAR(191) NULL,
+  is_admin BOOLEAN NOT NULL DEFAULT FALSE,
   nickname VARCHAR(80) NOT NULL,
   avatar_url TEXT NULL,
   facebook_url TEXT NULL,

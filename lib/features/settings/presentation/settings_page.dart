@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../core/repositories/auth_repository.dart';
+import '../../../core/repositories/profile_repository.dart';
 import '../../../core/repositories/submission_repository.dart';
 import '../../admin/presentation/admin_dashboard_page.dart';
 
@@ -27,16 +28,31 @@ class SettingsPage extends ConsumerWidget {
         Card(
           child: Column(
             children: [
-              ListTile(
-                leading: const Icon(Icons.admin_panel_settings_outlined),
-                title: const Text('後台管理'),
-                subtitle: const Text('查看資料庫狀態、管理活動資料'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const AdminDashboardPage()),
-                ),
+              FutureBuilder(
+                future: ref.watch(profileRepositoryProvider).currentProfile(),
+                builder: (context, snapshot) {
+                  final isAdmin = snapshot.data?.isAdmin == true;
+                  if (!isAdmin) return const SizedBox.shrink();
+                  return Column(
+                    children: [
+                      ListTile(
+                        leading: const Icon(
+                          Icons.admin_panel_settings_outlined,
+                        ),
+                        title: const Text('後台管理'),
+                        subtitle: const Text('查看資料庫狀態、管理活動資料'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const AdminDashboardPage(),
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                    ],
+                  );
+                },
               ),
-              const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.add_location_alt_outlined),
                 title: const Text('投稿活動'),

@@ -5,6 +5,7 @@ class UserProfile {
     required this.id,
     required this.nickname,
     this.publicCode = '',
+    this.isAdmin = false,
     this.avatarUrl = '',
     this.facebookUrl = '',
     this.bio = '',
@@ -14,6 +15,7 @@ class UserProfile {
   final String id;
   final String nickname;
   final String publicCode;
+  final bool isAdmin;
   final String avatarUrl;
   final String facebookUrl;
   final String bio;
@@ -24,6 +26,7 @@ class UserProfile {
       id: json['id']?.toString() ?? '',
       nickname: json['nickname']?.toString() ?? '',
       publicCode: json['publicCode']?.toString() ?? '',
+      isAdmin: json['isAdmin'] == true || json['isAdmin'] == 1,
       avatarUrl: json['avatarUrl']?.toString() ?? '',
       facebookUrl: json['facebookUrl']?.toString() ?? '',
       bio: json['bio']?.toString() ?? '',
@@ -46,6 +49,7 @@ class UserProfile {
   UserProfile copyWith({
     String? nickname,
     String? publicCode,
+    bool? isAdmin,
     String? avatarUrl,
     String? facebookUrl,
     String? bio,
@@ -55,6 +59,7 @@ class UserProfile {
       id: id,
       nickname: nickname ?? this.nickname,
       publicCode: publicCode ?? this.publicCode,
+      isAdmin: isAdmin ?? this.isAdmin,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       facebookUrl: facebookUrl ?? this.facebookUrl,
       bio: bio ?? this.bio,

@@ -32,8 +32,16 @@ class AuthRepository {
   Future<String?> restoreToken() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString(_tokenKey);
+    if (token == null || token.isEmpty) return null;
     _apiClient.setAuthToken(token);
-    return token;
+    try {
+      await _apiClient.get('/me');
+      return token;
+    } catch (_) {
+      await prefs.remove(_tokenKey);
+      _apiClient.setAuthToken(null);
+      return null;
+    }
   }
 
   Future<AuthSession> login({

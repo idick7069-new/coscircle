@@ -105,7 +105,15 @@ app.post('/api/auth/logout', async (req, res, next) => {
 
 app.use(async (req, _res, next) => {
   try {
+    if (req.path.startsWith('/api/profiles/')) {
+      next();
+      return;
+    }
     req.userId = await resolveUserId(req);
+    if (!req.userId) {
+      _res.status(401).json({ error: 'authentication_required' });
+      return;
+    }
     next();
   } catch (error) {
     next(error);
@@ -238,6 +246,8 @@ app.get('/api/events', async (req, res, next) => {
     next(error);
   }
 });
+
+app.use('/api/admin', requireAdmin);
 
 app.get('/api/admin/stats', async (_req, res, next) => {
   try {
@@ -813,10 +823,11 @@ async function ensureDevUser() {
   await pool.execute(
     `INSERT INTO users (
        id, provider, provider_user_id, public_code, email, password_hash, session_token,
-       nickname, avatar_url, facebook_url, bio
+       is_admin, nickname, avatar_url, facebook_url, bio
      )
-     VALUES (?, 'dev', 'local-user', ?, NULL, NULL, NULL, '圈圈新朋友', '', '', '')
-     ON DUPLICATE KEY UPDATE public_code = COALESCE(public_code, VALUES(public_code))`,
+     VALUES (?, 'dev', 'local-user', ?, NULL, NULL, NULL, TRUE, '圈圈新朋友', '', '', '')
+     ON DUPLICATE KEY UPDATE public_code = COALESCE(public_code, VALUES(public_code)),
+       is_admin = TRUE`,
     [devUserId, createPublicCode()],
   );
 }
@@ -858,17 +869,33 @@ function bearerToken(req) {
 
 async function resolveUserId(req) {
   const token = bearerToken(req);
-  if (!token) return devUserId;
+  if (!token) return null;
   const [rows] = await pool.execute(
     'SELECT id FROM users WHERE session_token = ? LIMIT 1',
     [token],
   );
-  return rows[0]?.id ?? devUserId;
+  return rows[0]?.id ?? null;
+}
+
+async function requireAdmin(req, res, next) {
+  try {
+    const [rows] = await pool.execute(
+      'SELECT is_admin AS isAdmin FROM users WHERE id = ? LIMIT 1',
+      [req.userId],
+    );
+    if (!rows[0]?.isAdmin) {
+      res.status(403).json({ error: 'admin_required' });
+      return;
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
 }
 
 async function fetchUserProfile(userId) {
   const [rows] = await pool.execute(
-    `SELECT id, public_code AS publicCode, nickname,
+    `SELECT id, public_code AS publicCode, is_admin AS isAdmin, nickname,
             avatar_url AS avatarUrl, facebook_url AS facebookUrl, bio
        FROM users
       WHERE id = ?`,
