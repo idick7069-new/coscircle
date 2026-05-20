@@ -154,7 +154,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       } else {
         await auth.login(email: email, password: password);
       }
-      if (mounted) context.go(_isRegister ? '/onboarding' : '/');
+      if (mounted) context.go('/');
     } catch (_) {
       if (!mounted) return;
       setState(() {
