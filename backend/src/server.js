@@ -292,13 +292,15 @@ app.get('/api/admin/events', async (_req, res, next) => {
   }
 });
 
-app.get('/api/admin/users', async (_req, res, next) => {
+app.get('/api/admin/users', async (req, res, next) => {
   try {
-    const [rows] = await pool.query(
+    const [rows] = await pool.execute(
       `SELECT id, email, nickname, is_admin AS isAdmin,
+              CASE WHEN id = ? THEN TRUE ELSE FALSE END AS isMe,
               DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s') AS createdAt
          FROM users
         ORDER BY created_at DESC, id DESC`,
+      [req.userId],
     );
     res.json(rows);
   } catch (error) {

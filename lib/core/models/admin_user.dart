@@ -4,6 +4,7 @@ class AdminUser {
     required this.nickname,
     this.email = '',
     this.isAdmin = false,
+    this.isMe = false,
     this.createdAt = '',
   });
 
@@ -11,6 +12,7 @@ class AdminUser {
   final String nickname;
   final String email;
   final bool isAdmin;
+  final bool isMe;
   final String createdAt;
 
   factory AdminUser.fromJson(Map<String, dynamic> json) {
@@ -19,6 +21,7 @@ class AdminUser {
       nickname: json['nickname']?.toString() ?? '',
       email: json['email']?.toString() ?? '',
       isAdmin: json['isAdmin'] == true || json['isAdmin'] == 1,
+      isMe: json['isMe'] == true || json['isMe'] == 1,
       createdAt: json['createdAt']?.toString() ?? '',
     );
   }

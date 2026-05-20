@@ -704,11 +704,12 @@ class _AdminUserList extends StatelessWidget {
                 [
                   if (user.email.isNotEmpty) user.email,
                   if (user.isAdmin) 'Admin',
+                  if (user.isMe) '目前登入',
                 ].join(' · '),
               ),
               trailing: IconButton(
                 tooltip: '刪除使用者',
-                onPressed: user.isAdmin ? null : () => onDelete(user),
+                onPressed: user.isMe ? null : () => onDelete(user),
                 icon: const Icon(Icons.delete_outline),
               ),
             ),
