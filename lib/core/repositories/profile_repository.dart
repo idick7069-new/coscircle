@@ -12,7 +12,7 @@ final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
 
 abstract class ProfileRepository {
   Future<UserProfile?> currentProfile();
-  Future<UserProfile?> fetchProfile(String userId);
+  Future<UserProfile?> fetchProfile(String publicCode);
   Future<UserProfile> saveProfile(UserProfile profile);
 }
 
@@ -39,14 +39,14 @@ class ApiProfileRepository implements ProfileRepository {
   }
 
   @override
-  Future<UserProfile?> fetchProfile(String userId) async {
+  Future<UserProfile?> fetchProfile(String publicCode) async {
     try {
-      final response = await _apiClient.get('/users/$userId/profile');
+      final response = await _apiClient.get('/profiles/$publicCode');
       final data = response.data;
       if (data == null) return null;
       return UserProfile.fromJson(data as Map<String, dynamic>);
     } catch (_) {
-      return _fallback.fetchProfile(userId);
+      return _fallback.fetchProfile(publicCode);
     }
   }
 
@@ -68,9 +68,9 @@ class InMemoryProfileRepository implements ProfileRepository {
   Future<UserProfile?> currentProfile() async => _profile;
 
   @override
-  Future<UserProfile?> fetchProfile(String userId) async {
+  Future<UserProfile?> fetchProfile(String publicCode) async {
     final profile = _profile;
-    if (profile == null || profile.id != userId) return null;
+    if (profile == null || profile.publicCode != publicCode) return null;
     return profile;
   }
 

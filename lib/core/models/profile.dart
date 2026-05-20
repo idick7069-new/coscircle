@@ -4,6 +4,7 @@ class UserProfile {
   const UserProfile({
     required this.id,
     required this.nickname,
+    this.publicCode = '',
     this.avatarUrl = '',
     this.facebookUrl = '',
     this.bio = '',
@@ -12,6 +13,7 @@ class UserProfile {
 
   final String id;
   final String nickname;
+  final String publicCode;
   final String avatarUrl;
   final String facebookUrl;
   final String bio;
@@ -19,8 +21,9 @@ class UserProfile {
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     return UserProfile(
-      id: json['id'].toString(),
+      id: json['id']?.toString() ?? '',
       nickname: json['nickname']?.toString() ?? '',
+      publicCode: json['publicCode']?.toString() ?? '',
       avatarUrl: json['avatarUrl']?.toString() ?? '',
       facebookUrl: json['facebookUrl']?.toString() ?? '',
       bio: json['bio']?.toString() ?? '',
@@ -42,6 +45,7 @@ class UserProfile {
 
   UserProfile copyWith({
     String? nickname,
+    String? publicCode,
     String? avatarUrl,
     String? facebookUrl,
     String? bio,
@@ -50,6 +54,7 @@ class UserProfile {
     return UserProfile(
       id: id,
       nickname: nickname ?? this.nickname,
+      publicCode: publicCode ?? this.publicCode,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       facebookUrl: facebookUrl ?? this.facebookUrl,
       bio: bio ?? this.bio,

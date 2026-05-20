@@ -27,9 +27,9 @@ final appRouter = GoRouter(
           CurrentEventPage(eventId: state.pathParameters['id']),
     ),
     GoRoute(
-      path: '/users/:id',
+      path: '/profiles/:code',
       builder: (context, state) =>
-          PublicProfilePage(userId: state.pathParameters['id']!),
+          PublicProfilePage(publicCode: state.pathParameters['code']!),
     ),
   ],
 );

@@ -7,18 +7,18 @@ import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/app_page.dart';
 
 final publicProfileProvider = FutureProvider.autoDispose
-    .family<UserProfile?, String>((ref, userId) {
-      return ref.watch(profileRepositoryProvider).fetchProfile(userId);
+    .family<UserProfile?, String>((ref, publicCode) {
+      return ref.watch(profileRepositoryProvider).fetchProfile(publicCode);
     });
 
 class PublicProfilePage extends ConsumerWidget {
-  const PublicProfilePage({super.key, required this.userId});
+  const PublicProfilePage({super.key, required this.publicCode});
 
-  final String userId;
+  final String publicCode;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(publicProfileProvider(userId));
+    final profile = ref.watch(publicProfileProvider(publicCode));
     return AppPage(
       appBar: AppBar(title: const Text('個人資訊')),
       child: profile.when(

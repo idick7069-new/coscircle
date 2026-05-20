@@ -44,11 +44,11 @@ app.post('/api/auth/register', async (req, res, next) => {
     const sessionToken = createSessionToken();
     const [result] = await pool.execute(
       `INSERT INTO users (
-         provider, provider_user_id, email, password_hash, session_token, nickname,
+         provider, provider_user_id, public_code, email, password_hash, session_token, nickname,
          avatar_url, facebook_url, bio
        )
-       VALUES ('email', ?, ?, ?, ?, ?, '', '', '')`,
-      [email, email, passwordHash, sessionToken, nickname],
+       VALUES ('email', ?, ?, ?, ?, ?, ?, '', '', '')`,
+      [email, createPublicCode(), email, passwordHash, sessionToken, nickname],
     );
     const profile = await fetchUserProfile(result.insertId);
     res.status(201).json({ token: sessionToken, user: profile });
@@ -662,9 +662,9 @@ app.post('/api/users/:userId/follow', async (req, res, next) => {
   }
 });
 
-app.get('/api/users/:userId/profile', async (req, res, next) => {
+app.get('/api/profiles/:publicCode', async (req, res, next) => {
   try {
-    const profile = await fetchUserProfile(req.params.userId);
+    const profile = await fetchUserProfileByPublicCode(req.params.publicCode);
     if (!profile) {
       res.status(404).json({ error: 'user_not_found' });
       return;
@@ -812,12 +812,12 @@ function timePartsInZone(timeZone) {
 async function ensureDevUser() {
   await pool.execute(
     `INSERT INTO users (
-       id, provider, provider_user_id, email, password_hash, session_token,
+       id, provider, provider_user_id, public_code, email, password_hash, session_token,
        nickname, avatar_url, facebook_url, bio
      )
-     VALUES (?, 'dev', 'local-user', NULL, NULL, NULL, '圈圈新朋友', '', '', '')
-     ON DUPLICATE KEY UPDATE nickname = nickname`,
-    [devUserId],
+     VALUES (?, 'dev', 'local-user', ?, NULL, NULL, NULL, '圈圈新朋友', '', '', '')
+     ON DUPLICATE KEY UPDATE public_code = COALESCE(public_code, VALUES(public_code))`,
+    [devUserId, createPublicCode()],
   );
 }
 
@@ -846,6 +846,10 @@ function createSessionToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
+function createPublicCode() {
+  return crypto.randomBytes(12).toString('hex');
+}
+
 function bearerToken(req) {
   const header = String(req.headers.authorization ?? '');
   if (!header.toLowerCase().startsWith('bearer ')) return '';
@@ -864,7 +868,8 @@ async function resolveUserId(req) {
 
 async function fetchUserProfile(userId) {
   const [rows] = await pool.execute(
-    `SELECT id, nickname, avatar_url AS avatarUrl, facebook_url AS facebookUrl, bio
+    `SELECT id, public_code AS publicCode, nickname,
+            avatar_url AS avatarUrl, facebook_url AS facebookUrl, bio
        FROM users
       WHERE id = ?`,
     [userId],
@@ -873,6 +878,23 @@ async function fetchUserProfile(userId) {
   return {
     ...rows[0],
     pitWorks: await fetchUserPitWorks(userId),
+  };
+}
+
+async function fetchUserProfileByPublicCode(publicCode) {
+  const [rows] = await pool.execute(
+    `SELECT id, public_code AS publicCode, nickname,
+            avatar_url AS avatarUrl, facebook_url AS facebookUrl, bio
+       FROM users
+      WHERE public_code = ?
+      LIMIT 1`,
+    [publicCode],
+  );
+  if (!rows[0]) return null;
+  const { id, ...profile } = rows[0];
+  return {
+    ...profile,
+    pitWorks: await fetchUserPitWorks(id),
   };
 }
 

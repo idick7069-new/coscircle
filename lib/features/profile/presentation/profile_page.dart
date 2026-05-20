@@ -140,7 +140,13 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   void _showShareSheet(BuildContext context, UserProfile profile) {
-    final url = 'coscircle://users/${profile.id}';
+    if (profile.publicCode.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('尚未取得分享碼，請稍後再試')));
+      return;
+    }
+    final url = 'coscircle://profiles/${profile.publicCode}';
     showModalBottomSheet<void>(
       context: context,
       builder: (context) {
