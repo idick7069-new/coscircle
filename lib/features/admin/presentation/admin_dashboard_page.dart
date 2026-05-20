@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/models/admin_stats.dart';
+import '../../../core/models/admin_user.dart';
 import '../../../core/models/event.dart';
 import '../../../core/models/event_submission.dart';
 import '../../../core/repositories/admin_repository.dart';
@@ -13,6 +14,10 @@ final adminStatsProvider = FutureProvider.autoDispose<AdminStats>((ref) {
 
 final adminEventsProvider = FutureProvider.autoDispose<List<CosEvent>>((ref) {
   return ref.watch(adminRepositoryProvider).fetchEvents();
+});
+
+final adminUsersProvider = FutureProvider.autoDispose<List<AdminUser>>((ref) {
+  return ref.watch(adminRepositoryProvider).fetchUsers();
 });
 
 final adminSubmissionsProvider =
@@ -27,6 +32,7 @@ class AdminDashboardPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final stats = ref.watch(adminStatsProvider);
     final events = ref.watch(adminEventsProvider);
+    final users = ref.watch(adminUsersProvider);
     final submissions = ref.watch(adminSubmissionsProvider);
 
     return Scaffold(
@@ -74,6 +80,22 @@ class AdminDashboardPage extends ConsumerWidget {
               ),
               const SizedBox(height: 20),
               Text(
+                '使用者管理',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              users.when(
+                data: (items) => _AdminUserList(
+                  users: items,
+                  onDelete: (user) => _confirmDeleteUser(context, ref, user),
+                ),
+                error: (error, stack) => _ErrorPanel(message: '使用者載入失敗：$error'),
+                loading: () => const _LoadingPanel(message: '載入使用者資料...'),
+              ),
+              const SizedBox(height: 20),
+              Text(
                 '投稿審核',
                 style: Theme.of(
                   context,
@@ -113,6 +135,8 @@ class AdminDashboardPage extends ConsumerWidget {
                     for (final event in items)
                       _AdminEventTile(
                         event: event,
+                        onEditDates: () =>
+                            _showEditEventDatesSheet(context, ref, event),
                         onDelete: () => _confirmDelete(context, ref, event),
                       ),
                   ],
@@ -162,6 +186,7 @@ class AdminDashboardPage extends ConsumerWidget {
     await Future.wait([
       ref.refresh(adminStatsProvider.future),
       ref.refresh(adminEventsProvider.future),
+      ref.refresh(adminUsersProvider.future),
       ref.refresh(adminSubmissionsProvider.future),
     ]);
   }
@@ -214,6 +239,61 @@ class AdminDashboardPage extends ConsumerWidget {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('活動已刪除')));
+  }
+
+  Future<void> _confirmDeleteUser(
+    BuildContext context,
+    WidgetRef ref,
+    AdminUser user,
+  ) async {
+    final label = user.email.isEmpty ? user.nickname : user.email;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('刪除使用者'),
+        content: Text('確定要刪除「$label」？相關出席、位置、關注與小圈圈資料也會一併移除。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('刪除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(adminRepositoryProvider).deleteUser(user.id);
+      await _refresh(ref);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('使用者已刪除')));
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('刪除使用者失敗：$error')));
+    }
+  }
+
+  Future<void> _showEditEventDatesSheet(
+    BuildContext context,
+    WidgetRef ref,
+    CosEvent event,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _EditEventDatesSheet(
+        event: event,
+        onSaved: () async => _refresh(ref),
+      ),
+    );
   }
 
   Future<void> _showCreateEventSheet(
@@ -361,6 +441,128 @@ class _CreateEventSheetState extends ConsumerState<_CreateEventSheet> {
   }
 }
 
+class _EditEventDatesSheet extends ConsumerStatefulWidget {
+  const _EditEventDatesSheet({required this.event, required this.onSaved});
+
+  final CosEvent event;
+  final Future<void> Function() onSaved;
+
+  @override
+  ConsumerState<_EditEventDatesSheet> createState() =>
+      _EditEventDatesSheetState();
+}
+
+class _EditEventDatesSheetState extends ConsumerState<_EditEventDatesSheet> {
+  late final TextEditingController _startDate;
+  late final TextEditingController _endDate;
+  bool _saving = false;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _startDate = TextEditingController(
+      text: DateFormat('yyyy-MM-dd').format(widget.event.startDate),
+    );
+    _endDate = TextEditingController(
+      text: DateFormat('yyyy-MM-dd').format(widget.event.endDate),
+    );
+  }
+
+  @override
+  void dispose() {
+    _startDate.dispose();
+    _endDate.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          16,
+          16,
+          MediaQuery.of(context).viewInsets.bottom + 16,
+        ),
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            Text('調整活動時間', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            Text(widget.event.name),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _startDate,
+              decoration: const InputDecoration(labelText: '開始日期 yyyy-MM-dd'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _endDate,
+              decoration: const InputDecoration(labelText: '結束日期 yyyy-MM-dd'),
+            ),
+            if (_errorText != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                _errorText!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _saving ? null : _save,
+              icon: _saving
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save),
+              label: const Text('儲存時間'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _save() async {
+    DateTime start;
+    DateTime end;
+    try {
+      start = DateTime.parse(_startDate.text.trim());
+      end = DateTime.parse(_endDate.text.trim());
+    } catch (_) {
+      setState(() => _errorText = '請輸入 yyyy-MM-dd 格式的日期');
+      return;
+    }
+    if (end.isBefore(start)) {
+      setState(() => _errorText = '結束日期不能早於開始日期');
+      return;
+    }
+
+    setState(() {
+      _saving = true;
+      _errorText = null;
+    });
+    try {
+      await ref
+          .read(adminRepositoryProvider)
+          .updateEventDates(
+            eventId: widget.event.id,
+            startDate: start,
+            endDate: end,
+          );
+      await widget.onSaved();
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (mounted) setState(() => _errorText = '儲存失敗：$error');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+}
+
 class _StatsGrid extends StatelessWidget {
   const _StatsGrid({required this.stats});
 
@@ -428,25 +630,90 @@ class _StatsGrid extends StatelessWidget {
 }
 
 class _AdminEventTile extends StatelessWidget {
-  const _AdminEventTile({required this.event, required this.onDelete});
+  const _AdminEventTile({
+    required this.event,
+    required this.onEditDates,
+    required this.onDelete,
+  });
 
   final CosEvent event;
+  final VoidCallback onEditDates;
   final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
     final date = DateFormat('yyyy/MM/dd').format(event.startDate);
+    final endDate = DateFormat('yyyy/MM/dd').format(event.endDate);
     return Card(
       child: ListTile(
         title: Text(event.name),
-        subtitle: Text('$date · ${event.venue}'),
+        subtitle: Text(
+          event.startDate == event.endDate
+              ? '$date · ${event.venue}'
+              : '$date - $endDate · ${event.venue}',
+        ),
         leading: const Icon(Icons.event),
-        trailing: IconButton(
-          tooltip: '刪除',
-          onPressed: onDelete,
-          icon: const Icon(Icons.delete_outline),
+        trailing: Wrap(
+          spacing: 2,
+          children: [
+            IconButton(
+              tooltip: '調整時間',
+              onPressed: onEditDates,
+              icon: const Icon(Icons.edit_calendar_outlined),
+            ),
+            IconButton(
+              tooltip: '刪除',
+              onPressed: onDelete,
+              icon: const Icon(Icons.delete_outline),
+            ),
+          ],
         ),
       ),
+    );
+  }
+}
+
+class _AdminUserList extends StatelessWidget {
+  const _AdminUserList({required this.users, required this.onDelete});
+
+  final List<AdminUser> users;
+  final ValueChanged<AdminUser> onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    if (users.isEmpty) {
+      return const Card(
+        child: Padding(padding: EdgeInsets.all(16), child: Text('目前沒有使用者')),
+      );
+    }
+    return Column(
+      children: [
+        for (final user in users)
+          Card(
+            child: ListTile(
+              leading: CircleAvatar(
+                child: Text(
+                  (user.nickname.isNotEmpty ? user.nickname : user.email)
+                          .characters
+                          .firstOrNull ??
+                      '?',
+                ),
+              ),
+              title: Text(user.nickname.isEmpty ? '未命名使用者' : user.nickname),
+              subtitle: Text(
+                [
+                  if (user.email.isNotEmpty) user.email,
+                  if (user.isAdmin) 'Admin',
+                ].join(' · '),
+              ),
+              trailing: IconButton(
+                tooltip: '刪除使用者',
+                onPressed: user.isAdmin ? null : () => onDelete(user),
+                icon: const Icon(Icons.delete_outline),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

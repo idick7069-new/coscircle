@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_client.dart';
 import '../models/admin_stats.dart';
+import '../models/admin_user.dart';
 import '../models/event.dart';
 import '../models/event_submission.dart';
 
@@ -42,6 +43,20 @@ class AdminRepository {
           .toList();
     } catch (error) {
       throw Exception('活動資料載入失敗：${_describeError(error)}');
+    }
+  }
+
+  Future<List<AdminUser>> fetchUsers() async {
+    try {
+      final response = await _apiClient
+          .get('/admin/users')
+          .timeout(_adminTimeout);
+      final rows = response.data as List<dynamic>;
+      return rows
+          .map((row) => AdminUser.fromJson(row as Map<String, dynamic>))
+          .toList();
+    } catch (error) {
+      throw Exception('使用者資料載入失敗：${_describeError(error)}');
     }
   }
 
@@ -86,6 +101,21 @@ class AdminRepository {
 
   Future<void> deleteEvent(String eventId) async {
     await _apiClient.delete('/admin/events/$eventId');
+  }
+
+  Future<void> updateEventDates({
+    required String eventId,
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    await _apiClient.put(
+      '/admin/events/$eventId/dates',
+      data: {'startDate': _dateOnly(startDate), 'endDate': _dateOnly(endDate)},
+    );
+  }
+
+  Future<void> deleteUser(String userId) async {
+    await _apiClient.delete('/admin/users/$userId');
   }
 
   Future<int> syncDoujinEvents() async {

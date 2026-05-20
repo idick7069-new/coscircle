@@ -292,6 +292,20 @@ app.get('/api/admin/events', async (_req, res, next) => {
   }
 });
 
+app.get('/api/admin/users', async (_req, res, next) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, email, nickname, is_admin AS isAdmin,
+              DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s') AS createdAt
+         FROM users
+        ORDER BY created_at DESC, id DESC`,
+    );
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post('/api/admin/sync-doujin-events', syncDoujinEvents);
 app.post('/api/admin/events/sync-doujin', syncDoujinEvents);
 
@@ -351,6 +365,59 @@ async function syncDoujinEvents(_req, res, next) {
 app.delete('/api/admin/events/:eventId', async (req, res, next) => {
   try {
     await pool.execute('DELETE FROM events WHERE id = ?', [req.params.eventId]);
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put('/api/admin/events/:eventId/dates', async (req, res, next) => {
+  try {
+    const startDate = String(req.body.startDate ?? '').trim();
+    const endDate = String(req.body.endDate ?? startDate).trim();
+    if (!isDateOnly(startDate) || !isDateOnly(endDate)) {
+      res.status(400).json({ error: 'invalid_date' });
+      return;
+    }
+    if (endDate < startDate) {
+      res.status(400).json({ error: 'end_before_start' });
+      return;
+    }
+    const [result] = await pool.execute(
+      `UPDATE events
+          SET start_date = ?,
+              end_date = ?
+        WHERE id = ?`,
+      [startDate, endDate, req.params.eventId],
+    );
+    if (result.affectedRows === 0) {
+      res.status(404).json({ error: 'event_not_found' });
+      return;
+    }
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete('/api/admin/users/:userId', async (req, res, next) => {
+  try {
+    const userId = Number(req.params.userId);
+    if (!Number.isInteger(userId)) {
+      res.status(400).json({ error: 'invalid_user_id' });
+      return;
+    }
+    if (userId === Number(req.userId)) {
+      res.status(400).json({ error: 'cannot_delete_self' });
+      return;
+    }
+    const [result] = await pool.execute('DELETE FROM users WHERE id = ?', [
+      userId,
+    ]);
+    if (result.affectedRows === 0) {
+      res.status(404).json({ error: 'user_not_found' });
+      return;
+    }
     res.status(204).end();
   } catch (error) {
     next(error);
@@ -859,6 +926,10 @@ function createSessionToken() {
 
 function createPublicCode() {
   return crypto.randomBytes(12).toString('hex');
+}
+
+function isDateOnly(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
 function bearerToken(req) {
