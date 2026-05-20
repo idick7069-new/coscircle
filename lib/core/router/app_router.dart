@@ -5,6 +5,7 @@ import '../../features/current_event/presentation/current_event_page.dart';
 import '../../features/events/presentation/event_detail_page.dart';
 import '../../features/home/presentation/home_shell_page.dart';
 import '../../features/profile/presentation/onboarding_profile_page.dart';
+import '../../features/profile/presentation/public_profile_page.dart';
 
 final appRouter = GoRouter(
   initialLocation: '/login',
@@ -24,6 +25,11 @@ final appRouter = GoRouter(
       path: '/current/:id',
       builder: (context, state) =>
           CurrentEventPage(eventId: state.pathParameters['id']),
+    ),
+    GoRoute(
+      path: '/users/:id',
+      builder: (context, state) =>
+          PublicProfilePage(userId: state.pathParameters['id']!),
     ),
   ],
 );

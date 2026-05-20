@@ -662,6 +662,19 @@ app.post('/api/users/:userId/follow', async (req, res, next) => {
   }
 });
 
+app.get('/api/users/:userId/profile', async (req, res, next) => {
+  try {
+    const profile = await fetchUserProfile(req.params.userId);
+    if (!profile) {
+      res.status(404).json({ error: 'user_not_found' });
+      return;
+    }
+    res.json(profile);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.delete('/api/users/:userId/follow', async (req, res, next) => {
   try {
     await pool.execute(

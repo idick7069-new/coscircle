@@ -12,6 +12,7 @@ final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
 
 abstract class ProfileRepository {
   Future<UserProfile?> currentProfile();
+  Future<UserProfile?> fetchProfile(String userId);
   Future<UserProfile> saveProfile(UserProfile profile);
 }
 
@@ -38,6 +39,18 @@ class ApiProfileRepository implements ProfileRepository {
   }
 
   @override
+  Future<UserProfile?> fetchProfile(String userId) async {
+    try {
+      final response = await _apiClient.get('/users/$userId/profile');
+      final data = response.data;
+      if (data == null) return null;
+      return UserProfile.fromJson(data as Map<String, dynamic>);
+    } catch (_) {
+      return _fallback.fetchProfile(userId);
+    }
+  }
+
+  @override
   Future<UserProfile> saveProfile(UserProfile profile) async {
     try {
       final response = await _apiClient.put('/me', data: profile.toJson());
@@ -53,6 +66,13 @@ class InMemoryProfileRepository implements ProfileRepository {
 
   @override
   Future<UserProfile?> currentProfile() async => _profile;
+
+  @override
+  Future<UserProfile?> fetchProfile(String userId) async {
+    final profile = _profile;
+    if (profile == null || profile.id != userId) return null;
+    return profile;
+  }
 
   @override
   Future<UserProfile> saveProfile(UserProfile profile) async {
