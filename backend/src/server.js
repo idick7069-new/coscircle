@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import crypto from 'node:crypto';
+import { promisify } from 'node:util';
 import cors from 'cors';
 import express from 'express';
 import { importEvents } from '../scripts/scrape-events.js';
@@ -7,6 +9,7 @@ import { createPool } from './db.js';
 const app = express();
 const pool = createPool();
 const devUserId = 1;
+const scrypt = promisify(crypto.scrypt);
 const eventScraperEnabled = process.env.EVENT_SCRAPER_ENABLED !== 'false';
 const eventScraperTimeZone = process.env.EVENT_SCRAPER_TIME_ZONE ?? 'Asia/Taipei';
 
@@ -27,22 +30,91 @@ if (eventScraperEnabled) {
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, name: 'CosCircle API' }));
 
-app.get('/api/me', async (_req, res, next) => {
+app.post('/api/auth/register', async (req, res, next) => {
   try {
-    const [rows] = await pool.execute(
-      `SELECT id, nickname, avatar_url AS avatarUrl, facebook_url AS facebookUrl, bio
-         FROM users
-        WHERE id = ?`,
-      [devUserId],
-    );
-    if (!rows[0]) {
-      res.json(null);
+    const email = normalizeEmail(req.body.email);
+    const password = String(req.body.password ?? '');
+    const nickname = String(req.body.nickname ?? '').trim() || '圈圈新朋友';
+    if (!email || password.length < 8) {
+      res.status(400).json({ error: 'invalid_email_or_password' });
       return;
     }
-    res.json({
-      ...rows[0],
-      pitWorks: await fetchUserPitWorks(devUserId),
-    });
+
+    const passwordHash = await hashPassword(password);
+    const sessionToken = createSessionToken();
+    const [result] = await pool.execute(
+      `INSERT INTO users (
+         provider, provider_user_id, email, password_hash, session_token, nickname,
+         avatar_url, facebook_url, bio
+       )
+       VALUES ('email', ?, ?, ?, ?, ?, '', '', '')`,
+      [email, email, passwordHash, sessionToken, nickname],
+    );
+    const profile = await fetchUserProfile(result.insertId);
+    res.status(201).json({ token: sessionToken, user: profile });
+  } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY') {
+      res.status(409).json({ error: 'email_already_registered' });
+      return;
+    }
+    next(error);
+  }
+});
+
+app.post('/api/auth/login', async (req, res, next) => {
+  try {
+    const email = normalizeEmail(req.body.email);
+    const password = String(req.body.password ?? '');
+    const [rows] = await pool.execute(
+      `SELECT id, password_hash AS passwordHash
+         FROM users
+        WHERE email = ?
+        LIMIT 1`,
+      [email],
+    );
+    const user = rows[0];
+    if (!user || !(await verifyPassword(password, user.passwordHash))) {
+      res.status(401).json({ error: 'invalid_credentials' });
+      return;
+    }
+
+    const sessionToken = createSessionToken();
+    await pool.execute('UPDATE users SET session_token = ? WHERE id = ?', [
+      sessionToken,
+      user.id,
+    ]);
+    res.json({ token: sessionToken, user: await fetchUserProfile(user.id) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/auth/logout', async (req, res, next) => {
+  try {
+    const token = bearerToken(req);
+    if (token) {
+      await pool.execute('UPDATE users SET session_token = NULL WHERE session_token = ?', [
+        token,
+      ]);
+    }
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.use(async (req, _res, next) => {
+  try {
+    req.userId = await resolveUserId(req);
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/me', async (req, res, next) => {
+  try {
+    res.json(await fetchUserProfile(req.userId));
   } catch (error) {
     next(error);
   }
@@ -57,29 +129,20 @@ app.put('/api/me', async (req, res, next) => {
       `UPDATE users
           SET nickname = ?, avatar_url = ?, facebook_url = ?, bio = ?
         WHERE id = ?`,
-      [nickname, avatarUrl ?? null, facebookUrl ?? null, bio ?? null, devUserId],
+      [nickname, avatarUrl ?? null, facebookUrl ?? null, bio ?? null, req.userId],
     );
     await connection.execute('DELETE FROM user_pit_works WHERE user_id = ?', [
-      devUserId,
+      req.userId,
     ]);
     for (const workId of pitWorkIds) {
       await connection.execute(
         `INSERT IGNORE INTO user_pit_works (user_id, work_id)
          VALUES (?, ?)`,
-        [devUserId, workId],
+        [req.userId, workId],
       );
     }
     await connection.commit();
-    const [rows] = await pool.execute(
-      `SELECT id, nickname, avatar_url AS avatarUrl, facebook_url AS facebookUrl, bio
-         FROM users
-        WHERE id = ?`,
-      [devUserId],
-    );
-    res.json({
-      ...rows[0],
-      pitWorks: await fetchUserPitWorks(devUserId),
-    });
+    res.json(await fetchUserProfile(req.userId));
   } catch (error) {
     await connection.rollback();
     next(error);
@@ -130,7 +193,7 @@ app.post('/api/works', async (req, res, next) => {
 
 app.get('/api/events', async (req, res, next) => {
   try {
-    const [rows] = await pool.query(
+    const [rows] = await pool.execute(
       `SELECT events.id, events.category, events.name,
               DATE_FORMAT(events.start_date, '%Y-%m-%d') AS startDate,
               DATE_FORMAT(events.end_date, '%Y-%m-%d') AS endDate,
@@ -145,13 +208,13 @@ app.get('/api/events', async (req, res, next) => {
          FROM events
          LEFT JOIN event_bookings AS my_bookings
            ON my_bookings.event_id = events.id
-          AND my_bookings.user_id = ${devUserId}
+          AND my_bookings.user_id = ?
          LEFT JOIN (
            SELECT DISTINCT event_bookings.event_id, event_bookings.user_id
              FROM event_bookings
              INNER JOIN follows
                ON follows.followed_user_id = event_bookings.user_id
-              AND follows.follower_user_id = ${devUserId}
+              AND follows.follower_user_id = ?
          ) AS followed_bookings
            ON followed_bookings.event_id = events.id
          LEFT JOIN (
@@ -161,13 +224,14 @@ app.get('/api/events', async (req, res, next) => {
                ON other_members.user_id = event_bookings.user_id
              INNER JOIN circle_members AS my_members
                ON my_members.circle_id = other_members.circle_id
-              AND my_members.user_id = ${devUserId}
-            WHERE event_bookings.user_id <> ${devUserId}
+              AND my_members.user_id = ?
+            WHERE event_bookings.user_id <> ?
          ) AS circle_bookings
            ON circle_bookings.event_id = events.id
         WHERE events.status = 'approved'
         GROUP BY events.id, my_bookings.id, followed_bookings.user_id, circle_bookings.user_id
-        ORDER BY events.start_date ASC`
+        ORDER BY events.start_date ASC`,
+      [req.userId, req.userId, req.userId, req.userId],
     );
     res.json(rows);
   } catch (error) {
@@ -364,7 +428,7 @@ app.post('/api/admin/event-submissions/:submissionId/reject', async (req, res, n
   }
 });
 
-app.get('/api/circles', async (_req, res, next) => {
+app.get('/api/circles', async (req, res, next) => {
   try {
     const [rows] = await pool.execute(
       `SELECT circles.id,
@@ -384,7 +448,7 @@ app.get('/api/circles', async (_req, res, next) => {
         )
         GROUP BY circles.id
         ORDER BY circles.created_at DESC`,
-      [devUserId, devUserId],
+      [req.userId, req.userId],
     );
     res.json(rows);
   } catch (error) {
@@ -403,12 +467,12 @@ app.post('/api/circles', async (req, res, next) => {
     const [result] = await connection.execute(
       `INSERT INTO circles (owner_user_id, name, invite_code, invite_url)
        VALUES (?, ?, ?, ?)`,
-      [devUserId, name, inviteCode, inviteUrl],
+      [req.userId, name, inviteCode, inviteUrl],
     );
     await connection.execute(
       `INSERT INTO circle_members (circle_id, user_id)
        VALUES (?, ?)`,
-      [result.insertId, devUserId],
+      [result.insertId, req.userId],
     );
     await connection.commit();
     res.status(201).json({ id: result.insertId, inviteCode, inviteUrl });
@@ -437,7 +501,7 @@ app.post('/api/circles/join', async (req, res, next) => {
     await pool.execute(
       `INSERT IGNORE INTO circle_members (circle_id, user_id)
        VALUES (?, ?)`,
-      [circle.id, devUserId],
+      [circle.id, req.userId],
     );
     res.status(204).end();
   } catch (error) {
@@ -453,7 +517,7 @@ app.delete('/api/circles/:circleId/members/me', async (req, res, next) => {
         WHERE id = ?`,
       [req.params.circleId],
     );
-    if (circles[0]?.ownerUserId === devUserId) {
+    if (circles[0]?.ownerUserId === req.userId) {
       await pool.execute('DELETE FROM circles WHERE id = ?', [req.params.circleId]);
       res.status(204).end();
       return;
@@ -463,7 +527,7 @@ app.delete('/api/circles/:circleId/members/me', async (req, res, next) => {
       `DELETE FROM circle_members
         WHERE circle_id = ?
           AND user_id = ?`,
-      [req.params.circleId, devUserId],
+      [req.params.circleId, req.userId],
     );
     res.status(204).end();
   } catch (error) {
@@ -513,7 +577,7 @@ app.post('/api/events/:eventId/bookings', async (req, res, next) => {
          message = VALUES(message)`,
       [
         req.params.eventId,
-        devUserId,
+        req.userId,
         role,
         workId || null,
         characterName ?? null,
@@ -536,7 +600,7 @@ app.delete('/api/events/:eventId/bookings/me', async (req, res, next) => {
       `DELETE FROM event_bookings
         WHERE event_id = ?
           AND user_id = ?`,
-      [req.params.eventId, devUserId],
+      [req.params.eventId, req.userId],
     );
     res.status(204).end();
   } catch (error) {
@@ -573,7 +637,7 @@ app.get('/api/events/:eventId/participants', async (req, res, next) => {
            ON works.id = event_bookings.work_id
         WHERE event_bookings.event_id = ?
         ORDER BY event_bookings.updated_at DESC`,
-      [devUserId, devUserId, req.params.eventId],
+      [req.userId, req.userId, req.params.eventId],
     );
     res.json(rows);
   } catch (error) {
@@ -583,14 +647,14 @@ app.get('/api/events/:eventId/participants', async (req, res, next) => {
 
 app.post('/api/users/:userId/follow', async (req, res, next) => {
   try {
-    if (Number(req.params.userId) === devUserId) {
+    if (Number(req.params.userId) === req.userId) {
       res.status(400).json({ error: 'cannot_follow_self' });
       return;
     }
     await pool.execute(
       `INSERT IGNORE INTO follows (follower_user_id, followed_user_id)
        VALUES (?, ?)`,
-      [devUserId, req.params.userId],
+      [req.userId, req.params.userId],
     );
     res.status(204).end();
   } catch (error) {
@@ -604,7 +668,7 @@ app.delete('/api/users/:userId/follow', async (req, res, next) => {
       `DELETE FROM follows
         WHERE follower_user_id = ?
           AND followed_user_id = ?`,
-      [devUserId, req.params.userId],
+      [req.userId, req.params.userId],
     );
     res.status(204).end();
   } catch (error) {
@@ -652,7 +716,7 @@ app.get('/api/events/:eventId/locations', async (req, res, next) => {
           )
         WHERE shared_locations.event_id = ?
         ORDER BY shared_locations.shared_at DESC`,
-      [devUserId, devUserId, devUserId, req.params.eventId],
+      [req.userId, req.userId, req.userId, req.params.eventId],
     );
     res.json(rows);
   } catch (error) {
@@ -669,7 +733,7 @@ app.put('/api/events/:eventId/location', async (req, res, next) => {
        ON DUPLICATE KEY UPDATE latitude = VALUES(latitude),
          longitude = VALUES(longitude),
          shared_at = CURRENT_TIMESTAMP`,
-      [req.params.eventId, devUserId, latitude, longitude]
+      [req.params.eventId, req.userId, latitude, longitude]
     );
     res.status(204).end();
   } catch (error) {
@@ -734,11 +798,69 @@ function timePartsInZone(timeZone) {
 
 async function ensureDevUser() {
   await pool.execute(
-    `INSERT INTO users (id, provider, provider_user_id, nickname, avatar_url, facebook_url, bio)
-     VALUES (?, 'dev', 'local-user', '圈圈新朋友', '', '', '')
+    `INSERT INTO users (
+       id, provider, provider_user_id, email, password_hash, session_token,
+       nickname, avatar_url, facebook_url, bio
+     )
+     VALUES (?, 'dev', 'local-user', NULL, NULL, NULL, '圈圈新朋友', '', '', '')
      ON DUPLICATE KEY UPDATE nickname = nickname`,
     [devUserId],
   );
+}
+
+function normalizeEmail(value) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+async function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derivedKey = await scrypt(password, salt, 64);
+  return `${salt}:${derivedKey.toString('hex')}`;
+}
+
+async function verifyPassword(password, passwordHash) {
+  if (!passwordHash || !passwordHash.includes(':')) return false;
+  const [salt, stored] = passwordHash.split(':');
+  const derivedKey = await scrypt(password, salt, 64);
+  const storedBuffer = Buffer.from(stored, 'hex');
+  return (
+    storedBuffer.length === derivedKey.length &&
+    crypto.timingSafeEqual(storedBuffer, derivedKey)
+  );
+}
+
+function createSessionToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function bearerToken(req) {
+  const header = String(req.headers.authorization ?? '');
+  if (!header.toLowerCase().startsWith('bearer ')) return '';
+  return header.slice(7).trim();
+}
+
+async function resolveUserId(req) {
+  const token = bearerToken(req);
+  if (!token) return devUserId;
+  const [rows] = await pool.execute(
+    'SELECT id FROM users WHERE session_token = ? LIMIT 1',
+    [token],
+  );
+  return rows[0]?.id ?? devUserId;
+}
+
+async function fetchUserProfile(userId) {
+  const [rows] = await pool.execute(
+    `SELECT id, nickname, avatar_url AS avatarUrl, facebook_url AS facebookUrl, bio
+       FROM users
+      WHERE id = ?`,
+    [userId],
+  );
+  if (!rows[0]) return null;
+  return {
+    ...rows[0],
+    pitWorks: await fetchUserPitWorks(userId),
+  };
 }
 
 async function fetchUserPitWorks(userId) {

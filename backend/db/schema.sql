@@ -2,13 +2,18 @@ CREATE TABLE users (
   id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   provider VARCHAR(32) NOT NULL,
   provider_user_id VARCHAR(191) NOT NULL,
+  email VARCHAR(191) NULL,
+  password_hash TEXT NULL,
+  session_token VARCHAR(191) NULL,
   nickname VARCHAR(80) NOT NULL,
   avatar_url TEXT NULL,
   facebook_url TEXT NULL,
   bio TEXT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uniq_provider_user (provider, provider_user_id)
+  UNIQUE KEY uniq_provider_user (provider, provider_user_id),
+  UNIQUE KEY uniq_user_email (email),
+  UNIQUE KEY uniq_session_token (session_token)
 );
 
 CREATE TABLE works (

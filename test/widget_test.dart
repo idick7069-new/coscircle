@@ -8,6 +8,7 @@ void main() {
 
     expect(find.text('CosCircle'), findsOneWidget);
     expect(find.text('Cos小圈圈'), findsOneWidget);
-    expect(find.text('使用 Google 登入'), findsOneWidget);
+    expect(find.text('登入'), findsWidgets);
+    expect(find.text('註冊'), findsOneWidget);
   });
 }

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../../core/repositories/auth_repository.dart';
 import '../../../core/repositories/submission_repository.dart';
 import '../../admin/presentation/admin_dashboard_page.dart';
 
@@ -64,6 +66,15 @@ class SettingsPage extends ConsumerWidget {
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const BugReportPage()),
                 ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text('登出'),
+                onTap: () async {
+                  await ref.read(authRepositoryProvider).logout();
+                  if (context.mounted) context.go('/login');
+                },
               ),
             ],
           ),
