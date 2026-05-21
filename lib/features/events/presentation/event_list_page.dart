@@ -32,7 +32,7 @@ class _EventListPageState extends ConsumerState<EventListPage> {
   Widget build(BuildContext context) {
     final events = ref.watch(eventsProvider);
     return RefreshIndicator(
-      onRefresh: () async => ref.invalidate(eventsProvider),
+      onRefresh: _refreshEvents,
       child: events.when(
         data: (items) {
           final filtered = _applyFilters(items);
@@ -237,6 +237,11 @@ class _EventListPageState extends ConsumerState<EventListPage> {
       builder: (context) => _BookingSheet(event: event),
     );
   }
+
+  Future<void> _refreshEvents() async {
+    ref.invalidate(eventParticipantsProvider);
+    await Future.wait([ref.refresh(eventsProvider.future)]);
+  }
 }
 
 class _BookingSheet extends ConsumerStatefulWidget {
@@ -266,6 +271,7 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
   String _presenceStatus = 'open';
   String? _outfitImagePath;
   WorkTag? _selectedWork;
+  bool _submitting = false;
 
   @override
   void dispose() {
@@ -410,42 +416,24 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
                   if (event.isJoined)
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () async {
-                          await ref
-                              .read(eventRepositoryProvider)
-                              .removeBooking(event.id);
-                          ref.invalidate(eventsProvider);
-                          if (context.mounted) Navigator.pop(context);
-                        },
+                        onPressed: _submitting
+                            ? null
+                            : () => _removeAttendance(context, event),
                         child: const Text('取消出席'),
                       ),
                     ),
                   if (event.isJoined) const SizedBox(width: 12),
                   Expanded(
                     child: FilledButton(
-                      onPressed: () async {
-                        await ref
-                            .read(eventRepositoryProvider)
-                            .upsertBooking(
-                              EventBooking(
-                                eventId: event.id,
-                                role: _role,
-                                workId: _role == ParticipantRole.coser
-                                    ? _selectedWork?.id
-                                    : null,
-                                characterName: _characterController.text,
-                                outfitImagePath: _outfitImagePath,
-                                interactionTags: _interactionTags.toList(),
-                                availableTime: _availableTimeController.text
-                                    .trim(),
-                                presenceStatus: _presenceStatus,
-                                message: _messageController.text,
-                              ),
-                            );
-                        ref.invalidate(eventsProvider);
-                        if (context.mounted) Navigator.pop(context);
-                      },
-                      child: Text(event.isJoined ? '儲存出席' : '我會去'),
+                      onPressed: _submitting
+                          ? null
+                          : () => _saveAttendance(context, event),
+                      child: _submitting
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Text(event.isJoined ? '儲存出席' : '我會去'),
                     ),
                   ),
                 ],
@@ -464,5 +452,59 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
     );
     if (image == null || !mounted) return;
     setState(() => _outfitImagePath = image.path);
+  }
+
+  Future<void> _saveAttendance(BuildContext context, CosEvent event) async {
+    setState(() => _submitting = true);
+    try {
+      await ref
+          .read(eventRepositoryProvider)
+          .upsertBooking(
+            EventBooking(
+              eventId: event.id,
+              role: _role,
+              workId: _role == ParticipantRole.coser ? _selectedWork?.id : null,
+              characterName: _characterController.text,
+              outfitImagePath: _outfitImagePath,
+              interactionTags: _interactionTags.toList(),
+              availableTime: _availableTimeController.text.trim(),
+              presenceStatus: _presenceStatus,
+              message: _messageController.text,
+            ),
+          );
+      await _refreshAfterAttendanceChanged(event.id);
+      if (context.mounted) Navigator.pop(context);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('儲存出席失敗：$error')));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _removeAttendance(BuildContext context, CosEvent event) async {
+    setState(() => _submitting = true);
+    try {
+      await ref.read(eventRepositoryProvider).removeBooking(event.id);
+      await _refreshAfterAttendanceChanged(event.id);
+      if (context.mounted) Navigator.pop(context);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('取消出席失敗：$error')));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _refreshAfterAttendanceChanged(String eventId) async {
+    ref.invalidate(eventParticipantsProvider(eventId));
+    await Future.wait([
+      ref.refresh(eventsProvider.future),
+      ref.refresh(eventParticipantsProvider(eventId).future),
+    ]);
   }
 }
