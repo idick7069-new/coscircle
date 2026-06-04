@@ -38,13 +38,14 @@ class EventCard extends ConsumerWidget {
     final textColor = isEnded
         ? Theme.of(context).colorScheme.onSurfaceVariant
         : Theme.of(context).colorScheme.onSurface;
+    final scheme = Theme.of(context).colorScheme;
 
     return Card(
       color: isEnded
-          ? Theme.of(context).colorScheme.surfaceContainerHighest
+          ? scheme.surfaceContainerHighest.withValues(alpha: 0.7)
           : null,
       child: InkWell(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(16),
         onTap: isEnded ? null : onTap,
         child: Padding(
           padding: const EdgeInsets.all(10),
@@ -53,11 +54,15 @@ class EventCard extends ConsumerWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _EventImage(imageUrl: event.imageUrl, isEnded: isEnded),
-                const SizedBox(width: 10),
+                _EventImage(
+                  imageUrl: event.imageUrl,
+                  isEnded: isEnded,
+                  statusText: statusText,
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 112),
+                    constraints: const BoxConstraints(minHeight: 116),
                     child: LayoutBuilder(
                       builder: (context, constraints) {
                         final compactActions = constraints.maxWidth < 250;
@@ -70,7 +75,10 @@ class EventCard extends ConsumerWidget {
                               runSpacing: 4,
                               children: [
                                 _EventTag(label: event.category),
-                                _EventTag(label: statusText),
+                                _EventTag(
+                                  label: statusText,
+                                  highlighted: status == EventStatus.active,
+                                ),
                                 _EventTag(
                                   label: event.sourceName,
                                   icon: event.sourceType == 1
@@ -91,18 +99,16 @@ class EventCard extends ConsumerWidget {
                                   ),
                             ),
                             const SizedBox(height: 3),
-                            Text(
-                              date,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall,
+                            _IconLine(
+                              icon: Icons.schedule,
+                              iconColor: scheme.tertiary,
+                              text: date,
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              event.venue,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall,
+                            const SizedBox(height: 3),
+                            _IconLine(
+                              icon: Icons.place_outlined,
+                              iconColor: scheme.secondary,
+                              text: event.venue,
                             ),
                             const SizedBox(height: 8),
                             _ParticipantStrip(participants: participants),
@@ -113,17 +119,23 @@ class EventCard extends ConsumerWidget {
                                 spacing: 6,
                                 runSpacing: 6,
                                 children: [
-                                  OutlinedButton(
+                                  OutlinedButton.icon(
                                     onPressed: onDetailPressed,
                                     style: _compactButtonStyle(),
-                                    child: Text(compactActions ? '詳情' : '詳細'),
+                                    icon: const Icon(Icons.open_in_new),
+                                    label: Text(compactActions ? '詳情' : '詳細'),
                                   ),
-                                  FilledButton.tonal(
+                                  FilledButton.tonalIcon(
                                     onPressed: isEnded
                                         ? null
                                         : onBookingPressed,
                                     style: _compactFilledButtonStyle(),
-                                    child: Text(event.isJoined ? '修改' : '加入'),
+                                    icon: Icon(
+                                      event.isJoined
+                                          ? Icons.edit_outlined
+                                          : Icons.add_circle_outline,
+                                    ),
+                                    label: Text(event.isJoined ? '修改' : '加入'),
                                   ),
                                 ],
                               ),
@@ -161,11 +173,42 @@ class EventCard extends ConsumerWidget {
   }
 }
 
+class _IconLine extends StatelessWidget {
+  const _IconLine({
+    required this.icon,
+    required this.iconColor,
+    required this.text,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: iconColor),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _EventTag extends StatelessWidget {
-  const _EventTag({required this.label, this.icon});
+  const _EventTag({required this.label, this.icon, this.highlighted = false});
 
   final String label;
   final IconData? icon;
+  final bool highlighted;
 
   @override
   Widget build(BuildContext context) {
@@ -174,22 +217,31 @@ class _EventTag extends StatelessWidget {
       height: 22,
       padding: const EdgeInsets.symmetric(horizontal: 7),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
+        color: highlighted
+            ? scheme.secondary.withValues(alpha: 0.18)
+            : scheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: scheme.outlineVariant),
+        border: Border.all(
+          color: highlighted ? scheme.secondary : scheme.outlineVariant,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 12, color: scheme.onSurfaceVariant),
+            Icon(
+              icon,
+              size: 12,
+              color: highlighted ? scheme.secondary : scheme.onSurfaceVariant,
+            ),
             const SizedBox(width: 3),
           ],
           Text(
             label,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: scheme.onSurfaceVariant,
+              color: highlighted ? scheme.secondary : scheme.onSurfaceVariant,
               fontWeight: FontWeight.w600,
+              fontSize: 10.5,
             ),
           ),
         ],
@@ -199,18 +251,27 @@ class _EventTag extends StatelessWidget {
 }
 
 class _EventImage extends StatelessWidget {
-  const _EventImage({required this.imageUrl, required this.isEnded});
+  const _EventImage({
+    required this.imageUrl,
+    required this.isEnded,
+    required this.statusText,
+  });
 
   final String imageUrl;
   final bool isEnded;
+  final String statusText;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final placeholder = Container(
       width: 92,
       height: 112,
-      color: Theme.of(context).colorScheme.primaryContainer,
-      child: const Icon(Icons.event, size: 34),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Icon(Icons.event, size: 34, color: scheme.onPrimaryContainer),
     );
 
     final image = imageUrl.isEmpty
@@ -223,17 +284,58 @@ class _EventImage extends StatelessWidget {
             errorBuilder: (context, error, stackTrace) => placeholder,
           );
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: isEnded
-          ? ColorFiltered(
-              colorFilter: const ColorFilter.mode(
-                Colors.grey,
-                BlendMode.saturation,
+    return SizedBox(
+      width: 92,
+      height: 112,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            isEnded
+                ? ColorFiltered(
+                    colorFilter: const ColorFilter.mode(
+                      Colors.grey,
+                      BlendMode.saturation,
+                    ),
+                    child: image,
+                  )
+                : image,
+            Positioned(
+              left: 6,
+              right: 6,
+              bottom: 6,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.58),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: isEnded ? scheme.outline : scheme.secondary,
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
+                  child: Text(
+                    statusText,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: isEnded
+                          ? scheme.onSurfaceVariant
+                          : scheme.secondary,
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
               ),
-              child: image,
-            )
-          : image,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

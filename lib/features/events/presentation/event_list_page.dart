@@ -113,71 +113,100 @@ class _EventListPageState extends ConsumerState<EventListPage> {
   }
 
   Widget _calendar(List<CosEvent> events) {
+    final scheme = Theme.of(context).colorScheme;
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: TableCalendar<CosEvent>(
-        firstDay: DateTime(2026, 1, 1),
-        lastDay: DateTime(2026, 12, 31),
-        focusedDay: _focusedDay,
-        selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-        eventLoader: (day) => events.where((event) {
-          final date = DateTime(day.year, day.month, day.day);
-          return !date.isBefore(event.startDate) &&
-              !date.isAfter(event.endDate);
-        }).toList(),
-        calendarBuilders: CalendarBuilders(
-          markerBuilder: (context, day, events) {
-            if (events.isEmpty) return null;
-            final hasJoined = events.any((event) => event.isJoined);
-            return Positioned(
-              bottom: 6,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final event in events.take(3))
-                    Container(
-                      width: hasJoined && event.isJoined ? 7 : 5,
-                      height: hasJoined && event.isJoined ? 7 : 5,
-                      margin: const EdgeInsets.symmetric(horizontal: 1),
-                      decoration: BoxDecoration(
-                        color: event.isJoined
-                            ? Theme.of(context).colorScheme.primary
-                            : Theme.of(context).colorScheme.secondary,
-                        shape: BoxShape.circle,
-                        border: event.isJoined
-                            ? Border.all(
-                                color: Theme.of(context).colorScheme.onPrimary,
-                                width: 1,
-                              )
-                            : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: TableCalendar<CosEvent>(
+          firstDay: DateTime(2026, 1, 1),
+          lastDay: DateTime(2026, 12, 31),
+          focusedDay: _focusedDay,
+          selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+          eventLoader: (day) => events.where((event) {
+            final date = DateTime(day.year, day.month, day.day);
+            return !date.isBefore(event.startDate) &&
+                !date.isAfter(event.endDate);
+          }).toList(),
+          calendarBuilders: CalendarBuilders(
+            markerBuilder: (context, day, events) {
+              if (events.isEmpty) return null;
+              final hasJoined = events.any((event) => event.isJoined);
+              return Positioned(
+                bottom: 6,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final event in events.take(3))
+                      Container(
+                        width: hasJoined && event.isJoined ? 7 : 5,
+                        height: hasJoined && event.isJoined ? 7 : 5,
+                        margin: const EdgeInsets.symmetric(horizontal: 1),
+                        decoration: BoxDecoration(
+                          color: event.isJoined
+                              ? scheme.primary
+                              : scheme.secondary,
+                          shape: BoxShape.circle,
+                          border: event.isJoined
+                              ? Border.all(color: scheme.onPrimary, width: 1)
+                              : null,
+                        ),
                       ),
-                    ),
-                ],
-              ),
-            );
+                  ],
+                ),
+              );
+            },
+          ),
+          calendarFormat: CalendarFormat.month,
+          availableCalendarFormats: const {CalendarFormat.month: '月'},
+          onDaySelected: (selectedDay, focusedDay) {
+            _updateFilters(selectedDay: selectedDay, focusedDay: focusedDay);
           },
-        ),
-        calendarFormat: CalendarFormat.month,
-        availableCalendarFormats: const {CalendarFormat.month: '月'},
-        onDaySelected: (selectedDay, focusedDay) {
-          _updateFilters(selectedDay: selectedDay, focusedDay: focusedDay);
-        },
-        headerStyle: const HeaderStyle(
-          formatButtonVisible: false,
-          titleCentered: true,
-        ),
-        calendarStyle: CalendarStyle(
-          markerDecoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.secondary,
-            shape: BoxShape.circle,
+          headerStyle: HeaderStyle(
+            formatButtonVisible: false,
+            titleCentered: true,
+            titleTextStyle: Theme.of(context).textTheme.titleMedium!.copyWith(
+              color: scheme.onSurface,
+              fontWeight: FontWeight.w900,
+            ),
+            leftChevronIcon: Icon(Icons.chevron_left, color: scheme.tertiary),
+            rightChevronIcon: Icon(Icons.chevron_right, color: scheme.tertiary),
           ),
-          selectedDecoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primary,
-            shape: BoxShape.circle,
+          daysOfWeekStyle: DaysOfWeekStyle(
+            weekdayStyle: TextStyle(
+              color: scheme.onSurfaceVariant,
+              fontWeight: FontWeight.w800,
+            ),
+            weekendStyle: TextStyle(
+              color: scheme.secondary,
+              fontWeight: FontWeight.w800,
+            ),
           ),
-          todayDecoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.tertiary,
-            shape: BoxShape.circle,
+          calendarStyle: CalendarStyle(
+            outsideDaysVisible: false,
+            defaultTextStyle: TextStyle(color: scheme.onSurface),
+            weekendTextStyle: TextStyle(color: scheme.secondary),
+            markerDecoration: BoxDecoration(
+              color: scheme.secondary,
+              shape: BoxShape.circle,
+            ),
+            selectedDecoration: BoxDecoration(
+              color: scheme.primary,
+              shape: BoxShape.circle,
+            ),
+            selectedTextStyle: TextStyle(
+              color: scheme.onPrimary,
+              fontWeight: FontWeight.w900,
+            ),
+            todayDecoration: BoxDecoration(
+              color: scheme.tertiary.withValues(alpha: 0.24),
+              shape: BoxShape.circle,
+              border: Border.all(color: scheme.tertiary),
+            ),
+            todayTextStyle: TextStyle(
+              color: scheme.tertiary,
+              fontWeight: FontWeight.w900,
+            ),
           ),
         ),
       ),

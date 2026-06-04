@@ -13,6 +13,8 @@ class CosCircleApp extends StatelessWidget {
       title: 'CosCircle | Cos小圈圈',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.dark,
       locale: const Locale('zh', 'TW'),
       supportedLocales: const [Locale('zh', 'TW'), Locale('en', 'US')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,

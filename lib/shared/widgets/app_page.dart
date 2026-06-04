@@ -16,11 +16,25 @@ class AppPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: appBar,
       floatingActionButton: floatingActionButton,
       body: SafeArea(
-        child: Padding(padding: padding, child: child),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                scheme.surfaceContainerLowest,
+                scheme.surfaceContainerLow,
+                scheme.surface,
+              ],
+            ),
+          ),
+          child: Padding(padding: padding, child: child),
+        ),
       ),
     );
   }

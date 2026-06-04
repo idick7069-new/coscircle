@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_theme.dart';
+
 Color participantRoleColor(String role) {
   return switch (role) {
-    'photographer' => Colors.blue,
-    'coser' => Colors.pink,
-    'manager' => Colors.amber,
-    'self' => Colors.green,
-    _ => Colors.green,
+    'photographer' => AppTheme.techBlue,
+    'coser' => AppTheme.neonPink,
+    'manager' => AppTheme.spotlightYellow,
+    'self' => AppTheme.acidGreen,
+    _ => AppTheme.acidGreen,
   };
 }
 
