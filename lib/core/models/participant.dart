@@ -3,6 +3,7 @@ class EventParticipant {
     required this.userId,
     required this.nickname,
     required this.role,
+    this.publicCode = '',
     this.avatarUrl = '',
     this.facebookUrl = '',
     this.bio = '',
@@ -21,6 +22,7 @@ class EventParticipant {
   final String userId;
   final String nickname;
   final String role;
+  final String publicCode;
   final String avatarUrl;
   final String facebookUrl;
   final String bio;
@@ -40,6 +42,7 @@ class EventParticipant {
       userId: json['userId'].toString(),
       nickname: json['nickname']?.toString() ?? '',
       role: json['role']?.toString() ?? '',
+      publicCode: json['publicCode']?.toString() ?? '',
       avatarUrl: json['avatarUrl']?.toString() ?? '',
       facebookUrl: json['facebookUrl']?.toString() ?? '',
       bio: json['bio']?.toString() ?? '',

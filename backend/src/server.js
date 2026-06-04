@@ -1,11 +1,16 @@
 import 'dotenv/config';
 import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import cors from 'cors';
 import express from 'express';
 import { importEvents } from '../scripts/scrape-events.js';
 import { createPool } from './db.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const uploadDir = path.resolve(__dirname, '..', 'uploads');
 const app = express();
 const pool = createPool();
 const devUserId = 1;
@@ -15,6 +20,7 @@ const eventScraperTimeZone = process.env.EVENT_SCRAPER_TIME_ZONE ?? 'Asia/Taipei
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+app.use('/uploads', express.static(uploadDir));
 
 function encodeInteractionTags(value) {
   if (!Array.isArray(value)) return null;
@@ -36,6 +42,11 @@ app.post('/api/auth/register', async (req, res, next) => {
     const password = String(req.body.password ?? '');
     const nickname = String(req.body.nickname ?? '').trim() || '圈圈新朋友';
     if (!email || password.length < 8) {
+      console.warn('[auth/register] invalid input', {
+        email,
+        hasEmail: Boolean(email),
+        passwordLength: password.length,
+      });
       res.status(400).json({ error: 'invalid_email_or_password' });
       return;
     }
@@ -51,9 +62,13 @@ app.post('/api/auth/register', async (req, res, next) => {
       [email, createPublicCode(), email, passwordHash, sessionToken, nickname],
     );
     const profile = await fetchUserProfile(result.insertId);
+    console.info('[auth/register] success', { email, userId: result.insertId });
     res.status(201).json({ token: sessionToken, user: profile });
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {
+      console.warn('[auth/register] duplicate email', {
+        email: normalizeEmail(req.body.email),
+      });
       res.status(409).json({ error: 'email_already_registered' });
       return;
     }
@@ -65,6 +80,7 @@ app.post('/api/auth/login', async (req, res, next) => {
   try {
     const email = normalizeEmail(req.body.email);
     const password = String(req.body.password ?? '');
+    console.info('[auth/login] attempt', { email });
     const [rows] = await pool.execute(
       `SELECT id, password_hash AS passwordHash
          FROM users
@@ -73,7 +89,26 @@ app.post('/api/auth/login', async (req, res, next) => {
       [email],
     );
     const user = rows[0];
-    if (!user || !(await verifyPassword(password, user.passwordHash))) {
+    if (!user) {
+      console.warn('[auth/login] failed', { email, reason: 'user_not_found' });
+      res.status(401).json({ error: 'invalid_credentials' });
+      return;
+    }
+    if (!user.passwordHash) {
+      console.warn('[auth/login] failed', {
+        email,
+        userId: user.id,
+        reason: 'missing_password_hash',
+      });
+      res.status(401).json({ error: 'invalid_credentials' });
+      return;
+    }
+    if (!(await verifyPassword(password, user.passwordHash))) {
+      console.warn('[auth/login] failed', {
+        email,
+        userId: user.id,
+        reason: 'bad_password',
+      });
       res.status(401).json({ error: 'invalid_credentials' });
       return;
     }
@@ -83,8 +118,13 @@ app.post('/api/auth/login', async (req, res, next) => {
       sessionToken,
       user.id,
     ]);
+    console.info('[auth/login] success', { email, userId: user.id });
     res.json({ token: sessionToken, user: await fetchUserProfile(user.id) });
   } catch (error) {
+    console.error('[auth/login] error', {
+      email: normalizeEmail(req.body.email),
+      message: error.message,
+    });
     next(error);
   }
 });
@@ -159,6 +199,30 @@ app.put('/api/me', async (req, res, next) => {
   }
 });
 
+app.post('/api/uploads/image', async (req, res, next) => {
+  try {
+    const { bytesBase64, mimeType } = req.body;
+    const extension = imageExtension(mimeType);
+    if (!extension || typeof bytesBase64 !== 'string') {
+      res.status(400).json({ error: 'invalid_image' });
+      return;
+    }
+
+    const bytes = Buffer.from(bytesBase64, 'base64');
+    if (bytes.length === 0 || bytes.length > 5 * 1024 * 1024) {
+      res.status(400).json({ error: 'invalid_image_size' });
+      return;
+    }
+
+    await fs.mkdir(uploadDir, { recursive: true });
+    const fileName = `${crypto.randomUUID()}.${extension}`;
+    await fs.writeFile(path.join(uploadDir, fileName), bytes);
+    res.status(201).json({ url: publicUploadUrl(req, fileName) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get('/api/works', async (req, res, next) => {
   try {
     const query = String(req.query.query ?? '').trim();
@@ -205,7 +269,8 @@ app.get('/api/events', async (req, res, next) => {
       `SELECT events.id, events.category, events.name,
               DATE_FORMAT(events.start_date, '%Y-%m-%d') AS startDate,
               DATE_FORMAT(events.end_date, '%Y-%m-%d') AS endDate,
-              events.venue, events.fee, events.organizer, events.description,
+              events.venue, events.detailed_address AS detailedAddress,
+              events.fee, events.organizer, events.description,
               events.image_url AS imageUrl,
               events.source_type AS sourceType,
               events.source_name AS sourceName,
@@ -282,7 +347,8 @@ app.get('/api/admin/events', async (_req, res, next) => {
               source_url AS sourceUrl, image_url AS imageUrl,
               DATE_FORMAT(start_date, '%Y-%m-%d') AS startDate,
               DATE_FORMAT(end_date, '%Y-%m-%d') AS endDate,
-              venue, fee, organizer, description, status
+              venue, detailed_address AS detailedAddress,
+              fee, organizer, description, status
          FROM events
         ORDER BY start_date DESC, id DESC`,
     );
@@ -319,6 +385,7 @@ app.post('/api/admin/events', async (req, res, next) => {
       startDate,
       endDate,
       venue,
+      detailedAddress,
       fee = '',
       organizer = '',
       description = '',
@@ -330,8 +397,8 @@ app.post('/api/admin/events', async (req, res, next) => {
     } = req.body;
     const [result] = await pool.execute(
       `INSERT INTO events
-        (source_key, source_type, source_name, source_url, image_url, category, name, start_date, end_date, venue, fee, organizer, description, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (source_key, source_type, source_name, source_url, image_url, category, name, start_date, end_date, venue, detailed_address, fee, organizer, description, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         `admin-${Date.now()}`,
         sourceType,
@@ -343,6 +410,7 @@ app.post('/api/admin/events', async (req, res, next) => {
         startDate,
         endDate ?? startDate,
         venue,
+        detailedAddress || venue,
         fee,
         organizer,
         description,
@@ -432,7 +500,7 @@ app.get('/api/admin/event-submissions', async (_req, res, next) => {
       `SELECT id, name,
               DATE_FORMAT(start_date, '%Y-%m-%d') AS startDate,
               DATE_FORMAT(end_date, '%Y-%m-%d') AS endDate,
-              venue, description,
+              venue, detailed_address AS detailedAddress, description,
               review_status AS reviewStatus,
               DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s') AS createdAt
          FROM event_submissions
@@ -449,7 +517,8 @@ app.post('/api/admin/event-submissions/:submissionId/approve', async (req, res, 
   try {
     await connection.beginTransaction();
     const [rows] = await connection.execute(
-      `SELECT id, name, start_date AS startDate, end_date AS endDate, venue, description
+      `SELECT id, name, start_date AS startDate, end_date AS endDate,
+              venue, detailed_address AS detailedAddress, description
          FROM event_submissions
         WHERE id = ?
           AND review_status = 'pending'
@@ -465,14 +534,15 @@ app.post('/api/admin/event-submissions/:submissionId/approve', async (req, res, 
 
     const [result] = await connection.execute(
       `INSERT INTO events
-        (source_key, source_type, source_name, category, name, start_date, end_date, venue, fee, organizer, description, status)
-       VALUES (?, 2, '投稿活動', '投稿', ?, ?, ?, ?, '', '使用者投稿', ?, 'approved')`,
+        (source_key, source_type, source_name, category, name, start_date, end_date, venue, detailed_address, fee, organizer, description, status)
+       VALUES (?, 2, '投稿活動', '投稿', ?, ?, ?, ?, ?, '', '使用者投稿', ?, 'approved')`,
       [
         `submission-${submission.id}`,
         submission.name,
         submission.startDate,
         submission.endDate,
         submission.venue,
+        submission.detailedAddress || submission.venue,
         submission.description,
       ],
     );
@@ -512,6 +582,7 @@ app.get('/api/circles', async (req, res, next) => {
     const [rows] = await pool.execute(
       `SELECT circles.id,
               circles.name,
+              circles.description,
               circles.invite_code AS inviteCode,
               circles.invite_url AS inviteUrl,
               circles.owner_user_id AS ownerUserId,
@@ -529,7 +600,38 @@ app.get('/api/circles', async (req, res, next) => {
         ORDER BY circles.created_at DESC`,
       [req.userId, req.userId],
     );
-    res.json(rows);
+    const circleIds = rows.map((row) => row.id);
+    const membersByCircle = new Map();
+    if (circleIds.length > 0) {
+      const placeholders = circleIds.map(() => '?').join(',');
+      const [members] = await pool.execute(
+        `SELECT circle_members.circle_id AS circleId,
+                users.id AS userId,
+                users.public_code AS publicCode,
+                users.nickname,
+                users.avatar_url AS avatarUrl,
+                CASE WHEN circles.owner_user_id = users.id THEN TRUE ELSE FALSE END AS isOwner
+           FROM circle_members
+           INNER JOIN users
+             ON users.id = circle_members.user_id
+           INNER JOIN circles
+             ON circles.id = circle_members.circle_id
+          WHERE circle_members.circle_id IN (${placeholders})
+          ORDER BY isOwner DESC, circle_members.created_at ASC`,
+        circleIds,
+      );
+      for (const member of members) {
+        const key = String(member.circleId);
+        if (!membersByCircle.has(key)) membersByCircle.set(key, []);
+        membersByCircle.get(key).push(member);
+      }
+    }
+    res.json(
+      rows.map((row) => ({
+        ...row,
+        members: membersByCircle.get(String(row.id)) ?? [],
+      })),
+    );
   } catch (error) {
     next(error);
   }
@@ -538,15 +640,15 @@ app.get('/api/circles', async (req, res, next) => {
 app.post('/api/circles', async (req, res, next) => {
   const connection = await pool.getConnection();
   try {
-    const { name } = req.body;
+    const { name, description } = req.body;
     const inviteCode = await createInviteCode(connection);
     const inviteUrl = `https://coscircle.local/join/${inviteCode}`;
 
     await connection.beginTransaction();
     const [result] = await connection.execute(
-      `INSERT INTO circles (owner_user_id, name, invite_code, invite_url)
-       VALUES (?, ?, ?, ?)`,
-      [req.userId, name, inviteCode, inviteUrl],
+      `INSERT INTO circles (owner_user_id, name, description, invite_code, invite_url)
+       VALUES (?, ?, ?, ?, ?)`,
+      [req.userId, name, String(description ?? '').trim() || null, inviteCode, inviteUrl],
     );
     await connection.execute(
       `INSERT INTO circle_members (circle_id, user_id)
@@ -560,6 +662,32 @@ app.post('/api/circles', async (req, res, next) => {
     next(error);
   } finally {
     connection.release();
+  }
+});
+
+app.put('/api/circles/:circleId', async (req, res, next) => {
+  try {
+    const name = String(req.body.name ?? '').trim();
+    const description = String(req.body.description ?? '').trim();
+    if (!name) {
+      res.status(400).json({ error: 'circle_name_required' });
+      return;
+    }
+    const [result] = await pool.execute(
+      `UPDATE circles
+          SET name = ?,
+              description = ?
+        WHERE id = ?
+          AND owner_user_id = ?`,
+      [name, description || null, req.params.circleId, req.userId],
+    );
+    if (result.affectedRows === 0) {
+      res.status(404).json({ error: 'circle_not_found' });
+      return;
+    }
+    res.status(204).end();
+  } catch (error) {
+    next(error);
   }
 });
 
@@ -614,13 +742,74 @@ app.delete('/api/circles/:circleId/members/me', async (req, res, next) => {
   }
 });
 
+app.delete('/api/circles/:circleId/members/:userId', async (req, res, next) => {
+  try {
+    const [circles] = await pool.execute(
+      `SELECT owner_user_id AS ownerUserId
+         FROM circles
+        WHERE id = ?
+        LIMIT 1`,
+      [req.params.circleId],
+    );
+    const circle = circles[0];
+    if (!circle || circle.ownerUserId !== req.userId) {
+      res.status(404).json({ error: 'circle_not_found' });
+      return;
+    }
+    if (Number(req.params.userId) === req.userId) {
+      res.status(400).json({ error: 'cannot_remove_owner' });
+      return;
+    }
+    await pool.execute(
+      `DELETE FROM circle_members
+        WHERE circle_id = ?
+          AND user_id = ?`,
+      [req.params.circleId, req.params.userId],
+    );
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/following', async (req, res, next) => {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT users.id AS userId,
+              users.public_code AS publicCode,
+              users.nickname,
+              users.avatar_url AS avatarUrl,
+              users.bio,
+              DATE_FORMAT(follows.created_at, '%Y-%m-%dT%H:%i:%s') AS followedAt
+         FROM follows
+         INNER JOIN users
+           ON users.id = follows.followed_user_id
+        WHERE follows.follower_user_id = ?
+        ORDER BY follows.created_at DESC`,
+      [req.userId],
+    );
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post('/api/events/submissions', async (req, res, next) => {
   try {
-    const { name, startDate, endDate, venue, description } = req.body;
+    const { name, startDate, endDate, venue, detailedAddress, description } =
+      req.body;
     const [result] = await pool.execute(
-      `INSERT INTO event_submissions (name, start_date, end_date, venue, description)
-       VALUES (?, ?, ?, ?, ?)`,
-      [name, startDate, endDate, venue, description ?? null]
+      `INSERT INTO event_submissions
+        (name, start_date, end_date, venue, detailed_address, description)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        name,
+        startDate,
+        endDate,
+        venue,
+        detailedAddress || venue,
+        description ?? null,
+      ]
     );
     res.status(201).json({ id: result.insertId, reviewStatus: 'pending' });
   } catch (error) {
@@ -691,6 +880,7 @@ app.get('/api/events/:eventId/participants', async (req, res, next) => {
   try {
     const [rows] = await pool.execute(
       `SELECT users.id AS userId,
+              users.public_code AS publicCode,
               users.nickname,
               users.avatar_url AS avatarUrl,
               users.facebook_url AS facebookUrl,
@@ -743,7 +933,11 @@ app.post('/api/users/:userId/follow', async (req, res, next) => {
 
 app.get('/api/profiles/:publicCode', async (req, res, next) => {
   try {
-    const profile = await fetchUserProfileByPublicCode(req.params.publicCode);
+    const viewerUserId = await resolveUserId(req);
+    const profile = await fetchUserProfileByPublicCode(
+      req.params.publicCode,
+      viewerUserId,
+    );
     if (!profile) {
       res.status(404).json({ error: 'user_not_found' });
       return;
@@ -772,6 +966,7 @@ app.get('/api/events/:eventId/locations', async (req, res, next) => {
   try {
     const [rows] = await pool.execute(
       `SELECT shared_locations.user_id AS userId,
+              users.public_code AS publicCode,
               users.nickname,
               users.avatar_url AS avatarUrl,
               event_bookings.role,
@@ -833,6 +1028,231 @@ app.put('/api/events/:eventId/location', async (req, res, next) => {
   }
 });
 
+app.get('/api/events/:eventId/meetups', async (req, res, next) => {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT event_meeting_points.id,
+              event_meeting_points.event_id AS eventId,
+              event_meeting_points.circle_id AS circleId,
+              circles.name AS circleName,
+              event_meeting_points.creator_user_id AS creatorUserId,
+              users.nickname AS creatorNickname,
+              event_meeting_points.latitude,
+              event_meeting_points.longitude,
+              event_meeting_points.description,
+              DATE_FORMAT(event_meeting_points.meet_at, '%Y-%m-%dT%H:%i:%s') AS meetAt,
+              DATE_FORMAT(event_meeting_points.created_at, '%Y-%m-%dT%H:%i:%s') AS createdAt,
+              CASE WHEN event_meeting_points.creator_user_id = ? THEN TRUE ELSE FALSE END AS isMine
+         FROM event_meeting_points
+         INNER JOIN circles
+           ON circles.id = event_meeting_points.circle_id
+         INNER JOIN users
+           ON users.id = event_meeting_points.creator_user_id
+         INNER JOIN circle_members
+           ON circle_members.circle_id = event_meeting_points.circle_id
+          AND circle_members.user_id = ?
+        WHERE event_meeting_points.event_id = ?
+        ORDER BY event_meeting_points.meet_at ASC,
+                 event_meeting_points.created_at DESC`,
+      [req.userId, req.userId, req.params.eventId],
+    );
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/events/:eventId/meetups', async (req, res, next) => {
+  try {
+    const { circleId, latitude, longitude, description, meetAt } = req.body;
+    const [memberships] = await pool.execute(
+      `SELECT circle_id AS circleId
+         FROM circle_members
+        WHERE circle_id = ?
+          AND user_id = ?
+        LIMIT 1`,
+      [circleId, req.userId],
+    );
+    if (!memberships[0]) {
+      res.status(403).json({ error: 'circle_membership_required' });
+      return;
+    }
+
+    const [result] = await pool.execute(
+      `INSERT INTO event_meeting_points (
+         event_id, circle_id, creator_user_id, latitude, longitude, description, meet_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.params.eventId,
+        circleId,
+        req.userId,
+        latitude,
+        longitude,
+        description ?? null,
+        normalizeDateTimeForSql(meetAt),
+      ],
+    );
+    res.status(201).json({ id: result.insertId });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put('/api/events/:eventId/meetups/:meetupId', async (req, res, next) => {
+  try {
+    const { circleId, latitude, longitude, description, meetAt } = req.body;
+    const [meetups] = await pool.execute(
+      `SELECT creator_user_id AS creatorUserId
+         FROM event_meeting_points
+        WHERE id = ?
+          AND event_id = ?
+        LIMIT 1`,
+      [req.params.meetupId, req.params.eventId],
+    );
+    const meetup = meetups[0];
+    if (!meetup || meetup.creatorUserId !== req.userId) {
+      res.status(404).json({ error: 'meetup_not_found' });
+      return;
+    }
+
+    const [memberships] = await pool.execute(
+      `SELECT circle_id AS circleId
+         FROM circle_members
+        WHERE circle_id = ?
+          AND user_id = ?
+        LIMIT 1`,
+      [circleId, req.userId],
+    );
+    if (!memberships[0]) {
+      res.status(403).json({ error: 'circle_membership_required' });
+      return;
+    }
+
+    await pool.execute(
+      `UPDATE event_meeting_points
+          SET circle_id = ?,
+              latitude = ?,
+              longitude = ?,
+              description = ?,
+              meet_at = ?
+        WHERE id = ?
+          AND event_id = ?
+          AND creator_user_id = ?`,
+      [
+        circleId,
+        latitude,
+        longitude,
+        description ?? null,
+        normalizeDateTimeForSql(meetAt),
+        req.params.meetupId,
+        req.params.eventId,
+        req.userId,
+      ],
+    );
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete('/api/events/:eventId/meetups/:meetupId', async (req, res, next) => {
+  try {
+    await pool.execute(
+      `DELETE FROM event_meeting_points
+        WHERE id = ?
+          AND event_id = ?
+          AND creator_user_id = ?`,
+      [req.params.meetupId, req.params.eventId, req.userId],
+    );
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/events/:eventId/recognitions', async (req, res, next) => {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT event_recognition_requests.id,
+              event_recognition_requests.event_id AS eventId,
+              event_recognition_requests.requester_user_id AS requesterUserId,
+              requester.nickname AS requesterNickname,
+              event_recognition_requests.target_user_id AS targetUserId,
+              target.nickname AS targetNickname,
+              event_recognition_requests.status,
+              event_recognition_requests.response_message AS responseMessage,
+              DATE_FORMAT(event_recognition_requests.created_at, '%Y-%m-%dT%H:%i:%s') AS createdAt,
+              DATE_FORMAT(event_recognition_requests.responded_at, '%Y-%m-%dT%H:%i:%s') AS respondedAt,
+              CASE WHEN event_recognition_requests.requester_user_id = ? THEN TRUE ELSE FALSE END AS isRequester,
+              CASE WHEN event_recognition_requests.target_user_id = ? THEN TRUE ELSE FALSE END AS isTarget
+         FROM event_recognition_requests
+         INNER JOIN users AS requester
+           ON requester.id = event_recognition_requests.requester_user_id
+         INNER JOIN users AS target
+           ON target.id = event_recognition_requests.target_user_id
+        WHERE event_recognition_requests.event_id = ?
+          AND (
+            event_recognition_requests.requester_user_id = ?
+            OR event_recognition_requests.target_user_id = ?
+          )
+        ORDER BY event_recognition_requests.created_at DESC`,
+      [req.userId, req.userId, req.params.eventId, req.userId, req.userId],
+    );
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/events/:eventId/recognitions', async (req, res, next) => {
+  try {
+    const { targetUserId } = req.body;
+    if (Number(targetUserId) === req.userId) {
+      res.status(400).json({ error: 'cannot_recognize_self' });
+      return;
+    }
+    const [result] = await pool.execute(
+      `INSERT INTO event_recognition_requests (
+         event_id, requester_user_id, target_user_id, status
+       )
+       VALUES (?, ?, ?, 'pending')`,
+      [req.params.eventId, req.userId, targetUserId],
+    );
+    res.status(201).json({ id: result.insertId });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/recognitions/:requestId/respond', async (req, res, next) => {
+  try {
+    const status = String(req.body.status ?? '');
+    if (!['come', 'busy'].includes(status)) {
+      res.status(400).json({ error: 'invalid_recognition_status' });
+      return;
+    }
+    const responseMessage = status === 'come' ? '快來' : '當前不方便';
+    const [result] = await pool.execute(
+      `UPDATE event_recognition_requests
+          SET status = ?,
+              response_message = ?,
+              responded_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+          AND target_user_id = ?
+          AND status = 'pending'`,
+      [status, responseMessage, req.params.requestId, req.userId],
+    );
+    if (result.affectedRows === 0) {
+      res.status(404).json({ error: 'recognition_request_not_found' });
+      return;
+    }
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.use((error, _req, res, _next) => {
   console.error(error);
   res.status(500).json({ error: 'internal_server_error' });
@@ -840,6 +1260,7 @@ app.use((error, _req, res, _next) => {
 
 const port = Number(process.env.PORT ?? 8080);
 await ensureDevUser();
+await ensureCollaborationTables();
 
 app.listen(port, () => {
   console.log(`CosCircle API listening on ${port}`);
@@ -901,6 +1322,45 @@ async function ensureDevUser() {
   );
 }
 
+async function ensureCollaborationTables() {
+  await pool.execute(
+    `CREATE TABLE IF NOT EXISTS event_meeting_points (
+      id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+      event_id BIGINT UNSIGNED NOT NULL,
+      circle_id BIGINT UNSIGNED NOT NULL,
+      creator_user_id BIGINT UNSIGNED NOT NULL,
+      latitude DECIMAL(10, 7) NOT NULL,
+      longitude DECIMAL(10, 7) NOT NULL,
+      description TEXT NULL,
+      meet_at DATETIME NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+      FOREIGN KEY (circle_id) REFERENCES circles(id) ON DELETE CASCADE,
+      FOREIGN KEY (creator_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      KEY idx_event_meeting_points_event (event_id),
+      KEY idx_event_meeting_points_circle (circle_id)
+    )`,
+  );
+  await pool.execute(
+    `CREATE TABLE IF NOT EXISTS event_recognition_requests (
+      id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+      event_id BIGINT UNSIGNED NOT NULL,
+      requester_user_id BIGINT UNSIGNED NOT NULL,
+      target_user_id BIGINT UNSIGNED NOT NULL,
+      status ENUM('pending','come','busy') NOT NULL DEFAULT 'pending',
+      response_message VARCHAR(80) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      responded_at TIMESTAMP NULL,
+      FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+      FOREIGN KEY (requester_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      KEY idx_event_recognition_event (event_id),
+      KEY idx_event_recognition_target (target_user_id),
+      KEY idx_event_recognition_requester (requester_user_id)
+    )`,
+  );
+}
+
 function normalizeEmail(value) {
   return String(value ?? '').trim().toLowerCase();
 }
@@ -932,6 +1392,14 @@ function createPublicCode() {
 
 function isDateOnly(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function normalizeDateTimeForSql(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error('invalid_datetime');
+  }
+  return date.toISOString().slice(0, 19).replace('T', ' ');
 }
 
 function bearerToken(req) {
@@ -981,14 +1449,22 @@ async function fetchUserProfile(userId) {
   };
 }
 
-async function fetchUserProfileByPublicCode(publicCode) {
+async function fetchUserProfileByPublicCode(publicCode, viewerUserId = null) {
   const [rows] = await pool.execute(
-    `SELECT id, public_code AS publicCode, nickname,
-            avatar_url AS avatarUrl, facebook_url AS facebookUrl, bio
+    `SELECT users.id,
+            users.public_code AS publicCode,
+            users.nickname,
+            users.avatar_url AS avatarUrl,
+            users.facebook_url AS facebookUrl,
+            users.bio,
+            CASE WHEN follows.followed_user_id IS NULL THEN FALSE ELSE TRUE END AS isFollowed
        FROM users
-      WHERE public_code = ?
+       LEFT JOIN follows
+         ON follows.follower_user_id = ?
+        AND follows.followed_user_id = users.id
+      WHERE users.public_code = ?
       LIMIT 1`,
-    [publicCode],
+    [viewerUserId ?? 0, publicCode],
   );
   if (!rows[0]) return null;
   const { id, ...profile } = rows[0];
@@ -1027,4 +1503,17 @@ function extractInviteCode(invite) {
   const value = String(invite ?? '').trim();
   const parts = value.split('/');
   return parts[parts.length - 1].trim().toUpperCase();
+}
+
+function imageExtension(mimeType) {
+  return {
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+  }[String(mimeType ?? '').toLowerCase()];
+}
+
+function publicUploadUrl(req, fileName) {
+  return `${req.protocol}://${req.get('host')}/uploads/${fileName}`;
 }

@@ -48,6 +48,7 @@ CREATE TABLE events (
   start_date DATE NOT NULL,
   end_date DATE NOT NULL,
   venue VARCHAR(255) NOT NULL,
+  detailed_address TEXT NULL,
   fee VARCHAR(80) NULL,
   organizer VARCHAR(255) NULL,
   description TEXT NULL,
@@ -60,7 +61,7 @@ CREATE TABLE event_bookings (
   id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   event_id BIGINT UNSIGNED NOT NULL,
   user_id BIGINT UNSIGNED NOT NULL,
-  role ENUM('photographer','coser','self') NOT NULL,
+  role ENUM('photographer','coser','manager','self') NOT NULL,
   work_id BIGINT UNSIGNED NULL,
   character_name VARCHAR(120) NULL,
   outfit_image_url TEXT NULL,
@@ -89,6 +90,7 @@ CREATE TABLE circles (
   id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   owner_user_id BIGINT UNSIGNED NOT NULL,
   name VARCHAR(120) NOT NULL,
+  description TEXT NULL,
   invite_code VARCHAR(40) NOT NULL UNIQUE,
   invite_url TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -116,6 +118,40 @@ CREATE TABLE shared_locations (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+CREATE TABLE event_meeting_points (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  event_id BIGINT UNSIGNED NOT NULL,
+  circle_id BIGINT UNSIGNED NOT NULL,
+  creator_user_id BIGINT UNSIGNED NOT NULL,
+  latitude DECIMAL(10, 7) NOT NULL,
+  longitude DECIMAL(10, 7) NOT NULL,
+  description TEXT NULL,
+  meet_at DATETIME NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+  FOREIGN KEY (circle_id) REFERENCES circles(id) ON DELETE CASCADE,
+  FOREIGN KEY (creator_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  KEY idx_event_meeting_points_event (event_id),
+  KEY idx_event_meeting_points_circle (circle_id)
+);
+
+CREATE TABLE event_recognition_requests (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  event_id BIGINT UNSIGNED NOT NULL,
+  requester_user_id BIGINT UNSIGNED NOT NULL,
+  target_user_id BIGINT UNSIGNED NOT NULL,
+  status ENUM('pending','come','busy') NOT NULL DEFAULT 'pending',
+  response_message VARCHAR(80) NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  responded_at TIMESTAMP NULL,
+  FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+  FOREIGN KEY (requester_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  KEY idx_event_recognition_event (event_id),
+  KEY idx_event_recognition_target (target_user_id),
+  KEY idx_event_recognition_requester (requester_user_id)
+);
+
 CREATE TABLE event_submissions (
   id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   submitter_user_id BIGINT UNSIGNED NULL,
@@ -123,6 +159,7 @@ CREATE TABLE event_submissions (
   start_date DATE NOT NULL,
   end_date DATE NOT NULL,
   venue VARCHAR(255) NOT NULL,
+  detailed_address TEXT NULL,
   description TEXT NULL,
   review_status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

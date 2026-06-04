@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../core/models/circle.dart';
 import '../../../core/repositories/social_repository.dart';
+import '../../../core/utils/picked_image_provider.dart';
 
 final circlesProvider = FutureProvider.autoDispose<List<CircleGroup>>((ref) {
   return ref.watch(socialRepositoryProvider).fetchCircles();
+});
+
+final followingProvider = FutureProvider.autoDispose<List<FollowedUser>>((ref) {
+  return ref.watch(socialRepositoryProvider).fetchFollowing();
 });
 
 class SocialPage extends ConsumerWidget {
@@ -14,82 +21,211 @@ class SocialPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final circles = ref.watch(circlesProvider);
+    final following = ref.watch(followingProvider);
 
-    return RefreshIndicator(
-      onRefresh: () async => ref.invalidate(circlesProvider),
-      child: ListView(
-        padding: const EdgeInsets.all(16),
+    return DefaultTabController(
+      length: 2,
+      child: Column(
         children: [
-          Text(
-            '社交',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 16),
-          _ActionTile(
-            icon: Icons.group_add,
-            title: '新建小圈圈',
-            subtitle: '命名後自動產生邀請碼與網址',
-            onTap: () => _circleDialog(context, ref, create: true),
-          ),
-          _ActionTile(
-            icon: Icons.qr_code,
-            title: '加入小圈圈',
-            subtitle: '透過邀請碼或網址加入',
-            onTap: () => _circleDialog(context, ref, create: false),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '我的小圈圈',
-                  style: Theme.of(context).textTheme.titleLarge,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '社交',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
-              ),
-              IconButton(
-                tooltip: '重新整理',
-                onPressed: () => ref.invalidate(circlesProvider),
-                icon: const Icon(Icons.refresh),
-              ),
+                IconButton.filledTonal(
+                  tooltip: '掃描個人 QRCode',
+                  onPressed: () => context.push('/scan-profile'),
+                  icon: const Icon(Icons.qr_code_scanner),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: '重新整理',
+                  onPressed: () {
+                    ref.invalidate(circlesProvider);
+                    ref.invalidate(followingProvider);
+                  },
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
+            ),
+          ),
+          const TabBar(
+            tabs: [
+              Tab(text: '小圈圈', icon: Icon(Icons.groups_outlined)),
+              Tab(text: '已關注', icon: Icon(Icons.favorite_border)),
             ],
           ),
-          const SizedBox(height: 8),
-          circles.when(
-            data: (items) {
-              if (items.isEmpty) {
-                return const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('尚未加入任何小圈圈'),
+          Expanded(
+            child: TabBarView(
+              children: [
+                RefreshIndicator(
+                  onRefresh: () async => ref.invalidate(circlesProvider),
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      _ActionTile(
+                        icon: Icons.group_add,
+                        title: '新建小圈圈',
+                        subtitle: '命名後自動產生邀請碼與網址',
+                        onTap: () => _circleDialog(context, ref, create: true),
+                      ),
+                      _ActionTile(
+                        icon: Icons.qr_code,
+                        title: '加入小圈圈',
+                        subtitle: '透過邀請碼或網址加入',
+                        onTap: () => _circleDialog(context, ref, create: false),
+                      ),
+                      _ActionTile(
+                        icon: Icons.qr_code_scanner,
+                        title: '掃描小圈圈 QRCode',
+                        subtitle: '掃描邀請碼加入小圈圈',
+                        onTap: () => context.push('/scan-circle'),
+                      ),
+                      const SizedBox(height: 12),
+                      circles.when(
+                        data: (items) {
+                          if (items.isEmpty) {
+                            return const Card(
+                              child: Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Text('尚未加入任何小圈圈'),
+                              ),
+                            );
+                          }
+                          return Column(
+                            children: [
+                              for (final circle in items)
+                                _CircleCard(
+                                  circle: circle,
+                                  onLeave: () =>
+                                      _confirmLeave(context, ref, circle),
+                                  onEdit: circle.isOwner
+                                      ? () => _editCircle(context, ref, circle)
+                                      : null,
+                                  onOpenMember: (member) {
+                                    if (member.publicCode.isEmpty) return;
+                                    context.push(
+                                      '/profiles/${member.publicCode}',
+                                    );
+                                  },
+                                  onRemoveMember: circle.isOwner
+                                      ? (member) => _confirmRemoveMember(
+                                          context,
+                                          ref,
+                                          circle,
+                                          member,
+                                        )
+                                      : null,
+                                ),
+                            ],
+                          );
+                        },
+                        error: (error, stack) => Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Text('小圈圈載入失敗：$error'),
+                          ),
+                        ),
+                        loading: () => const Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Center(child: CircularProgressIndicator()),
+                        ),
+                      ),
+                    ],
                   ),
-                );
-              }
-              return Column(
-                children: [
-                  for (final circle in items)
-                    _CircleCard(
-                      circle: circle,
-                      onLeave: () => _confirmLeave(context, ref, circle),
+                ),
+                RefreshIndicator(
+                  onRefresh: () async => ref.invalidate(followingProvider),
+                  child: following.when(
+                    data: (items) {
+                      if (items.isEmpty) {
+                        return ListView(
+                          padding: const EdgeInsets.all(16),
+                          children: [
+                            Card(
+                              child: Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Text('尚未關注任何人'),
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+                      return ListView(
+                        padding: const EdgeInsets.all(16),
+                        children: [
+                          for (final user in items)
+                            _FollowedUserCard(
+                              user: user,
+                              onOpenProfile: () {
+                                if (user.publicCode.isEmpty) return;
+                                context.push('/profiles/${user.publicCode}');
+                              },
+                              onUnfollow: () =>
+                                  _confirmUnfollow(context, ref, user),
+                            ),
+                        ],
+                      );
+                    },
+                    error: (error, stack) => ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Text('關注清單載入失敗：$error'),
+                          ),
+                        ),
+                      ],
                     ),
-                ],
-              );
-            },
-            error: (error, stack) => Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text('小圈圈載入失敗：$error'),
-              ),
-            ),
-            loading: () => const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: CircularProgressIndicator()),
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _confirmUnfollow(
+    BuildContext context,
+    WidgetRef ref,
+    FollowedUser user,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('取消關注'),
+        content: Text('確定要取消關注「${user.nickname}」？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('取消關注'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref.read(socialRepositoryProvider).unfollowUser(user.userId);
+    ref.invalidate(followingProvider);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已取消關注')));
   }
 
   Future<void> _circleDialog(
@@ -101,6 +237,51 @@ class SocialPage extends ConsumerWidget {
       context: context,
       builder: (context) => _CircleDialog(create: create),
     );
+  }
+
+  Future<void> _editCircle(
+    BuildContext context,
+    WidgetRef ref,
+    CircleGroup circle,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => _CircleDialog(create: true, circle: circle),
+    );
+  }
+
+  Future<void> _confirmRemoveMember(
+    BuildContext context,
+    WidgetRef ref,
+    CircleGroup circle,
+    CircleMember member,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('移除成員'),
+        content: Text('確定要將「${member.nickname}」移出「${circle.name}」？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('移除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref
+        .read(socialRepositoryProvider)
+        .removeCircleMember(circleId: circle.id, userId: member.userId);
+    ref.invalidate(circlesProvider);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已移除小圈圈成員')));
   }
 
   Future<void> _confirmLeave(
@@ -136,9 +317,10 @@ class SocialPage extends ConsumerWidget {
 }
 
 class _CircleDialog extends ConsumerStatefulWidget {
-  const _CircleDialog({required this.create});
+  const _CircleDialog({required this.create, this.circle});
 
   final bool create;
+  final CircleGroup? circle;
 
   @override
   ConsumerState<_CircleDialog> createState() => _CircleDialogState();
@@ -146,23 +328,55 @@ class _CircleDialog extends ConsumerStatefulWidget {
 
 class _CircleDialogState extends ConsumerState<_CircleDialog> {
   final _controller = TextEditingController();
+  final _descriptionController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    final circle = widget.circle;
+    if (circle != null) {
+      _controller.text = circle.name;
+      _descriptionController.text = circle.description;
+    }
+  }
 
   @override
   void dispose() {
     _controller.dispose();
+    _descriptionController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final create = widget.create;
+    final editing = widget.circle != null;
 
     return AlertDialog(
-      title: Text(create ? '新建小圈圈' : '加入小圈圈'),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        decoration: InputDecoration(labelText: create ? '小圈圈名稱' : '邀請碼或網址'),
+      title: Text(
+        editing
+            ? '編輯小圈圈'
+            : create
+            ? '新建小圈圈'
+            : '加入小圈圈',
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            decoration: InputDecoration(labelText: create ? '小圈圈名稱' : '邀請碼或網址'),
+          ),
+          if (create) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(labelText: '小圈圈說明'),
+              maxLines: 3,
+            ),
+          ],
+        ],
       ),
       actions: [
         TextButton(
@@ -173,15 +387,31 @@ class _CircleDialogState extends ConsumerState<_CircleDialog> {
           onPressed: () async {
             final value = _controller.text.trim();
             if (value.isEmpty) return;
-            if (create) {
-              await ref.read(socialRepositoryProvider).createCircle(value);
+            final repository = ref.read(socialRepositoryProvider);
+            if (editing) {
+              await repository.updateCircle(
+                circleId: widget.circle!.id,
+                name: value,
+                description: _descriptionController.text.trim(),
+              );
+            } else if (create) {
+              await repository.createCircle(
+                value,
+                description: _descriptionController.text.trim(),
+              );
             } else {
-              await ref.read(socialRepositoryProvider).joinCircle(value);
+              await repository.joinCircle(value);
             }
             ref.invalidate(circlesProvider);
             if (context.mounted) Navigator.pop(context);
           },
-          child: Text(create ? '建立' : '加入'),
+          child: Text(
+            editing
+                ? '儲存'
+                : create
+                ? '建立'
+                : '加入',
+          ),
         ),
       ],
     );
@@ -189,61 +419,200 @@ class _CircleDialogState extends ConsumerState<_CircleDialog> {
 }
 
 class _CircleCard extends StatelessWidget {
-  const _CircleCard({required this.circle, required this.onLeave});
+  const _CircleCard({
+    required this.circle,
+    required this.onLeave,
+    required this.onOpenMember,
+    this.onEdit,
+    this.onRemoveMember,
+  });
 
   final CircleGroup circle;
   final VoidCallback onLeave;
+  final VoidCallback? onEdit;
+  final ValueChanged<CircleMember> onOpenMember;
+  final ValueChanged<CircleMember>? onRemoveMember;
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
+      child: ExpansionTile(
+        leading: const CircleAvatar(child: Icon(Icons.groups)),
+        title: Text(
+          circle.name,
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                const CircleAvatar(child: Icon(Icons.groups)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        circle.name,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      Text(
-                        '${circle.memberCount} 位成員${circle.isOwner ? ' · 我建立的' : ''}',
-                      ),
-                    ],
-                  ),
-                ),
-                PopupMenuButton<String>(
-                  onSelected: (value) {
-                    if (value == 'leave') onLeave();
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'leave', child: Text('離開')),
-                  ],
-                ),
-              ],
+            Text('${circle.memberCount} 位成員${circle.isOwner ? ' · 我建立的' : ''}'),
+            if (circle.description.isNotEmpty)
+              Text(
+                circle.description,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            const SizedBox(height: 6),
+            _MemberAvatarStrip(members: circle.members),
+          ],
+        ),
+        trailing: PopupMenuButton<String>(
+          onSelected: (value) {
+            if (value == 'edit') onEdit?.call();
+            if (value == 'leave') onLeave();
+          },
+          itemBuilder: (context) => [
+            if (onEdit != null)
+              const PopupMenuItem(value: 'edit', child: Text('編輯')),
+            const PopupMenuItem(value: 'leave', child: Text('離開')),
+          ],
+        ),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Chip(label: Text(circle.inviteCode)),
+              IconButton.filledTonal(
+                tooltip: '顯示邀請 QRCode',
+                onPressed: () => _showCircleQr(context),
+                icon: const Icon(Icons.qr_code_2),
+              ),
+              Text(
+                circle.inviteUrl,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (final member in circle.members)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(
+                backgroundImage: pickedImageProvider(member.avatarUrl),
+                child: member.avatarUrl.isEmpty
+                    ? Text(member.nickname.characters.firstOrNull ?? '?')
+                    : null,
+              ),
+              title: Text(member.nickname.isEmpty ? '未命名使用者' : member.nickname),
+              subtitle: member.isOwner ? const Text('建立者') : null,
+              onTap: () => onOpenMember(member),
+              trailing: !circle.isOwner || member.isOwner
+                  ? null
+                  : IconButton(
+                      tooltip: '移除成員',
+                      onPressed: () => onRemoveMember?.call(member),
+                      icon: const Icon(Icons.person_remove_outlined),
+                    ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showCircleQr(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(circle.name),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            QrImageView(
+              data: circle.inviteUrl.isEmpty
+                  ? circle.inviteCode
+                  : circle.inviteUrl,
+              version: QrVersions.auto,
+              size: 220,
+              backgroundColor: Colors.white,
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Chip(label: Text(circle.inviteCode)),
-                Text(
-                  circle.inviteUrl,
-                  style: Theme.of(context).textTheme.bodySmall,
+            SelectableText(circle.inviteCode),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('關閉'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MemberAvatarStrip extends StatelessWidget {
+  const _MemberAvatarStrip({required this.members});
+
+  final List<CircleMember> members;
+
+  @override
+  Widget build(BuildContext context) {
+    if (members.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      height: 28,
+      child: Stack(
+        children: [
+          for (final entry in members.take(8).indexed)
+            Positioned(
+              left: entry.$1 * 20,
+              child: CircleAvatar(
+                radius: 14,
+                backgroundColor: Theme.of(context).colorScheme.surface,
+                child: CircleAvatar(
+                  radius: 12,
+                  backgroundImage: pickedImageProvider(entry.$2.avatarUrl),
+                  child: entry.$2.avatarUrl.isEmpty
+                      ? Text(
+                          entry.$2.nickname.characters.firstOrNull ?? '?',
+                          style: Theme.of(context).textTheme.labelSmall,
+                        )
+                      : null,
                 ),
-              ],
+              ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FollowedUserCard extends StatelessWidget {
+  const _FollowedUserCard({
+    required this.user,
+    required this.onOpenProfile,
+    required this.onUnfollow,
+  });
+
+  final FollowedUser user;
+  final VoidCallback onOpenProfile;
+  final VoidCallback onUnfollow;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundImage: pickedImageProvider(user.avatarUrl),
+          child: user.avatarUrl.isEmpty
+              ? Text(user.nickname.characters.firstOrNull ?? '?')
+              : null,
+        ),
+        title: Text(user.nickname.isEmpty ? '未命名使用者' : user.nickname),
+        subtitle: user.bio.isEmpty
+            ? const Text('尚未填寫自我介紹')
+            : Text(user.bio, maxLines: 2, overflow: TextOverflow.ellipsis),
+        onTap: onOpenProfile,
+        trailing: PopupMenuButton<String>(
+          onSelected: (value) {
+            if (value == 'unfollow') onUnfollow();
+          },
+          itemBuilder: (context) => const [
+            PopupMenuItem(value: 'unfollow', child: Text('取消關注')),
           ],
         ),
       ),

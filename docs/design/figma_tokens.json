@@ -1,0 +1,155 @@
+{
+  "name": "CosCircle / Cos小圈圈",
+  "source": "lib/core/theme/app_theme.dart",
+  "frames": {
+    "android": {
+      "width": 393,
+      "height": 852
+    },
+    "iphone": {
+      "width": 390,
+      "height": 844
+    },
+    "smallAndroid": {
+      "width": 360,
+      "height": 800
+    }
+  },
+  "colors": {
+    "seed": "#5FA8D3",
+    "primary": "#4F9DC9",
+    "secondary": "#FFB86B",
+    "tertiary": "#8CC9A8",
+    "surface": "#FFFBF5",
+    "card": "#FFFFFF",
+    "success": "#4F9D69",
+    "warning": "#D9822B",
+    "danger": "#C94F4F",
+    "disabledBg": "#E9E5DD",
+    "disabledText": "#77736C"
+  },
+  "radius": {
+    "card": 8,
+    "input": 8,
+    "button": 8,
+    "pill": 999
+  },
+  "spacing": {
+    "xxs": 4,
+    "xs": 6,
+    "sm": 8,
+    "md": 12,
+    "page": 16,
+    "lg": 20,
+    "xl": 24,
+    "xxl": 32
+  },
+  "typography": {
+    "displayAppName": {
+      "materialStyle": "displaySmall",
+      "weight": 800
+    },
+    "pageHeading": {
+      "materialStyle": "headlineSmall",
+      "weight": 800
+    },
+    "sectionHeading": {
+      "materialStyle": "titleLarge",
+      "weight": 800
+    },
+    "cardTitle": {
+      "materialStyle": "titleMedium",
+      "weight": 700
+    },
+    "body": {
+      "materialStyle": "bodyMedium",
+      "weight": 400
+    },
+    "secondaryBody": {
+      "materialStyle": "bodySmall",
+      "weight": 400
+    },
+    "pillLabel": {
+      "materialStyle": "labelSmall",
+      "weight": 600
+    }
+  },
+  "components": {
+    "appShell": {
+      "name": "Navigation/BottomMain",
+      "destinations": ["個人", "活動", "當前", "社交", "其他"]
+    },
+    "eventCard": {
+      "name": "Event/Card",
+      "variants": {
+        "state": ["upcoming", "active", "ended"],
+        "joined": [true, false],
+        "image": ["present", "placeholder"],
+        "density": ["regular", "narrow"]
+      },
+      "layout": {
+        "direction": "horizontal",
+        "padding": 10,
+        "gap": 10,
+        "imageWidth": 92,
+        "imageHeight": 112,
+        "radius": 8
+      }
+    },
+    "eventTag": {
+      "name": "Event/Tag",
+      "height": 22,
+      "radius": 999,
+      "hasIconVariant": true
+    },
+    "avatarStrip": {
+      "name": "Avatar/Strip",
+      "maxVisible": 10
+    },
+    "attendanceSheet": {
+      "name": "Attendance/Sheet",
+      "maxViewportHeightRatio": 0.86,
+      "states": ["create", "edit", "submitting", "error"]
+    },
+    "participantCard": {
+      "name": "Participant/Card",
+      "states": ["default", "followed", "me"]
+    },
+    "mapMarker": {
+      "name": "Map/AvatarMarker",
+      "variants": {
+        "owner": ["me", "other"],
+        "image": ["avatar", "initial"]
+      }
+    },
+    "profileSummary": {
+      "name": "Profile/Summary",
+      "states": ["view", "edit", "public"]
+    },
+    "workSelector": {
+      "name": "Work/Selector",
+      "variants": {
+        "mode": ["single", "multi"],
+        "state": ["empty", "results", "create", "selected"]
+      }
+    },
+    "adminTile": {
+      "name": "Admin/Tile",
+      "variants": {
+        "type": ["user", "submission", "event"],
+        "state": ["default", "loading", "error"]
+      }
+    }
+  },
+  "prototypeFlows": [
+    "Register and publish attendance",
+    "Find people at event",
+    "Share profile by QR",
+    "Use current event map",
+    "Admin management"
+  ],
+  "privacyRules": {
+    "profileQrUsesPublicCode": true,
+    "neverExposeUserIdInPublicLinks": true
+  }
+}

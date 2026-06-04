@@ -18,6 +18,7 @@ class ApiClient {
           receiveTimeout: const Duration(seconds: 10),
         ),
       ) {
+    debugPrint('[ApiClient] baseUrl=${_dio.options.baseUrl}');
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
@@ -57,7 +58,8 @@ class ApiClient {
 }
 
 String _defaultBaseUrl() {
+  const devLanBaseUrl = 'http://192.168.5.198:8080/api';
   if (kIsWeb) return 'http://127.0.0.1:8080/api';
-  if (Platform.isAndroid) return 'http://10.0.2.2:8080/api';
+  if (Platform.isAndroid || Platform.isIOS) return devLanBaseUrl;
   return 'http://127.0.0.1:8080/api';
 }

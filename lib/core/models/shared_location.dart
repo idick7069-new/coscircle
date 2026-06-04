@@ -6,6 +6,7 @@ class SharedLocation {
     required this.latitude,
     required this.longitude,
     required this.sharedAt,
+    this.publicCode = '',
     this.avatarUrl = '',
     this.characterName = '',
     this.workName = '',
@@ -24,6 +25,7 @@ class SharedLocation {
   final double latitude;
   final double longitude;
   final DateTime sharedAt;
+  final String publicCode;
   final String avatarUrl;
   final String characterName;
   final String workName;
@@ -43,6 +45,7 @@ class SharedLocation {
       latitude: double.parse(json['latitude'].toString()),
       longitude: double.parse(json['longitude'].toString()),
       sharedAt: DateTime.parse(json['sharedAt'].toString()),
+      publicCode: json['publicCode']?.toString() ?? '',
       avatarUrl: json['avatarUrl']?.toString() ?? '',
       characterName: json['characterName']?.toString() ?? '',
       workName: json['workName']?.toString() ?? '',

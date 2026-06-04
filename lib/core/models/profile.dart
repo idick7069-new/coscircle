@@ -6,6 +6,7 @@ class UserProfile {
     required this.nickname,
     this.publicCode = '',
     this.isAdmin = false,
+    this.isFollowed = false,
     this.avatarUrl = '',
     this.facebookUrl = '',
     this.bio = '',
@@ -16,6 +17,7 @@ class UserProfile {
   final String nickname;
   final String publicCode;
   final bool isAdmin;
+  final bool isFollowed;
   final String avatarUrl;
   final String facebookUrl;
   final String bio;
@@ -27,6 +29,7 @@ class UserProfile {
       nickname: json['nickname']?.toString() ?? '',
       publicCode: json['publicCode']?.toString() ?? '',
       isAdmin: json['isAdmin'] == true || json['isAdmin'] == 1,
+      isFollowed: json['isFollowed'] == true || json['isFollowed'] == 1,
       avatarUrl: json['avatarUrl']?.toString() ?? '',
       facebookUrl: json['facebookUrl']?.toString() ?? '',
       bio: json['bio']?.toString() ?? '',
@@ -50,6 +53,7 @@ class UserProfile {
     String? nickname,
     String? publicCode,
     bool? isAdmin,
+    bool? isFollowed,
     String? avatarUrl,
     String? facebookUrl,
     String? bio,
@@ -60,6 +64,7 @@ class UserProfile {
       nickname: nickname ?? this.nickname,
       publicCode: publicCode ?? this.publicCode,
       isAdmin: isAdmin ?? this.isAdmin,
+      isFollowed: isFollowed ?? this.isFollowed,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       facebookUrl: facebookUrl ?? this.facebookUrl,
       bio: bio ?? this.bio,

@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:table_calendar/table_calendar.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:table_calendar/table_calendar.dart';
 
 import '../../../core/models/booking.dart';
 import '../../../core/models/event.dart';
 import '../../../core/models/work.dart';
 import '../../../core/providers/event_providers.dart';
 import '../../../core/repositories/event_repository.dart';
+import '../../../core/repositories/profile_repository.dart';
 import '../../works/presentation/work_selector.dart';
 import 'widgets/event_card.dart';
 
@@ -22,11 +24,24 @@ class EventListPage extends ConsumerStatefulWidget {
 }
 
 class _EventListPageState extends ConsumerState<EventListPage> {
+  static const _filterKey = 'event_list_filter';
+  static const _joinedOnlyKey = 'event_list_joined_only';
+  static const _hideEndedKey = 'event_list_hide_ended';
+  static const _selectedDayKey = 'event_list_selected_day';
+  static const _focusedDayKey = 'event_list_focused_day';
+  static const _validFilters = {'全部', '我有加入', '關注者', '小圈圈'};
+
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
   bool _joinedOnly = false;
-  bool _hideEnded = false;
+  bool _hideEnded = true;
   String _filter = '全部';
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreFilters();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,7 +69,7 @@ class _EventListPageState extends ConsumerState<EventListPage> {
                         tooltip: '只看我參加',
                         isSelected: _joinedOnly,
                         onPressed: () =>
-                            setState(() => _joinedOnly = !_joinedOnly),
+                            _updateFilters(joinedOnly: !_joinedOnly),
                         icon: const Icon(Icons.how_to_reg),
                       ),
                     ],
@@ -145,10 +160,7 @@ class _EventListPageState extends ConsumerState<EventListPage> {
         calendarFormat: CalendarFormat.month,
         availableCalendarFormats: const {CalendarFormat.month: '月'},
         onDaySelected: (selectedDay, focusedDay) {
-          setState(() {
-            _selectedDay = selectedDay;
-            _focusedDay = focusedDay;
-          });
+          _updateFilters(selectedDay: selectedDay, focusedDay: focusedDay);
         },
         headerStyle: const HeaderStyle(
           formatButtonVisible: false,
@@ -185,7 +197,7 @@ class _EventListPageState extends ConsumerState<EventListPage> {
             ChoiceChip(
               label: Text(filter),
               selected: _filter == filter,
-              onSelected: (_) => setState(() => _filter = filter),
+              onSelected: (_) => _updateFilters(filter: filter),
             ),
           FilterChip(
             avatar: Icon(
@@ -194,7 +206,7 @@ class _EventListPageState extends ConsumerState<EventListPage> {
             ),
             label: const Text('隱藏已結束'),
             selected: _hideEnded,
-            onSelected: (value) => setState(() => _hideEnded = value),
+            onSelected: (value) => _updateFilters(hideEnded: value),
           ),
         ],
       ),
@@ -227,6 +239,65 @@ class _EventListPageState extends ConsumerState<EventListPage> {
           !_hideEnded || event.status(DateTime.now()) != EventStatus.ended;
       return matchesDate && matchesJoined && matchesType && matchesEnded;
     }).toList()..sort((a, b) => a.startDate.compareTo(b.startDate));
+  }
+
+  Future<void> _restoreFilters() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    final filter = prefs.getString(_filterKey);
+    final selectedDay = _parseSavedDate(prefs.getString(_selectedDayKey));
+    final focusedDay = _parseSavedDate(prefs.getString(_focusedDayKey));
+    setState(() {
+      if (filter != null && _validFilters.contains(filter)) {
+        _filter = filter;
+      }
+      _joinedOnly = prefs.getBool(_joinedOnlyKey) ?? false;
+      _hideEnded = prefs.getBool(_hideEndedKey) ?? true;
+      _selectedDay = selectedDay;
+      _focusedDay = focusedDay ?? selectedDay ?? DateTime.now();
+    });
+  }
+
+  void _updateFilters({
+    String? filter,
+    bool? joinedOnly,
+    bool? hideEnded,
+    DateTime? selectedDay,
+    DateTime? focusedDay,
+  }) {
+    setState(() {
+      if (filter != null) _filter = filter;
+      if (joinedOnly != null) _joinedOnly = joinedOnly;
+      if (hideEnded != null) _hideEnded = hideEnded;
+      if (selectedDay != null) _selectedDay = selectedDay;
+      if (focusedDay != null) _focusedDay = focusedDay;
+    });
+    _saveFilters();
+  }
+
+  Future<void> _saveFilters() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_filterKey, _filter);
+    await prefs.setBool(_joinedOnlyKey, _joinedOnly);
+    await prefs.setBool(_hideEndedKey, _hideEnded);
+    await prefs.setString(_focusedDayKey, _dateOnly(_focusedDay));
+    final selectedDay = _selectedDay;
+    if (selectedDay == null) {
+      await prefs.remove(_selectedDayKey);
+    } else {
+      await prefs.setString(_selectedDayKey, _dateOnly(selectedDay));
+    }
+  }
+
+  DateTime? _parseSavedDate(String? value) {
+    if (value == null || value.isEmpty) return null;
+    return DateTime.tryParse(value);
+  }
+
+  String _dateOnly(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
   }
 
   Future<void> _showBookingSheet(BuildContext context, CosEvent event) async {
@@ -270,6 +341,7 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
   final Set<String> _interactionTags = {};
   String _presenceStatus = 'open';
   String? _outfitImagePath;
+  XFile? _pickedOutfitImage;
   WorkTag? _selectedWork;
   bool _submitting = false;
 
@@ -321,8 +393,13 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
                     icon: Icon(Icons.face),
                   ),
                   ButtonSegment(
+                    value: ParticipantRole.manager,
+                    label: Text('馬內'),
+                    icon: Icon(Icons.support_agent),
+                  ),
+                  ButtonSegment(
                     value: ParticipantRole.self,
-                    label: Text('本體'),
+                    label: Text('路人'),
                     icon: Icon(Icons.person),
                   ),
                 ],
@@ -390,7 +467,9 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
               OutlinedButton.icon(
                 onPressed: _pickOutfitImage,
                 icon: const Icon(Icons.image_outlined),
-                label: Text(_outfitImagePath == null ? '上傳當天穿搭照片' : '已選擇當天穿搭'),
+                label: Text(
+                  _outfitImagePath == null ? '上傳當天出的角照片' : '已選擇當天出的角',
+                ),
               ),
               if (_outfitImagePath != null) ...[
                 const SizedBox(height: 8),
@@ -451,12 +530,27 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
       imageQuality: 82,
     );
     if (image == null || !mounted) return;
-    setState(() => _outfitImagePath = image.path);
+    setState(() {
+      _outfitImagePath = image.path;
+      _pickedOutfitImage = image;
+    });
   }
 
   Future<void> _saveAttendance(BuildContext context, CosEvent event) async {
     setState(() => _submitting = true);
     try {
+      var outfitImageUrl = _outfitImagePath;
+      final pickedOutfitImage = _pickedOutfitImage;
+      if (pickedOutfitImage != null) {
+        final uploadedUrl = await ref
+            .read(profileRepositoryProvider)
+            .uploadImage(
+              bytes: await pickedOutfitImage.readAsBytes(),
+              mimeType: _mimeTypeForPath(pickedOutfitImage.path),
+            );
+        if (uploadedUrl.isNotEmpty) outfitImageUrl = uploadedUrl;
+      }
+
       await ref
           .read(eventRepositoryProvider)
           .upsertBooking(
@@ -465,7 +559,7 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
               role: _role,
               workId: _role == ParticipantRole.coser ? _selectedWork?.id : null,
               characterName: _characterController.text,
-              outfitImagePath: _outfitImagePath,
+              outfitImagePath: outfitImageUrl,
               interactionTags: _interactionTags.toList(),
               availableTime: _availableTimeController.text.trim(),
               presenceStatus: _presenceStatus,
@@ -482,6 +576,13 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  String _mimeTypeForPath(String path) {
+    final lower = path.toLowerCase();
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    return 'image/jpeg';
   }
 
   Future<void> _removeAttendance(BuildContext context, CosEvent event) async {

@@ -20,8 +20,30 @@ class SocialRepository {
         .toList();
   }
 
-  Future<void> createCircle(String name) async {
-    await _apiClient.post('/circles', data: {'name': name});
+  Future<List<FollowedUser>> fetchFollowing() async {
+    final response = await _apiClient.get('/following');
+    final rows = response.data as List<dynamic>;
+    return rows
+        .map((row) => FollowedUser.fromJson(row as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> createCircle(String name, {String description = ''}) async {
+    await _apiClient.post(
+      '/circles',
+      data: {'name': name, 'description': description},
+    );
+  }
+
+  Future<void> updateCircle({
+    required String circleId,
+    required String name,
+    required String description,
+  }) async {
+    await _apiClient.put(
+      '/circles/$circleId',
+      data: {'name': name, 'description': description},
+    );
   }
 
   Future<void> joinCircle(String invite) async {
@@ -30,5 +52,16 @@ class SocialRepository {
 
   Future<void> leaveCircle(String circleId) async {
     await _apiClient.delete('/circles/$circleId/members/me');
+  }
+
+  Future<void> removeCircleMember({
+    required String circleId,
+    required String userId,
+  }) async {
+    await _apiClient.delete('/circles/$circleId/members/$userId');
+  }
+
+  Future<void> unfollowUser(String userId) async {
+    await _apiClient.delete('/users/$userId/follow');
   }
 }

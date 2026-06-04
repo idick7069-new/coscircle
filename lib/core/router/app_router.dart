@@ -6,6 +6,8 @@ import '../../features/events/presentation/event_detail_page.dart';
 import '../../features/home/presentation/home_shell_page.dart';
 import '../../features/profile/presentation/onboarding_profile_page.dart';
 import '../../features/profile/presentation/public_profile_page.dart';
+import '../../features/profile/presentation/profile_qr_scanner_page.dart';
+import '../../features/social/presentation/circle_qr_scanner_page.dart';
 
 final appRouter = GoRouter(
   initialLocation: '/login',
@@ -30,6 +32,14 @@ final appRouter = GoRouter(
       path: '/profiles/:code',
       builder: (context, state) =>
           PublicProfilePage(publicCode: state.pathParameters['code']!),
+    ),
+    GoRoute(
+      path: '/scan-profile',
+      builder: (context, state) => const ProfileQrScannerPage(),
+    ),
+    GoRoute(
+      path: '/scan-circle',
+      builder: (context, state) => const CircleQrScannerPage(),
     ),
   ],
 );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/models/profile.dart';
 import '../../../core/repositories/profile_repository.dart';
@@ -20,7 +21,20 @@ class PublicProfilePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final profile = ref.watch(publicProfileProvider(publicCode));
     return AppPage(
-      appBar: AppBar(title: const Text('個人資訊')),
+      appBar: AppBar(
+        leading: IconButton(
+          tooltip: '返回',
+          onPressed: () {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            } else {
+              context.go('/');
+            }
+          },
+          icon: const BackButtonIcon(),
+        ),
+        title: const Text('個人資訊'),
+      ),
       child: profile.when(
         data: (value) {
           if (value == null) return const Center(child: Text('找不到使用者'));
@@ -43,6 +57,34 @@ class PublicProfilePage extends ConsumerWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
+              const SizedBox(height: 12),
+              if (value.id.isNotEmpty)
+                FilledButton.icon(
+                  onPressed: () async {
+                    if (value.isFollowed) {
+                      await ref
+                          .read(profileRepositoryProvider)
+                          .unfollowUser(value.id);
+                    } else {
+                      await ref
+                          .read(profileRepositoryProvider)
+                          .followUser(value.id);
+                    }
+                    ref.invalidate(publicProfileProvider(publicCode));
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(value.isFollowed ? '已取消關注' : '已加入關注'),
+                      ),
+                    );
+                  },
+                  icon: Icon(
+                    value.isFollowed
+                        ? Icons.person_remove_outlined
+                        : Icons.person_add_outlined,
+                  ),
+                  label: Text(value.isFollowed ? '取消關注' : '加入關注'),
+                ),
               if (value.bio.isNotEmpty) ...[
                 const SizedBox(height: 20),
                 Text(value.bio),

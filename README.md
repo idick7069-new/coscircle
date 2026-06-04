@@ -13,10 +13,18 @@ CosCircle 是一個 Flutter Android / iOS 專案，用於大型 Cosplay / 同人
 
 ```sh
 flutter pub get
-flutter run --dart-define=API_BASE_URL=http://localhost:8080/api
+flutter run
 ```
 
-Android Emulator 連本機後端時請使用：
+實體 Android / iOS 手機與開發電腦連同一個 Wi-Fi 時，App 會預設連到：
+
+```text
+http://192.168.5.198:8080/api
+```
+
+如果電腦的 Wi-Fi IP 改變，請更新 `lib/core/api/api_client.dart` 裡的 `devLanBaseUrl`。
+
+Android Emulator 連本機後端時可改用：
 
 ```sh
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8080/api

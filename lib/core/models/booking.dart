@@ -1,4 +1,4 @@
-enum ParticipantRole { photographer, coser, self }
+enum ParticipantRole { photographer, coser, manager, self }
 
 class EventBooking {
   const EventBooking({

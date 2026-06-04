@@ -124,6 +124,7 @@ class _SubmitEventSheetState extends ConsumerState<_SubmitEventSheet> {
     text: DateFormat('yyyy-MM-dd').format(DateTime.now()),
   );
   final _venue = TextEditingController();
+  final _detailedAddress = TextEditingController();
   final _description = TextEditingController();
 
   @override
@@ -132,6 +133,7 @@ class _SubmitEventSheetState extends ConsumerState<_SubmitEventSheet> {
     _startDate.dispose();
     _endDate.dispose();
     _venue.dispose();
+    _detailedAddress.dispose();
     _description.dispose();
     super.dispose();
   }
@@ -184,6 +186,11 @@ class _SubmitEventSheetState extends ConsumerState<_SubmitEventSheet> {
             ),
             const SizedBox(height: 12),
             TextField(
+              controller: _detailedAddress,
+              decoration: const InputDecoration(labelText: '詳細地址'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
               controller: _description,
               decoration: const InputDecoration(labelText: '活動說明'),
               maxLines: 3,
@@ -198,6 +205,9 @@ class _SubmitEventSheetState extends ConsumerState<_SubmitEventSheet> {
                       startDate: DateTime.parse(_startDate.text.trim()),
                       endDate: DateTime.parse(_endDate.text.trim()),
                       venue: _venue.text.trim(),
+                      detailedAddress: _detailedAddress.text.trim().isEmpty
+                          ? _venue.text.trim()
+                          : _detailedAddress.text.trim(),
                       description: _description.text.trim(),
                     );
                 if (!context.mounted) return;

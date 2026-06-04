@@ -16,6 +16,7 @@ class SubmissionRepository {
     required DateTime startDate,
     required DateTime endDate,
     required String venue,
+    required String detailedAddress,
     required String description,
   }) async {
     await _apiClient.post(
@@ -25,6 +26,7 @@ class SubmissionRepository {
         'startDate': _dateOnly(startDate),
         'endDate': _dateOnly(endDate),
         'venue': venue,
+        'detailedAddress': detailedAddress,
         'description': description,
       },
     );

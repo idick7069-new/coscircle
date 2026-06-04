@@ -26,6 +26,8 @@
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>CosCircle 需要取得你的位置，讓你在活動中分享目前所在位置給已加入活動的朋友。</string>
+	<key>NSCameraUsageDescription</key>
+	<string>CosCircle 需要使用相機掃描個人資訊 QRCode。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>CosCircle 需要存取相簿，讓你上傳頭像與活動當天預計穿著照片。</string>
 	<key>UILaunchStoryboardName</key>

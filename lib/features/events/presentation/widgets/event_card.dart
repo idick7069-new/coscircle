@@ -6,6 +6,7 @@ import '../../../../core/models/event.dart';
 import '../../../../core/models/participant.dart';
 import '../../../../core/providers/event_providers.dart';
 import '../../../../core/utils/picked_image_provider.dart';
+import '../../../../core/utils/participant_role_style.dart';
 
 class EventCard extends ConsumerWidget {
   const EventCard({
@@ -263,18 +264,27 @@ class _ParticipantStrip extends StatelessWidget {
                   left: entry.$1 * 17,
                   child: Tooltip(
                     message: entry.$2.nickname,
-                    child: CircleAvatar(
-                      radius: 12,
-                      backgroundColor: Theme.of(
-                        context,
-                      ).colorScheme.primaryContainer,
-                      backgroundImage: pickedImageProvider(entry.$2.avatarUrl),
-                      child: entry.$2.avatarUrl.isEmpty
-                          ? Text(
-                              entry.$2.nickname.characters.firstOrNull ?? '?',
-                              style: Theme.of(context).textTheme.labelSmall,
-                            )
-                          : null,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: participantRoleColor(entry.$2.role),
+                        shape: BoxShape.circle,
+                      ),
+                      child: CircleAvatar(
+                        radius: 10,
+                        backgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.primaryContainer,
+                        backgroundImage: pickedImageProvider(
+                          entry.$2.avatarUrl,
+                        ),
+                        child: entry.$2.avatarUrl.isEmpty
+                            ? Text(
+                                entry.$2.nickname.characters.firstOrNull ?? '?',
+                                style: Theme.of(context).textTheme.labelSmall,
+                              )
+                            : null,
+                      ),
                     ),
                   ),
                 ),

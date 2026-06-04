@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -21,9 +22,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   final _facebook = TextEditingController();
   final _bio = TextEditingController();
   String _avatarUrl = '';
+  XFile? _pickedAvatar;
   List<WorkTag> _pitWorks = const [];
   bool _initialized = false;
   bool _editing = false;
+  bool _saving = false;
 
   @override
   void dispose() {
@@ -66,6 +69,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   icon: const Icon(Icons.qr_code_2),
                 ),
                 const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  tooltip: '掃描個人 QRCode',
+                  onPressed: () => context.push('/scan-profile'),
+                  icon: const Icon(Icons.qr_code_scanner),
+                ),
+                const SizedBox(width: 8),
                 IconButton.filled(
                   tooltip: _editing ? '取消編輯' : '編輯',
                   onPressed: () {
@@ -89,6 +98,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 onPickAvatar: _pickAvatar,
                 onPitWorksChanged: (works) => setState(() => _pitWorks = works),
                 onSave: () => _saveProfile(context, profile),
+                saving: _saving,
               )
             else
               _ProfileSummary(profile: profile),
@@ -103,30 +113,50 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     _facebook.text = profile.facebookUrl;
     _bio.text = profile.bio;
     _avatarUrl = profile.avatarUrl;
+    _pickedAvatar = null;
     _pitWorks = profile.pitWorks;
     _initialized = true;
   }
 
   Future<void> _saveProfile(BuildContext context, UserProfile profile) async {
-    final saved = await ref
-        .read(profileRepositoryProvider)
-        .saveProfile(
-          profile.copyWith(
-            nickname: _nickname.text.trim(),
-            avatarUrl: _avatarUrl,
-            facebookUrl: _facebook.text.trim(),
-            bio: _bio.text.trim(),
-            pitWorks: _pitWorks,
-          ),
+    setState(() => _saving = true);
+    try {
+      final repository = ref.read(profileRepositoryProvider);
+      var avatarUrl = _avatarUrl;
+      final pickedAvatar = _pickedAvatar;
+      if (pickedAvatar != null) {
+        final uploadedUrl = await repository.uploadImage(
+          bytes: await pickedAvatar.readAsBytes(),
+          mimeType: _mimeTypeForPath(pickedAvatar.path),
         );
-    setState(() {
-      _editing = false;
-      _loadProfile(saved);
-    });
-    if (context.mounted) {
+        if (uploadedUrl.isNotEmpty) avatarUrl = uploadedUrl;
+      }
+
+      final saved = await repository.saveProfile(
+        profile.copyWith(
+          nickname: _nickname.text.trim(),
+          avatarUrl: avatarUrl,
+          facebookUrl: _facebook.text.trim(),
+          bio: _bio.text.trim(),
+          pitWorks: _pitWorks,
+        ),
+      );
+      setState(() {
+        _editing = false;
+        _loadProfile(saved);
+      });
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('已同步更新個人資訊')));
+      }
+    } catch (error) {
+      if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('已同步更新個人資訊')));
+      ).showSnackBar(SnackBar(content: Text('個人資訊儲存失敗：$error')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -136,7 +166,17 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       imageQuality: 82,
     );
     if (image == null || !mounted) return;
-    setState(() => _avatarUrl = image.path);
+    setState(() {
+      _avatarUrl = image.path;
+      _pickedAvatar = image;
+    });
+  }
+
+  String _mimeTypeForPath(String path) {
+    final lower = path.toLowerCase();
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    return 'image/jpeg';
   }
 
   void _showShareSheet(BuildContext context, UserProfile profile) {
@@ -247,6 +287,7 @@ class _EditProfileForm extends StatelessWidget {
     required this.onPickAvatar,
     required this.onPitWorksChanged,
     required this.onSave,
+    required this.saving,
   });
 
   final String avatarUrl;
@@ -257,6 +298,7 @@ class _EditProfileForm extends StatelessWidget {
   final VoidCallback onPickAvatar;
   final ValueChanged<List<WorkTag>> onPitWorksChanged;
   final VoidCallback onSave;
+  final bool saving;
 
   @override
   Widget build(BuildContext context) {
@@ -275,7 +317,7 @@ class _EditProfileForm extends StatelessWidget {
               ),
               IconButton.filled(
                 tooltip: '上傳頭像',
-                onPressed: onPickAvatar,
+                onPressed: saving ? null : onPickAvatar,
                 icon: const Icon(Icons.photo_camera),
               ),
             ],
@@ -307,9 +349,14 @@ class _EditProfileForm extends StatelessWidget {
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
-            onPressed: onSave,
-            icon: const Icon(Icons.save),
-            label: const Text('儲存'),
+            onPressed: saving ? null : onSave,
+            icon: saving
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.save),
+            label: Text(saving ? '儲存中' : '儲存'),
           ),
         ),
       ],

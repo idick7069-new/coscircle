@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -8,6 +9,7 @@ import '../../../core/models/participant.dart';
 import '../../../core/providers/event_providers.dart';
 import '../../../core/repositories/event_repository.dart';
 import '../../../core/utils/picked_image_provider.dart';
+import '../../../core/utils/participant_role_style.dart';
 import '../../../shared/widgets/app_page.dart';
 
 final eventDetailProvider = FutureProvider.autoDispose
@@ -72,6 +74,7 @@ class EventDetailPage extends ConsumerWidget {
                 rows: [
                   _InfoRow.text('活動日期', _dateText(value)),
                   _InfoRow.text('活動地點', value.venue),
+                  _InfoRow.text('詳細地址', value.detailedAddress),
                   _InfoRow.text('分類', value.category),
                   _InfoRow.text(
                     '狀態',
@@ -232,7 +235,7 @@ String _statusText(EventStatus status) {
   };
 }
 
-class _ParticipantsSection extends ConsumerStatefulWidget {
+class _ParticipantsSection extends ConsumerWidget {
   const _ParticipantsSection({
     required this.eventId,
     required this.participants,
@@ -242,29 +245,9 @@ class _ParticipantsSection extends ConsumerStatefulWidget {
   final AsyncValue<List<EventParticipant>> participants;
 
   @override
-  ConsumerState<_ParticipantsSection> createState() =>
-      _ParticipantsSectionState();
-}
-
-class _ParticipantsSectionState extends ConsumerState<_ParticipantsSection> {
-  final _searchController = TextEditingController();
-  String _roleFilter = 'all';
-  String? _tagFilter;
-  bool _openOnly = false;
-  bool _followedOnly = false;
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return widget.participants.when(
+  Widget build(BuildContext context, WidgetRef ref) {
+    return participants.when(
       data: (items) {
-        final filtered = _applyFilters(items);
-        final tags = _availableTags(items);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -272,7 +255,7 @@ class _ParticipantsSectionState extends ConsumerState<_ParticipantsSection> {
               children: [
                 Expanded(
                   child: Text(
-                    '今天誰會去 ${items.length}',
+                    '參加者 ${items.length}',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
@@ -280,131 +263,24 @@ class _ParticipantsSectionState extends ConsumerState<_ParticipantsSection> {
                   const Chip(label: Text('已有關注者參加')),
               ],
             ),
-            if (items.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              TextField(
-                controller: _searchController,
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search),
-                  labelText: '搜尋暱稱、作品或角色',
-                ),
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  ChoiceChip(
-                    label: const Text('全部'),
-                    selected: _roleFilter == 'all',
-                    onSelected: (_) => setState(() => _roleFilter = 'all'),
-                  ),
-                  ChoiceChip(
-                    label: const Text('Coser'),
-                    selected: _roleFilter == 'coser',
-                    onSelected: (_) => setState(() => _roleFilter = 'coser'),
-                  ),
-                  ChoiceChip(
-                    label: const Text('攝影'),
-                    selected: _roleFilter == 'photographer',
-                    onSelected: (_) =>
-                        setState(() => _roleFilter = 'photographer'),
-                  ),
-                  ChoiceChip(
-                    label: const Text('本體'),
-                    selected: _roleFilter == 'self',
-                    onSelected: (_) => setState(() => _roleFilter = 'self'),
-                  ),
-                  FilterChip(
-                    avatar: Icon(
-                      _openOnly
-                          ? Icons.check_box
-                          : Icons.check_box_outline_blank,
-                      size: 18,
-                    ),
-                    label: const Text('只看可互動'),
-                    selected: _openOnly,
-                    onSelected: (value) => setState(() => _openOnly = value),
-                  ),
-                  FilterChip(
-                    avatar: Icon(
-                      _followedOnly
-                          ? Icons.check_box
-                          : Icons.check_box_outline_blank,
-                      size: 18,
-                    ),
-                    label: const Text('只看關注'),
-                    selected: _followedOnly,
-                    onSelected: (value) =>
-                        setState(() => _followedOnly = value),
-                  ),
-                ],
-              ),
-              if (tags.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      for (final tag in tags)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: FilterChip(
-                            label: Text(tag),
-                            selected: _tagFilter == tag,
-                            onSelected: (selected) => setState(
-                              () => _tagFilter = selected ? tag : null,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 8),
-              Text(
-                filtered.length == items.length
-                    ? '顯示全部 ${items.length} 人'
-                    : '符合條件 ${filtered.length} / ${items.length} 人',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
             const SizedBox(height: 12),
             if (items.isEmpty)
               const Card(
                 child: Padding(
                   padding: EdgeInsets.all(16),
-                  child: Text('目前還沒有人發布出席宣告'),
-                ),
-              )
-            else if (filtered.isEmpty)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      const Expanded(child: Text('沒有符合條件的參加者')),
-                      TextButton(
-                        onPressed: _clearFilters,
-                        child: const Text('清除篩選'),
-                      ),
-                    ],
-                  ),
+                  child: Text('目前還沒有人公開預訂'),
                 ),
               )
             else
-              Column(
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
                 children: [
-                  for (final participant in filtered)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _ParticipantCard(
-                        participant: participant,
-                        onTap: () =>
-                            _showParticipantSheet(context, ref, participant),
-                      ),
+                  for (final participant in items)
+                    _ParticipantAvatar(
+                      participant: participant,
+                      onTap: () =>
+                          _showParticipantSheet(context, ref, participant),
                     ),
                 ],
               ),
@@ -416,47 +292,6 @@ class _ParticipantsSectionState extends ConsumerState<_ParticipantsSection> {
     );
   }
 
-  List<EventParticipant> _applyFilters(List<EventParticipant> items) {
-    final query = _searchController.text.trim().toLowerCase();
-    return items.where((participant) {
-      final matchesQuery =
-          query.isEmpty ||
-          participant.nickname.toLowerCase().contains(query) ||
-          participant.workName.toLowerCase().contains(query) ||
-          participant.characterName.toLowerCase().contains(query);
-      final matchesRole =
-          _roleFilter == 'all' || participant.role == _roleFilter;
-      final matchesTag =
-          _tagFilter == null ||
-          participant.interactionTags.contains(_tagFilter);
-      final matchesOpen = !_openOnly || participant.presenceStatus == 'open';
-      final matchesFollowed = !_followedOnly || participant.isFollowed;
-      return matchesQuery &&
-          matchesRole &&
-          matchesTag &&
-          matchesOpen &&
-          matchesFollowed;
-    }).toList();
-  }
-
-  List<String> _availableTags(List<EventParticipant> items) {
-    final tags = <String>{};
-    for (final item in items) {
-      tags.addAll(item.interactionTags);
-    }
-    return tags.toList()..sort();
-  }
-
-  void _clearFilters() {
-    setState(() {
-      _searchController.clear();
-      _roleFilter = 'all';
-      _tagFilter = null;
-      _openOnly = false;
-      _followedOnly = false;
-    });
-  }
-
   Future<void> _showParticipantSheet(
     BuildContext context,
     WidgetRef ref,
@@ -466,11 +301,10 @@ class _ParticipantsSectionState extends ConsumerState<_ParticipantsSection> {
       context: context,
       isScrollControlled: true,
       builder: (context) {
-        final mediaQuery = MediaQuery.of(context);
         return SafeArea(
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxHeight: mediaQuery.size.height * 0.86,
+              maxHeight: MediaQuery.sizeOf(context).height * 0.86,
             ),
             child: ListView(
               shrinkWrap: true,
@@ -478,20 +312,27 @@ class _ParticipantsSectionState extends ConsumerState<_ParticipantsSection> {
               children: [
                 Row(
                   children: [
-                    CircleAvatar(
-                      radius: 30,
-                      backgroundColor: participant.isFollowed
-                          ? Theme.of(context).colorScheme.secondary
-                          : Theme.of(context).colorScheme.primaryContainer,
-                      backgroundImage: pickedImageProvider(
-                        participant.avatarUrl,
+                    Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: participantRoleColor(participant.role),
+                        shape: BoxShape.circle,
                       ),
-                      child: participant.avatarUrl.isEmpty
-                          ? Text(
-                              participant.nickname.characters.firstOrNull ??
-                                  '?',
-                            )
-                          : null,
+                      child: CircleAvatar(
+                        radius: 30,
+                        backgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.primaryContainer,
+                        backgroundImage: pickedImageProvider(
+                          participant.avatarUrl,
+                        ),
+                        child: participant.avatarUrl.isEmpty
+                            ? Text(
+                                participant.nickname.characters.firstOrNull ??
+                                    '?',
+                              )
+                            : null,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -503,34 +344,14 @@ class _ParticipantsSectionState extends ConsumerState<_ParticipantsSection> {
                             style: Theme.of(context).textTheme.titleLarge,
                           ),
                           Text(_roleText(participant)),
-                          Text(_presenceStatusText(participant.presenceStatus)),
                         ],
                       ),
                     ),
                   ],
                 ),
-                if (participant.availableTime.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text('出沒時間：${participant.availableTime}'),
-                ],
-                if (participant.interactionTags.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final tag in participant.interactionTags)
-                        Chip(label: Text(tag)),
-                    ],
-                  ),
-                ],
                 if (participant.message.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Text(participant.message),
-                ],
-                if (participant.bio.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text('自我介紹：${participant.bio}'),
                 ],
                 if (participant.outfitImageUrl.isNotEmpty) ...[
                   const SizedBox(height: 12),
@@ -542,7 +363,7 @@ class _ParticipantsSectionState extends ConsumerState<_ParticipantsSection> {
                       width: double.infinity,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) =>
-                          Text('當天穿著：${participant.outfitImageUrl}'),
+                          Text('當天出的角：${participant.outfitImageUrl}'),
                     ),
                   ),
                 ],
@@ -564,7 +385,7 @@ class _ParticipantsSectionState extends ConsumerState<_ParticipantsSection> {
                                       .followUser(participant.userId);
                                 }
                                 ref.invalidate(
-                                  eventParticipantsProvider(widget.eventId),
+                                  eventParticipantsProvider(eventId),
                                 );
                                 if (context.mounted) Navigator.pop(context);
                               },
@@ -579,7 +400,16 @@ class _ParticipantsSectionState extends ConsumerState<_ParticipantsSection> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () {},
+                        onPressed: () {
+                          if (participant.publicCode.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('尚未取得分享碼')),
+                            );
+                            return;
+                          }
+                          Navigator.of(context).pop();
+                          context.push('/profiles/${participant.publicCode}');
+                        },
                         icon: const Icon(Icons.info_outline),
                         label: const Text('詳細資料'),
                       ),
@@ -595,31 +425,21 @@ class _ParticipantsSectionState extends ConsumerState<_ParticipantsSection> {
   }
 
   String _roleText(EventParticipant participant) {
-    return switch (participant.role) {
-      'photographer' => '攝影',
-      'coser' => [
-        'Coser',
-        if (participant.workName.isNotEmpty) participant.workName,
-        if (participant.characterName.isNotEmpty) participant.characterName,
-      ].join(' / '),
-      'self' => '本體',
-      _ => '參加者',
-    };
-  }
-
-  String _presenceStatusText(String status) {
-    return switch (status) {
-      'moving' => '移動中',
-      'resting' => '休息中',
-      'quiet' => '暫不互動',
-      'left' => '已離場',
-      _ => '可來找我',
-    };
+    final label = participantRoleLabel(participant.role);
+    if (participant.role != 'coser') {
+      return label;
+    }
+    final details = [
+      if (participant.workName.isNotEmpty) participant.workName,
+      if (participant.characterName.isNotEmpty) participant.characterName,
+    ];
+    if (details.isEmpty) return label;
+    return '$label / ${details.join(' / ')}';
   }
 }
 
-class _ParticipantCard extends StatelessWidget {
-  const _ParticipantCard({required this.participant, required this.onTap});
+class _ParticipantAvatar extends StatelessWidget {
+  const _ParticipantAvatar({required this.participant, required this.onTap});
 
   final EventParticipant participant;
   final VoidCallback onTap;
@@ -628,138 +448,37 @@ class _ParticipantCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Card(
-        margin: EdgeInsets.zero,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(
-                radius: 28,
-                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                backgroundImage: pickedImageProvider(participant.avatarUrl),
-                child: participant.avatarUrl.isEmpty
-                    ? Text(participant.nickname.characters.firstOrNull ?? '?')
-                    : null,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            participant.nickname,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                        if (participant.isFollowed)
-                          const Icon(Icons.star, size: 18),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _roleText(participant),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        _StatusPill(status: participant.presenceStatus),
-                      ],
-                    ),
-                    if (participant.availableTime.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        participant.availableTime,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                    if (participant.interactionTags.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (final tag in participant.interactionTags.take(4))
-                            Chip(
-                              visualDensity: VisualDensity.compact,
-                              label: Text(tag),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: participantRoleColor(participant.role),
+              shape: BoxShape.circle,
+            ),
+            child: CircleAvatar(
+              radius: 25,
+              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+              backgroundImage: pickedImageProvider(participant.avatarUrl),
+              child: participant.avatarUrl.isEmpty
+                  ? Text(participant.nickname.characters.firstOrNull ?? '?')
+                  : null,
+            ),
           ),
-        ),
+          const SizedBox(height: 6),
+          SizedBox(
+            width: 72,
+            child: Text(
+              participant.nickname,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
       ),
     );
-  }
-
-  String _roleText(EventParticipant participant) {
-    return switch (participant.role) {
-      'photographer' => '攝影',
-      'coser' => [
-        'Coser',
-        if (participant.workName.isNotEmpty) participant.workName,
-        if (participant.characterName.isNotEmpty) participant.characterName,
-      ].join(' / '),
-      'self' => '本體',
-      _ => '參加者',
-    };
-  }
-}
-
-class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.status});
-
-  final String status;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final isOpen = status == 'open';
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: isOpen
-            ? colors.primaryContainer
-            : colors.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        child: Text(
-          _statusText(status),
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: isOpen ? colors.onPrimaryContainer : colors.onSurfaceVariant,
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _statusText(String status) {
-    return switch (status) {
-      'moving' => '移動中',
-      'resting' => '休息',
-      'quiet' => '暫不互動',
-      'left' => '離場',
-      _ => '可互動',
-    };
   }
 }

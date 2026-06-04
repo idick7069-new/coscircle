@@ -327,6 +327,7 @@ class _CreateEventSheetState extends ConsumerState<_CreateEventSheet> {
     text: DateFormat('yyyy-MM-dd').format(DateTime.now()),
   );
   final _venue = TextEditingController();
+  final _detailedAddress = TextEditingController();
   final _fee = TextEditingController();
   final _organizer = TextEditingController();
   final _description = TextEditingController();
@@ -338,6 +339,7 @@ class _CreateEventSheetState extends ConsumerState<_CreateEventSheet> {
     _startDate.dispose();
     _endDate.dispose();
     _venue.dispose();
+    _detailedAddress.dispose();
     _fee.dispose();
     _organizer.dispose();
     _description.dispose();
@@ -374,18 +376,24 @@ class _CreateEventSheetState extends ConsumerState<_CreateEventSheet> {
                 Expanded(
                   child: TextField(
                     controller: _startDate,
+                    readOnly: true,
                     decoration: const InputDecoration(
-                      labelText: '開始日期 yyyy-MM-dd',
+                      labelText: '開始日期',
+                      suffixIcon: Icon(Icons.calendar_month),
                     ),
+                    onTap: () => _pickDate(_startDate),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
                     controller: _endDate,
+                    readOnly: true,
                     decoration: const InputDecoration(
-                      labelText: '結束日期 yyyy-MM-dd',
+                      labelText: '結束日期',
+                      suffixIcon: Icon(Icons.calendar_month),
                     ),
+                    onTap: () => _pickDate(_endDate),
                   ),
                 ),
               ],
@@ -394,6 +402,11 @@ class _CreateEventSheetState extends ConsumerState<_CreateEventSheet> {
             TextField(
               controller: _venue,
               decoration: const InputDecoration(labelText: '地點'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _detailedAddress,
+              decoration: const InputDecoration(labelText: '詳細地址'),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -424,6 +437,9 @@ class _CreateEventSheetState extends ConsumerState<_CreateEventSheet> {
                       startDate: DateTime.parse(_startDate.text.trim()),
                       endDate: DateTime.parse(_endDate.text.trim()),
                       venue: _venue.text.trim(),
+                      detailedAddress: _detailedAddress.text.trim().isEmpty
+                          ? _venue.text.trim()
+                          : _detailedAddress.text.trim(),
                       fee: _fee.text.trim(),
                       organizer: _organizer.text.trim(),
                       description: _description.text.trim(),
@@ -438,6 +454,18 @@ class _CreateEventSheetState extends ConsumerState<_CreateEventSheet> {
         ),
       ),
     );
+  }
+
+  Future<void> _pickDate(TextEditingController controller) async {
+    final current = DateTime.tryParse(controller.text.trim()) ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+    );
+    if (picked == null) return;
+    controller.text = DateFormat('yyyy-MM-dd').format(picked);
   }
 }
 
@@ -495,12 +523,22 @@ class _EditEventDatesSheetState extends ConsumerState<_EditEventDatesSheet> {
             const SizedBox(height: 12),
             TextField(
               controller: _startDate,
-              decoration: const InputDecoration(labelText: '開始日期 yyyy-MM-dd'),
+              readOnly: true,
+              decoration: const InputDecoration(
+                labelText: '開始日期',
+                suffixIcon: Icon(Icons.calendar_month),
+              ),
+              onTap: () => _pickDate(_startDate),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _endDate,
-              decoration: const InputDecoration(labelText: '結束日期 yyyy-MM-dd'),
+              readOnly: true,
+              decoration: const InputDecoration(
+                labelText: '結束日期',
+                suffixIcon: Icon(Icons.calendar_month),
+              ),
+              onTap: () => _pickDate(_endDate),
             ),
             if (_errorText != null) ...[
               const SizedBox(height: 10),
@@ -524,6 +562,18 @@ class _EditEventDatesSheetState extends ConsumerState<_EditEventDatesSheet> {
         ),
       ),
     );
+  }
+
+  Future<void> _pickDate(TextEditingController controller) async {
+    final current = DateTime.tryParse(controller.text.trim()) ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+    );
+    if (picked == null) return;
+    controller.text = DateFormat('yyyy-MM-dd').format(picked);
   }
 
   Future<void> _save() async {

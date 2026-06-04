@@ -8,6 +8,7 @@ class CosEvent {
     required this.startDate,
     required this.endDate,
     required this.venue,
+    required this.detailedAddress,
     required this.fee,
     required this.organizer,
     required this.description,
@@ -26,6 +27,7 @@ class CosEvent {
   final DateTime startDate;
   final DateTime endDate;
   final String venue;
+  final String detailedAddress;
   final String fee;
   final String organizer;
   final String description;
@@ -50,6 +52,11 @@ class CosEvent {
       startDate: startDate,
       endDate: endDate,
       venue: json['venue']?.toString() ?? '',
+      detailedAddress:
+          json['detailedAddress']?.toString() ??
+          json['address']?.toString() ??
+          json['venue']?.toString() ??
+          '',
       fee: json['fee']?.toString() ?? '',
       organizer: json['organizer']?.toString() ?? '',
       description: json['description']?.toString() ?? '',
@@ -85,6 +92,7 @@ class CosEvent {
       startDate: startDate,
       endDate: endDate,
       venue: venue,
+      detailedAddress: detailedAddress,
       fee: fee,
       organizer: organizer,
       description: description,

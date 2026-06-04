@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -48,6 +50,7 @@ class AuthRepository {
     required String email,
     required String password,
   }) async {
+    _logAuthAttempt('login', email);
     final session = await _authenticate(
       '/auth/login',
       data: {'email': email, 'password': password},
@@ -61,6 +64,7 @@ class AuthRepository {
     required String email,
     required String password,
   }) async {
+    _logAuthAttempt('register', email);
     final session = await _authenticate(
       '/auth/register',
       data: {'nickname': nickname, 'email': email, 'password': password},
@@ -83,13 +87,46 @@ class AuthRepository {
     String path, {
     required Map<String, dynamic> data,
   }) async {
-    final response = await _apiClient.post(path, data: data);
-    return AuthSession.fromJson(response.data as Map<String, dynamic>);
+    try {
+      final response = await _apiClient.post(path, data: data);
+      debugPrint(
+        '[Auth] $path success status=${response.statusCode} '
+        'email=${_safeEmail(data['email'])}',
+      );
+      return AuthSession.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (error, stackTrace) {
+      final response = error.response;
+      debugPrint(
+        '[Auth] $path failed '
+        'email=${_safeEmail(data['email'])} '
+        'type=${error.type} '
+        'status=${response?.statusCode} '
+        'message=${error.message} '
+        'body=${response?.data}',
+      );
+      debugPrintStack(stackTrace: stackTrace, label: '[Auth] DioException');
+      rethrow;
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[Auth] $path unexpected error '
+        'email=${_safeEmail(data['email'])} error=$error',
+      );
+      debugPrintStack(stackTrace: stackTrace, label: '[Auth] Unexpected');
+      rethrow;
+    }
   }
 
   Future<void> _saveToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_tokenKey, token);
     _apiClient.setAuthToken(token);
+  }
+
+  void _logAuthAttempt(String action, String email) {
+    debugPrint('[Auth] $action attempt email=${_safeEmail(email)}');
+  }
+
+  String _safeEmail(Object? value) {
+    return value?.toString().trim().toLowerCase() ?? '';
   }
 }
