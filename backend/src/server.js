@@ -171,21 +171,87 @@ app.get('/api/me', async (req, res, next) => {
 app.put('/api/me', async (req, res, next) => {
   const connection = await pool.getConnection();
   try {
-    const { nickname, avatarUrl, facebookUrl, bio, pitWorkIds = [] } = req.body;
+    const {
+      nickname,
+      avatarUrl,
+      facebookUrl,
+      bio,
+      age,
+      regions = [],
+      travelRegions = [],
+      travelSameRegion = false,
+      landmine,
+      gender = 'private',
+      otherPhotoUrls = [],
+      pitWorkIds = [],
+      deepPitWorkIds = pitWorkIds,
+      shallowPitWorkIds = [],
+    } = req.body;
+    const normalizedRegions = normalizeStringArray(regions, [
+      '北部',
+      '中部',
+      '南部',
+      '離島',
+      '海外',
+    ]);
+    const normalizedTravelRegions = normalizeStringArray(travelRegions, [
+      '北部',
+      '中部',
+      '南部',
+      '離島',
+      '海外',
+    ]);
+    const normalizedGender = ['male', 'female', 'private'].includes(gender)
+      ? gender
+      : 'private';
+    const normalizedPhotoUrls = normalizeStringArray(otherPhotoUrls).slice(0, 3);
     await connection.beginTransaction();
     await connection.execute(
       `UPDATE users
-          SET nickname = ?, avatar_url = ?, facebook_url = ?, bio = ?
+          SET nickname = ?,
+              avatar_url = ?,
+              facebook_url = ?,
+              bio = ?,
+              age = ?,
+              regions_json = ?,
+              travel_regions_json = ?,
+              travel_same_region = ?,
+              landmine = ?,
+              gender = ?,
+              other_photo_urls_json = ?
         WHERE id = ?`,
-      [nickname, avatarUrl ?? null, facebookUrl ?? null, bio ?? null, req.userId],
+      [
+        nickname,
+        avatarUrl ?? null,
+        facebookUrl ?? null,
+        bio ?? null,
+        age ?? null,
+        JSON.stringify(normalizedRegions),
+        JSON.stringify(normalizedTravelRegions),
+        travelSameRegion ||
+        sameStringSet(normalizedRegions, normalizedTravelRegions)
+          ? 1
+          : 0,
+        landmine ?? null,
+        normalizedGender,
+        JSON.stringify(normalizedPhotoUrls),
+        req.userId,
+      ],
     );
     await connection.execute('DELETE FROM user_pit_works WHERE user_id = ?', [
       req.userId,
     ]);
-    for (const workId of pitWorkIds) {
+    for (const workId of normalizeIdArray(deepPitWorkIds)) {
       await connection.execute(
-        `INSERT IGNORE INTO user_pit_works (user_id, work_id)
-         VALUES (?, ?)`,
+        `INSERT IGNORE INTO user_pit_works (user_id, work_id, depth)
+         VALUES (?, ?, 'deep')`,
+        [req.userId, workId],
+      );
+    }
+    for (const workId of normalizeIdArray(shallowPitWorkIds)) {
+      await connection.execute(
+        `INSERT IGNORE INTO user_pit_works (user_id, work_id, depth)
+         VALUES (?, ?, 'shallow')`,
         [req.userId, workId],
       );
     }
@@ -275,13 +341,16 @@ app.get('/api/events', async (req, res, next) => {
               events.source_type AS sourceType,
               events.source_name AS sourceName,
               events.source_url AS sourceUrl,
-              CASE WHEN my_bookings.id IS NULL THEN FALSE ELSE TRUE END AS isJoined,
+              CASE WHEN my_bookings.event_id IS NULL THEN FALSE ELSE TRUE END AS isJoined,
               CASE WHEN followed_bookings.user_id IS NULL THEN FALSE ELSE TRUE END AS hasFollowedParticipants,
               CASE WHEN circle_bookings.user_id IS NULL THEN FALSE ELSE TRUE END AS hasCircleMembers
          FROM events
-         LEFT JOIN event_bookings AS my_bookings
+         LEFT JOIN (
+           SELECT DISTINCT event_id
+             FROM event_bookings
+            WHERE user_id = ?
+         ) AS my_bookings
            ON my_bookings.event_id = events.id
-          AND my_bookings.user_id = ?
          LEFT JOIN (
            SELECT DISTINCT event_bookings.event_id, event_bookings.user_id
              FROM event_bookings
@@ -302,7 +371,7 @@ app.get('/api/events', async (req, res, next) => {
          ) AS circle_bookings
            ON circle_bookings.event_id = events.id
         WHERE events.status = 'approved'
-        GROUP BY events.id, my_bookings.id, followed_bookings.user_id, circle_bookings.user_id
+        GROUP BY events.id, my_bookings.event_id, followed_bookings.user_id, circle_bookings.user_id
         ORDER BY events.start_date ASC`,
       [req.userId, req.userId, req.userId, req.userId],
     );
@@ -821,6 +890,7 @@ app.post('/api/events/:eventId/bookings', async (req, res, next) => {
   try {
     const {
       role,
+      dayIndex = 1,
       workId,
       characterName,
       outfitImageUrl,
@@ -829,12 +899,16 @@ app.post('/api/events/:eventId/bookings', async (req, res, next) => {
       presenceStatus,
       message,
     } = req.body;
+    const normalizedDayIndex = Math.max(
+      1,
+      Number.parseInt(dayIndex, 10) || 1,
+    );
     await pool.execute(
       `INSERT INTO event_bookings (
-         event_id, user_id, role, work_id, character_name, outfit_image_url,
+         event_id, user_id, day_index, role, work_id, character_name, outfit_image_url,
          interaction_tags, available_time, presence_status, message
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE role = VALUES(role),
          work_id = VALUES(work_id),
          character_name = VALUES(character_name),
@@ -846,6 +920,7 @@ app.post('/api/events/:eventId/bookings', async (req, res, next) => {
       [
         req.params.eventId,
         req.userId,
+        normalizedDayIndex,
         role,
         workId || null,
         characterName ?? null,
@@ -864,6 +939,18 @@ app.post('/api/events/:eventId/bookings', async (req, res, next) => {
 
 app.delete('/api/events/:eventId/bookings/me', async (req, res, next) => {
   try {
+    const dayIndex = Number.parseInt(req.query.dayIndex, 10);
+    if (Number.isFinite(dayIndex) && dayIndex > 0) {
+      await pool.execute(
+        `DELETE FROM event_bookings
+          WHERE event_id = ?
+            AND user_id = ?
+            AND day_index = ?`,
+        [req.params.eventId, req.userId, dayIndex],
+      );
+      res.status(204).end();
+      return;
+    }
     await pool.execute(
       `DELETE FROM event_bookings
         WHERE event_id = ?
@@ -886,6 +973,7 @@ app.get('/api/events/:eventId/participants', async (req, res, next) => {
               users.facebook_url AS facebookUrl,
               users.bio,
               event_bookings.role,
+              event_bookings.day_index AS dayIndex,
               works.id AS workId,
               works.name AS workName,
               event_bookings.character_name AS characterName,
@@ -905,7 +993,7 @@ app.get('/api/events/:eventId/participants', async (req, res, next) => {
          LEFT JOIN works
            ON works.id = event_bookings.work_id
         WHERE event_bookings.event_id = ?
-        ORDER BY event_bookings.updated_at DESC`,
+        ORDER BY event_bookings.day_index ASC, event_bookings.updated_at DESC`,
       [req.userId, req.userId, req.params.eventId],
     );
     res.json(rows);
@@ -970,6 +1058,7 @@ app.get('/api/events/:eventId/locations', async (req, res, next) => {
               users.nickname,
               users.avatar_url AS avatarUrl,
               event_bookings.role,
+              event_bookings.day_index AS dayIndex,
               works.id AS workId,
               works.name AS workName,
               event_bookings.character_name AS characterName,
@@ -1437,15 +1526,27 @@ async function requireAdmin(req, res, next) {
 async function fetchUserProfile(userId) {
   const [rows] = await pool.execute(
     `SELECT id, public_code AS publicCode, is_admin AS isAdmin, nickname,
-            avatar_url AS avatarUrl, facebook_url AS facebookUrl, bio
+            avatar_url AS avatarUrl,
+            facebook_url AS facebookUrl,
+            bio,
+            age,
+            regions_json AS regionsJson,
+            travel_regions_json AS travelRegionsJson,
+            travel_same_region AS travelSameRegion,
+            landmine,
+            gender,
+            other_photo_urls_json AS otherPhotoUrlsJson
        FROM users
       WHERE id = ?`,
     [userId],
   );
   if (!rows[0]) return null;
+  const pitWorks = await fetchUserPitWorks(userId);
   return {
-    ...rows[0],
-    pitWorks: await fetchUserPitWorks(userId),
+    ...normalizeProfileJsonFields(rows[0]),
+    pitWorks,
+    deepPitWorks: pitWorks.filter((work) => work.depth === 'deep'),
+    shallowPitWorks: pitWorks.filter((work) => work.depth === 'shallow'),
   };
 }
 
@@ -1457,6 +1558,13 @@ async function fetchUserProfileByPublicCode(publicCode, viewerUserId = null) {
             users.avatar_url AS avatarUrl,
             users.facebook_url AS facebookUrl,
             users.bio,
+            users.age,
+            users.regions_json AS regionsJson,
+            users.travel_regions_json AS travelRegionsJson,
+            users.travel_same_region AS travelSameRegion,
+            users.landmine,
+            users.gender,
+            users.other_photo_urls_json AS otherPhotoUrlsJson,
             CASE WHEN follows.followed_user_id IS NULL THEN FALSE ELSE TRUE END AS isFollowed
        FROM users
        LEFT JOIN follows
@@ -1468,23 +1576,97 @@ async function fetchUserProfileByPublicCode(publicCode, viewerUserId = null) {
   );
   if (!rows[0]) return null;
   const { id, ...profile } = rows[0];
+  const pitWorks = await fetchUserPitWorks(id);
   return {
-    ...profile,
-    pitWorks: await fetchUserPitWorks(id),
+    ...normalizeProfileJsonFields(profile),
+    pitWorks,
+    deepPitWorks: pitWorks.filter((work) => work.depth === 'deep'),
+    shallowPitWorks: pitWorks.filter((work) => work.depth === 'shallow'),
   };
 }
 
 async function fetchUserPitWorks(userId) {
   const [rows] = await pool.execute(
-    `SELECT works.id, works.name
+    `SELECT works.id, works.name, user_pit_works.depth
        FROM user_pit_works
        INNER JOIN works
          ON works.id = user_pit_works.work_id
       WHERE user_pit_works.user_id = ?
-      ORDER BY works.name ASC`,
+      ORDER BY user_pit_works.depth ASC, works.name ASC`,
     [userId],
   );
   return rows;
+}
+
+function normalizeProfileJsonFields(profile) {
+  const {
+    regionsJson,
+    travelRegionsJson,
+    otherPhotoUrlsJson,
+    travelSameRegion,
+    ...rest
+  } = profile;
+  const regions = parseJsonStringArray(regionsJson);
+  const storedTravelRegions = parseJsonStringArray(travelRegionsJson);
+  const isSameRegion =
+    travelSameRegion === true ||
+    travelSameRegion === 1 ||
+    travelSameRegion === '1';
+  const travelRegions =
+    storedTravelRegions.length > 0 || !isSameRegion
+      ? storedTravelRegions
+      : regions;
+  return {
+    ...rest,
+    travelSameRegion: isSameRegion,
+    regions,
+    travelRegions,
+    otherPhotoUrls: parseJsonStringArray(otherPhotoUrlsJson).slice(0, 3),
+  };
+}
+
+function parseJsonStringArray(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item) => typeof item === 'string')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  } catch (_error) {
+    return [];
+  }
+}
+
+function normalizeStringArray(value, allowList = null) {
+  if (!Array.isArray(value)) return [];
+  const allowed = allowList == null ? null : new Set(allowList);
+  return [
+    ...new Set(
+      value
+        .filter((item) => typeof item === 'string')
+        .map((item) => item.trim())
+        .filter((item) => item && (allowed == null || allowed.has(item))),
+    ),
+  ];
+}
+
+function normalizeIdArray(value) {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value
+        .map((item) => Number.parseInt(item, 10))
+        .filter((item) => Number.isFinite(item) && item > 0),
+    ),
+  ];
+}
+
+function sameStringSet(left, right) {
+  if (left.length !== right.length) return false;
+  const rightSet = new Set(right);
+  return left.every((item) => rightSet.has(item));
 }
 
 async function createInviteCode(connection) {

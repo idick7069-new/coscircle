@@ -13,16 +13,24 @@ final eventParticipantsProvider = FutureProvider.autoDispose
       return ref.watch(eventRepositoryProvider).fetchParticipants(eventId);
     });
 
-final selectedCurrentEventIdProvider =
-    NotifierProvider<SelectedCurrentEventId, String?>(
-      SelectedCurrentEventId.new,
+final selectedCurrentEventTargetProvider =
+    NotifierProvider<SelectedCurrentEventTargetController, CurrentEventTarget?>(
+      SelectedCurrentEventTargetController.new,
     );
 
-class SelectedCurrentEventId extends Notifier<String?> {
-  @override
-  String? build() => null;
+class CurrentEventTarget {
+  const CurrentEventTarget({required this.eventId, required this.dayIndex});
 
-  void select(String eventId) {
-    state = eventId;
+  final String eventId;
+  final int dayIndex;
+}
+
+class SelectedCurrentEventTargetController
+    extends Notifier<CurrentEventTarget?> {
+  @override
+  CurrentEventTarget? build() => null;
+
+  void select(String eventId, {int dayIndex = 1}) {
+    state = CurrentEventTarget(eventId: eventId, dayIndex: dayIndex);
   }
 }

@@ -18,7 +18,7 @@ abstract class EventRepository {
   Future<void> followUser(String userId);
   Future<void> unfollowUser(String userId);
   Future<void> upsertBooking(EventBooking booking);
-  Future<void> removeBooking(String eventId);
+  Future<void> removeBooking(String eventId, {int? dayIndex});
 }
 
 class ApiEventRepository implements EventRepository {
@@ -74,6 +74,7 @@ class ApiEventRepository implements EventRepository {
         '/events/${booking.eventId}/bookings',
         data: {
           'role': booking.role.name,
+          'dayIndex': booking.dayIndex,
           'characterName': booking.characterName,
           'workId': booking.workId,
           'outfitImageUrl': booking.outfitImagePath,
@@ -89,11 +90,14 @@ class ApiEventRepository implements EventRepository {
   }
 
   @override
-  Future<void> removeBooking(String eventId) async {
+  Future<void> removeBooking(String eventId, {int? dayIndex}) async {
     try {
-      await _apiClient.delete('/events/$eventId/bookings/me');
+      await _apiClient.delete(
+        '/events/$eventId/bookings/me',
+        query: dayIndex == null ? null : {'dayIndex': dayIndex},
+      );
     } catch (_) {
-      await _fallback.removeBooking(eventId);
+      await _fallback.removeBooking(eventId, dayIndex: dayIndex);
     }
   }
 }
@@ -129,8 +133,13 @@ class InMemoryEventRepository implements EventRepository {
   }
 
   @override
-  Future<void> removeBooking(String eventId) async {
-    _bookings.remove(eventId);
+  Future<void> removeBooking(String eventId, {int? dayIndex}) async {
+    if (dayIndex == null) {
+      _bookings.remove(eventId);
+      return;
+    }
+    final booking = _bookings[eventId];
+    if (booking?.dayIndex == dayIndex) _bookings.remove(eventId);
   }
 }
 

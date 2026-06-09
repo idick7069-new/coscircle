@@ -3,6 +3,7 @@ class EventParticipant {
     required this.userId,
     required this.nickname,
     required this.role,
+    this.dayIndex = 1,
     this.publicCode = '',
     this.avatarUrl = '',
     this.facebookUrl = '',
@@ -22,6 +23,7 @@ class EventParticipant {
   final String userId;
   final String nickname;
   final String role;
+  final int dayIndex;
   final String publicCode;
   final String avatarUrl;
   final String facebookUrl;
@@ -42,6 +44,7 @@ class EventParticipant {
       userId: json['userId'].toString(),
       nickname: json['nickname']?.toString() ?? '',
       role: json['role']?.toString() ?? '',
+      dayIndex: _intValue(json['dayIndex'], fallback: 1),
       publicCode: json['publicCode']?.toString() ?? '',
       avatarUrl: json['avatarUrl']?.toString() ?? '',
       facebookUrl: json['facebookUrl']?.toString() ?? '',
@@ -58,6 +61,11 @@ class EventParticipant {
       isFollowed: json['isFollowed'] == true || json['isFollowed'] == 1,
     );
   }
+}
+
+int _intValue(Object? value, {required int fallback}) {
+  if (value is int) return value;
+  return int.tryParse(value?.toString() ?? '') ?? fallback;
 }
 
 List<String> _stringList(Object? value) {

@@ -89,6 +89,29 @@ class PublicProfilePage extends ConsumerWidget {
                 const SizedBox(height: 20),
                 Text(value.bio),
               ],
+              const SizedBox(height: 16),
+              _PublicInfoTile(
+                icon: Icons.cake_outlined,
+                label: '年齡',
+                value: value.age.isEmpty ? '尚未設定' : value.age,
+              ),
+              _PublicInfoTile(
+                icon: Icons.wc_outlined,
+                label: '性別',
+                value: _publicGenderLabel(value.gender),
+              ),
+              _PublicInfoTile(
+                icon: Icons.explore_outlined,
+                label: '座標',
+                value: value.regions.isEmpty ? '尚未設定' : value.regions.join('、'),
+              ),
+              _PublicInfoTile(
+                icon: Icons.directions_run_outlined,
+                label: '跑場範圍',
+                value: value.travelRegions.isEmpty
+                    ? '尚未設定'
+                    : value.travelRegions.join('、'),
+              ),
               if (value.facebookUrl.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 ListTile(
@@ -98,26 +121,117 @@ class PublicProfilePage extends ConsumerWidget {
                   subtitle: Text(value.facebookUrl),
                 ),
               ],
+              if (value.landmine.isNotEmpty)
+                _PublicInfoTile(
+                  icon: Icons.warning_amber_outlined,
+                  label: '雷點',
+                  value: value.landmine,
+                ),
               const SizedBox(height: 16),
-              Text('坑單', style: Theme.of(context).textTheme.titleMedium),
+              Text('深坑', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
-              if (value.pitWorks.isEmpty)
-                const Text('尚未新增坑單')
+              if (value.deepPitWorks.isEmpty)
+                const Text('尚未新增深坑')
               else
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    for (final work in value.pitWorks)
+                    for (final work in value.deepPitWorks)
                       Chip(label: Text(work.name)),
                   ],
                 ),
+              const SizedBox(height: 12),
+              Text('淺坑', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              if (value.shallowPitWorks.isEmpty)
+                const Text('尚未新增淺坑')
+              else
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final work in value.shallowPitWorks)
+                      Chip(label: Text(work.name)),
+                  ],
+                ),
+              const SizedBox(height: 16),
+              Text('其他照片', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              if (value.otherPhotoUrls.isEmpty)
+                const Text('尚未新增其他照片')
+              else
+                _PublicOtherPhotoGrid(photoUrls: value.otherPhotoUrls),
             ],
           );
         },
         error: (error, stack) => Center(child: Text('個人資訊載入失敗：$error')),
         loading: () => const Center(child: CircularProgressIndicator()),
       ),
+    );
+  }
+}
+
+String _publicGenderLabel(String value) {
+  return switch (value) {
+    'male' => '生理男',
+    'female' => '生理女',
+    _ => '不公開',
+  };
+}
+
+class _PublicInfoTile extends StatelessWidget {
+  const _PublicInfoTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon),
+      title: Text(label),
+      subtitle: Text(value),
+    );
+  }
+}
+
+class _PublicOtherPhotoGrid extends StatelessWidget {
+  const _PublicOtherPhotoGrid({required this.photoUrls});
+
+  final List<String> photoUrls;
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: photoUrls.length.clamp(0, 3),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        childAspectRatio: 0.82,
+      ),
+      itemBuilder: (context, index) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Image(
+            image: pickedImageProvider(photoUrls[index])!,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => Container(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: const Icon(Icons.broken_image_outlined),
+            ),
+          ),
+        );
+      },
     );
   }
 }

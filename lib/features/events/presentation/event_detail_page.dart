@@ -11,6 +11,7 @@ import '../../../core/repositories/event_repository.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../core/utils/participant_role_style.dart';
 import '../../../shared/widgets/app_page.dart';
+import 'event_booking_share_page.dart';
 
 final eventDetailProvider = FutureProvider.autoDispose
     .family<CosEvent?, String>((ref, eventId) async {
@@ -120,6 +121,7 @@ class EventDetailPage extends ConsumerWidget {
               Text(value.description.isEmpty ? '未提供活動說明' : value.description),
               const SizedBox(height: 24),
               _ParticipantsSection(
+                event: value,
                 eventId: eventId,
                 participants: participants,
               ),
@@ -237,10 +239,12 @@ String _statusText(EventStatus status) {
 
 class _ParticipantsSection extends ConsumerWidget {
   const _ParticipantsSection({
+    required this.event,
     required this.eventId,
     required this.participants,
   });
 
+  final CosEvent event;
   final String eventId;
   final AsyncValue<List<EventParticipant>> participants;
 
@@ -248,6 +252,7 @@ class _ParticipantsSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return participants.when(
       data: (items) {
+        final myBookings = items.where((item) => item.isMe).toList();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -264,6 +269,26 @@ class _ParticipantsSection extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 12),
+            if (myBookings.isNotEmpty) ...[
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => EventBookingSharePage(
+                          event: event,
+                          bookings: myBookings,
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.image_outlined),
+                  label: const Text('產生預訂分享圖'),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             if (items.isEmpty)
               const Card(
                 child: Padding(

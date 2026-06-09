@@ -9,6 +9,7 @@ import '../../../core/repositories/auth_repository.dart';
 import '../../../core/repositories/profile_repository.dart';
 import '../../../core/repositories/submission_repository.dart';
 import '../../admin/presentation/admin_dashboard_page.dart';
+import 'theme_settings_page.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -58,6 +59,16 @@ class SettingsPage extends ConsumerWidget {
                 title: const Text('投稿活動'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _submitEventDialog(context, ref),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.palette_outlined),
+                title: const Text('介面主題'),
+                subtitle: const Text('切換深色霓虹或莫蘭迪亮色'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ThemeSettingsPage()),
+                ),
               ),
               const Divider(height: 1),
               ListTile(

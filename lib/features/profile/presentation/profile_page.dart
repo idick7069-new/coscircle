@@ -10,6 +10,9 @@ import '../../../core/repositories/profile_repository.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../works/presentation/work_selector.dart';
 
+const _profileRegionOptions = ['北部', '中部', '南部', '離島', '海外'];
+const _genderLabels = {'male': '生理男', 'female': '生理女', 'private': '不公開'};
+
 class ProfilePage extends ConsumerStatefulWidget {
   const ProfilePage({super.key});
 
@@ -21,25 +24,43 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   final _nickname = TextEditingController();
   final _facebook = TextEditingController();
   final _bio = TextEditingController();
+  final _age = TextEditingController();
+  final _landmine = TextEditingController();
   String _avatarUrl = '';
   XFile? _pickedAvatar;
-  List<WorkTag> _pitWorks = const [];
+  List<WorkTag> _deepPitWorks = const [];
+  List<WorkTag> _shallowPitWorks = const [];
+  List<String> _regions = const [];
+  List<String> _travelRegions = const [];
+  bool _travelSameRegion = false;
+  String _gender = 'private';
+  List<String> _otherPhotoUrls = const [];
+  final List<XFile?> _pickedOtherPhotos = List<XFile?>.filled(3, null);
+  late Future<UserProfile?> _profileFuture;
   bool _initialized = false;
   bool _editing = false;
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _profileFuture = _fetchProfile();
+  }
 
   @override
   void dispose() {
     _nickname.dispose();
     _facebook.dispose();
     _bio.dispose();
+    _age.dispose();
+    _landmine.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder(
-      future: ref.watch(profileRepositoryProvider).currentProfile(),
+      future: _profileFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -87,16 +108,40 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             if (_editing)
               _EditProfileForm(
                 avatarUrl: _avatarUrl,
                 nickname: _nickname,
                 facebook: _facebook,
                 bio: _bio,
-                pitWorks: _pitWorks,
+                age: _age,
+                landmine: _landmine,
+                deepPitWorks: _deepPitWorks,
+                shallowPitWorks: _shallowPitWorks,
+                regions: _regions,
+                travelRegions: _travelRegions,
+                travelSameRegion: _travelSameRegion,
+                gender: _gender,
+                otherPhotoUrls: _otherPhotoUrls,
                 onPickAvatar: _pickAvatar,
-                onPitWorksChanged: (works) => setState(() => _pitWorks = works),
+                onDeepPitWorksChanged: (works) =>
+                    setState(() => _deepPitWorks = works),
+                onShallowPitWorksChanged: (works) =>
+                    setState(() => _shallowPitWorks = works),
+                onRegionsChanged: (regions) =>
+                    setState(() => _regions = regions),
+                onTravelRegionsChanged: (regions) => setState(() {
+                  _travelRegions = regions;
+                  _travelSameRegion = _sameStringSet(_regions, regions);
+                }),
+                onUseSameRegions: () => setState(() {
+                  _travelRegions = List<String>.from(_regions);
+                  _travelSameRegion = _regions.isNotEmpty;
+                }),
+                onGenderChanged: (value) => setState(() => _gender = value),
+                onPickOtherPhoto: _pickOtherPhoto,
+                onRemoveOtherPhoto: _removeOtherPhoto,
                 onSave: () => _saveProfile(context, profile),
                 saving: _saving,
               )
@@ -108,13 +153,30 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     );
   }
 
+  Future<UserProfile?> _fetchProfile() {
+    return ref.read(profileRepositoryProvider).currentProfile();
+  }
+
   void _loadProfile(UserProfile profile) {
     _nickname.text = profile.nickname;
     _facebook.text = profile.facebookUrl;
     _bio.text = profile.bio;
+    _age.text = profile.age;
+    _landmine.text = profile.landmine;
     _avatarUrl = profile.avatarUrl;
     _pickedAvatar = null;
-    _pitWorks = profile.pitWorks;
+    _deepPitWorks = profile.deepPitWorks;
+    _shallowPitWorks = profile.shallowPitWorks;
+    _regions = profile.regions;
+    _travelRegions = profile.travelRegions;
+    _travelSameRegion = profile.travelSameRegion;
+    _gender = _genderLabels.containsKey(profile.gender)
+        ? profile.gender
+        : 'private';
+    _otherPhotoUrls = List<String>.from(profile.otherPhotoUrls.take(3));
+    for (var index = 0; index < _pickedOtherPhotos.length; index += 1) {
+      _pickedOtherPhotos[index] = null;
+    }
     _initialized = true;
   }
 
@@ -131,6 +193,19 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         );
         if (uploadedUrl.isNotEmpty) avatarUrl = uploadedUrl;
       }
+      final otherPhotoUrls = List<String>.from(_otherPhotoUrls);
+      while (otherPhotoUrls.length < 3) {
+        otherPhotoUrls.add('');
+      }
+      for (var index = 0; index < _pickedOtherPhotos.length; index += 1) {
+        final picked = _pickedOtherPhotos[index];
+        if (picked == null) continue;
+        final uploadedUrl = await repository.uploadImage(
+          bytes: await picked.readAsBytes(),
+          mimeType: _mimeTypeForPath(picked.path),
+        );
+        if (uploadedUrl.isNotEmpty) otherPhotoUrls[index] = uploadedUrl;
+      }
 
       final saved = await repository.saveProfile(
         profile.copyWith(
@@ -138,12 +213,25 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           avatarUrl: avatarUrl,
           facebookUrl: _facebook.text.trim(),
           bio: _bio.text.trim(),
-          pitWorks: _pitWorks,
+          deepPitWorks: _deepPitWorks,
+          shallowPitWorks: _shallowPitWorks,
+          age: _age.text.trim(),
+          regions: _regions,
+          travelRegions: _travelRegions,
+          travelSameRegion: _travelSameRegion,
+          landmine: _landmine.text.trim(),
+          gender: _gender,
+          otherPhotoUrls: otherPhotoUrls
+              .map((url) => url.trim())
+              .where((url) => url.isNotEmpty)
+              .take(3)
+              .toList(),
         ),
       );
       setState(() {
         _editing = false;
         _loadProfile(saved);
+        _profileFuture = Future.value(saved);
       });
       if (context.mounted) {
         ScaffoldMessenger.of(
@@ -172,11 +260,41 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     });
   }
 
+  Future<void> _pickOtherPhoto(int index) async {
+    final image = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 82,
+    );
+    if (image == null || !mounted) return;
+    setState(() {
+      while (_otherPhotoUrls.length <= index) {
+        _otherPhotoUrls = [..._otherPhotoUrls, ''];
+      }
+      _otherPhotoUrls[index] = image.path;
+      _pickedOtherPhotos[index] = image;
+    });
+  }
+
+  void _removeOtherPhoto(int index) {
+    setState(() {
+      if (index < _otherPhotoUrls.length) {
+        final urls = List<String>.from(_otherPhotoUrls);
+        urls[index] = '';
+        _otherPhotoUrls = urls.where((url) => url.isNotEmpty).toList();
+      }
+      _pickedOtherPhotos[index] = null;
+    });
+  }
+
   String _mimeTypeForPath(String path) {
     final lower = path.toLowerCase();
     if (lower.endsWith('.png')) return 'image/png';
     if (lower.endsWith('.webp')) return 'image/webp';
     return 'image/jpeg';
+  }
+
+  bool _sameStringSet(List<String> left, List<String> right) {
+    return left.length == right.length && left.every(right.contains);
   }
 
   void _showShareSheet(BuildContext context, UserProfile profile) {
@@ -233,14 +351,14 @@ class _ProfileSummary extends StatelessWidget {
       children: [
         Center(
           child: CircleAvatar(
-            radius: 52,
+            radius: 44,
             backgroundImage: pickedImageProvider(profile.avatarUrl),
             child: profile.avatarUrl.isEmpty
-                ? const Icon(Icons.person, size: 46)
+                ? const Icon(Icons.person, size: 40)
                 : null,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         Text(
           profile.nickname.isEmpty ? '尚未設定暱稱' : profile.nickname,
           textAlign: TextAlign.center,
@@ -248,30 +366,79 @@ class _ProfileSummary extends StatelessWidget {
             context,
           ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 12),
         _InfoTile(
           icon: Icons.article_outlined,
           label: '自我介紹',
           value: profile.bio.isEmpty ? '尚未填寫自我介紹' : profile.bio,
         ),
         _InfoTile(
+          icon: Icons.cake_outlined,
+          label: '年齡',
+          value: profile.age.isEmpty ? '尚未設定' : profile.age,
+        ),
+        _InfoTile(
+          icon: Icons.wc_outlined,
+          label: '性別',
+          value: _genderLabels[profile.gender] ?? '不公開',
+        ),
+        _InfoTile(
+          icon: Icons.explore_outlined,
+          label: '座標',
+          value: profile.regions.isEmpty ? '尚未設定' : profile.regions.join('、'),
+        ),
+        _InfoTile(
+          icon: Icons.directions_run_outlined,
+          label: '跑場範圍',
+          value: profile.travelRegions.isEmpty
+              ? '尚未設定'
+              : profile.travelRegions.join('、'),
+        ),
+        _InfoTile(
           icon: Icons.facebook,
           label: 'Facebook',
           value: profile.facebookUrl.isEmpty ? '尚未設定' : profile.facebookUrl,
         ),
-        const SizedBox(height: 12),
-        Text('坑單', style: Theme.of(context).textTheme.titleMedium),
+        _InfoTile(
+          icon: Icons.warning_amber_outlined,
+          label: '雷點',
+          value: profile.landmine.isEmpty ? '尚未填寫' : profile.landmine,
+        ),
         const SizedBox(height: 8),
-        if (profile.pitWorks.isEmpty)
-          const Text('尚未新增坑單')
+        Text('深坑', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 6),
+        if (profile.deepPitWorks.isEmpty)
+          const Text('尚未新增深坑')
         else
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (final work in profile.pitWorks) Chip(label: Text(work.name)),
+              for (final work in profile.deepPitWorks)
+                Chip(label: Text(work.name)),
             ],
           ),
+        const SizedBox(height: 8),
+        Text('淺坑', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 6),
+        if (profile.shallowPitWorks.isEmpty)
+          const Text('尚未新增淺坑')
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final work in profile.shallowPitWorks)
+                Chip(label: Text(work.name)),
+            ],
+          ),
+        const SizedBox(height: 10),
+        Text('其他照片', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 6),
+        if (profile.otherPhotoUrls.isEmpty)
+          const Text('尚未新增其他照片')
+        else
+          _OtherPhotoGrid(photoUrls: profile.otherPhotoUrls),
       ],
     );
   }
@@ -283,9 +450,24 @@ class _EditProfileForm extends StatelessWidget {
     required this.nickname,
     required this.facebook,
     required this.bio,
-    required this.pitWorks,
+    required this.age,
+    required this.landmine,
+    required this.deepPitWorks,
+    required this.shallowPitWorks,
+    required this.regions,
+    required this.travelRegions,
+    required this.travelSameRegion,
+    required this.gender,
+    required this.otherPhotoUrls,
     required this.onPickAvatar,
-    required this.onPitWorksChanged,
+    required this.onDeepPitWorksChanged,
+    required this.onShallowPitWorksChanged,
+    required this.onRegionsChanged,
+    required this.onTravelRegionsChanged,
+    required this.onUseSameRegions,
+    required this.onGenderChanged,
+    required this.onPickOtherPhoto,
+    required this.onRemoveOtherPhoto,
     required this.onSave,
     required this.saving,
   });
@@ -294,9 +476,24 @@ class _EditProfileForm extends StatelessWidget {
   final TextEditingController nickname;
   final TextEditingController facebook;
   final TextEditingController bio;
-  final List<WorkTag> pitWorks;
+  final TextEditingController age;
+  final TextEditingController landmine;
+  final List<WorkTag> deepPitWorks;
+  final List<WorkTag> shallowPitWorks;
+  final List<String> regions;
+  final List<String> travelRegions;
+  final bool travelSameRegion;
+  final String gender;
+  final List<String> otherPhotoUrls;
   final VoidCallback onPickAvatar;
-  final ValueChanged<List<WorkTag>> onPitWorksChanged;
+  final ValueChanged<List<WorkTag>> onDeepPitWorksChanged;
+  final ValueChanged<List<WorkTag>> onShallowPitWorksChanged;
+  final ValueChanged<List<String>> onRegionsChanged;
+  final ValueChanged<List<String>> onTravelRegionsChanged;
+  final VoidCallback onUseSameRegions;
+  final ValueChanged<String> onGenderChanged;
+  final ValueChanged<int> onPickOtherPhoto;
+  final ValueChanged<int> onRemoveOtherPhoto;
   final VoidCallback onSave;
   final bool saving;
 
@@ -309,10 +506,10 @@ class _EditProfileForm extends StatelessWidget {
             alignment: Alignment.bottomRight,
             children: [
               CircleAvatar(
-                radius: 48,
+                radius: 42,
                 backgroundImage: pickedImageProvider(avatarUrl),
                 child: avatarUrl.isEmpty
-                    ? const Icon(Icons.person, size: 42)
+                    ? const Icon(Icons.person, size: 38)
                     : null,
               ),
               IconButton.filled(
@@ -323,29 +520,97 @@ class _EditProfileForm extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 14),
         TextField(
           controller: nickname,
           decoration: const InputDecoration(labelText: '暱稱'),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         TextField(
           controller: facebook,
           decoration: const InputDecoration(labelText: 'Facebook 網址'),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: age,
+                decoration: const InputDecoration(labelText: '年齡'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                initialValue: _genderLabels.containsKey(gender)
+                    ? gender
+                    : 'private',
+                decoration: const InputDecoration(labelText: '性別'),
+                items: [
+                  for (final entry in _genderLabels.entries)
+                    DropdownMenuItem(
+                      value: entry.key,
+                      child: Text(entry.value),
+                    ),
+                ],
+                onChanged: saving
+                    ? null
+                    : (value) => onGenderChanged(value ?? 'private'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        _RegionSelector(
+          label: '座標',
+          selected: regions,
+          onChanged: onRegionsChanged,
+          enabled: !saving,
+        ),
+        const SizedBox(height: 10),
+        _RegionSelector(
+          label: '跑場範圍',
+          selected: travelRegions,
+          onChanged: onTravelRegionsChanged,
+          enabled: !saving,
+          action: TextButton.icon(
+            onPressed: saving || regions.isEmpty ? null : onUseSameRegions,
+            icon: const Icon(Icons.copy_all_outlined),
+            label: Text(travelSameRegion ? '已同座標' : '同座標'),
+          ),
+        ),
+        const SizedBox(height: 10),
         TextField(
           controller: bio,
           decoration: const InputDecoration(labelText: '自我介紹'),
           maxLines: 4,
         ),
-        const SizedBox(height: 12),
-        WorkMultiSelector(
-          label: '坑單',
-          selected: pitWorks,
-          onChanged: onPitWorksChanged,
+        const SizedBox(height: 10),
+        TextField(
+          controller: landmine,
+          decoration: const InputDecoration(labelText: '雷點'),
+          maxLines: 3,
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 10),
+        WorkMultiSelector(
+          label: '深坑',
+          selected: deepPitWorks,
+          onChanged: onDeepPitWorksChanged,
+        ),
+        const SizedBox(height: 10),
+        WorkMultiSelector(
+          label: '淺坑',
+          selected: shallowPitWorks,
+          onChanged: onShallowPitWorksChanged,
+        ),
+        const SizedBox(height: 12),
+        _EditableOtherPhotoGrid(
+          photoUrls: otherPhotoUrls,
+          enabled: !saving,
+          onPick: onPickOtherPhoto,
+          onRemove: onRemoveOtherPhoto,
+        ),
+        const SizedBox(height: 14),
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
@@ -360,6 +625,208 @@ class _EditProfileForm extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _RegionSelector extends StatelessWidget {
+  const _RegionSelector({
+    required this.label,
+    required this.selected,
+    required this.onChanged,
+    required this.enabled,
+    this.action,
+  });
+
+  final String label;
+  final List<String> selected;
+  final ValueChanged<List<String>> onChanged;
+  final bool enabled;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(label, style: Theme.of(context).textTheme.titleSmall),
+            ),
+            if (action != null) action!,
+          ],
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            for (final region in _profileRegionOptions)
+              FilterChip(
+                label: Text(region),
+                selected: selected.contains(region),
+                onSelected: enabled
+                    ? (value) {
+                        final next = List<String>.from(selected);
+                        if (value) {
+                          if (!next.contains(region)) next.add(region);
+                        } else {
+                          next.remove(region);
+                        }
+                        onChanged(next);
+                      }
+                    : null,
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _OtherPhotoGrid extends StatelessWidget {
+  const _OtherPhotoGrid({required this.photoUrls});
+
+  final List<String> photoUrls;
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: photoUrls.length.clamp(0, 3),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        childAspectRatio: 0.82,
+      ),
+      itemBuilder: (context, index) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Image(
+            image: pickedImageProvider(photoUrls[index])!,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => Container(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: const Icon(Icons.broken_image_outlined),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _EditableOtherPhotoGrid extends StatelessWidget {
+  const _EditableOtherPhotoGrid({
+    required this.photoUrls,
+    required this.enabled,
+    required this.onPick,
+    required this.onRemove,
+  });
+
+  final List<String> photoUrls;
+  final bool enabled;
+  final ValueChanged<int> onPick;
+  final ValueChanged<int> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('其他照片', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 6),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: 3,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+            childAspectRatio: 0.82,
+          ),
+          itemBuilder: (context, index) {
+            final url = index < photoUrls.length ? photoUrls[index] : '';
+            return _EditablePhotoSlot(
+              imageUrl: url,
+              enabled: enabled,
+              onPick: () => onPick(index),
+              onRemove: url.isEmpty ? null : () => onRemove(index),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _EditablePhotoSlot extends StatelessWidget {
+  const _EditablePhotoSlot({
+    required this.imageUrl,
+    required this.enabled,
+    required this.onPick,
+    required this.onRemove,
+  });
+
+  final String imageUrl;
+  final bool enabled;
+  final VoidCallback onPick;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: enabled ? onPick : null,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: scheme.outlineVariant),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (imageUrl.isEmpty)
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.add_photo_alternate_outlined,
+                      color: scheme.primary,
+                    ),
+                    const SizedBox(height: 6),
+                    Text('新增', style: Theme.of(context).textTheme.labelMedium),
+                  ],
+                )
+              else
+                Image(
+                  image: pickedImageProvider(imageUrl)!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const Center(child: Icon(Icons.broken_image_outlined)),
+                ),
+              if (onRemove != null && enabled)
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: IconButton.filledTonal(
+                    visualDensity: VisualDensity.compact,
+                    onPressed: onRemove,
+                    icon: const Icon(Icons.close, size: 16),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -379,7 +846,10 @@ class _InfoTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading: Icon(icon),
+      dense: true,
+      visualDensity: VisualDensity.compact,
+      minLeadingWidth: 26,
+      leading: Icon(icon, size: 20),
       title: Text(label),
       subtitle: Text(value),
     );

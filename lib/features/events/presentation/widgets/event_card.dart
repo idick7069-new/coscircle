@@ -12,21 +12,27 @@ class EventCard extends ConsumerWidget {
   const EventCard({
     super.key,
     required this.event,
+    this.title,
+    this.dateText,
     required this.onTap,
     required this.onBookingPressed,
     required this.onDetailPressed,
   });
 
   final CosEvent event;
+  final String? title;
+  final String? dateText;
   final VoidCallback? onTap;
   final VoidCallback? onBookingPressed;
   final VoidCallback onDetailPressed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final date = event.startDate == event.endDate
-        ? DateFormat('yyyy/MM/dd E', 'zh_TW').format(event.startDate)
-        : '${DateFormat('yyyy/MM/dd').format(event.startDate)} - ${DateFormat('MM/dd').format(event.endDate)}';
+    final date =
+        dateText ??
+        (event.startDate == event.endDate
+            ? DateFormat('yyyy/MM/dd E', 'zh_TW').format(event.startDate)
+            : '${DateFormat('yyyy/MM/dd').format(event.startDate)} - ${DateFormat('MM/dd').format(event.endDate)}');
     final status = event.status(DateTime.now());
     final isEnded = status == EventStatus.ended;
     final participants = ref.watch(eventParticipantsProvider(event.id));
@@ -89,7 +95,7 @@ class EventCard extends ConsumerWidget {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              event.name,
+                              title ?? event.name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.titleMedium
@@ -369,7 +375,10 @@ class _ParticipantStrip extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.all(2),
                       decoration: BoxDecoration(
-                        color: participantRoleColor(entry.$2.role),
+                        color: participantRoleColorForScheme(
+                          entry.$2.role,
+                          Theme.of(context).colorScheme,
+                        ),
                         shape: BoxShape.circle,
                       ),
                       child: CircleAvatar(

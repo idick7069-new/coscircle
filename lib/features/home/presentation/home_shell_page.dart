@@ -20,16 +20,23 @@ class _HomeShellPageState extends ConsumerState<HomeShellPage> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedCurrentEventId = ref.watch(selectedCurrentEventIdProvider);
+    final selectedCurrentEventTarget = ref.watch(
+      selectedCurrentEventTargetProvider,
+    );
     final pages = [
       const ProfilePage(),
       EventListPage(
-        onOpenCurrentEvent: (event) {
-          ref.read(selectedCurrentEventIdProvider.notifier).select(event.id);
+        onOpenCurrentEvent: (item) {
+          ref
+              .read(selectedCurrentEventTargetProvider.notifier)
+              .select(item.event.id, dayIndex: item.dayIndex);
           setState(() => _index = 2);
         },
       ),
-      CurrentEventPage(eventId: selectedCurrentEventId),
+      CurrentEventPage(
+        eventId: selectedCurrentEventTarget?.eventId,
+        dayIndex: selectedCurrentEventTarget?.dayIndex ?? 1,
+      ),
       const SocialPage(),
       const SettingsPage(),
     ];

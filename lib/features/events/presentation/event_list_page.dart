@@ -2,22 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import '../../../core/models/booking.dart';
 import '../../../core/models/event.dart';
+import '../../../core/models/event_day_item.dart';
+import '../../../core/models/participant.dart';
 import '../../../core/models/work.dart';
 import '../../../core/providers/event_providers.dart';
 import '../../../core/repositories/event_repository.dart';
 import '../../../core/repositories/profile_repository.dart';
 import '../../works/presentation/work_selector.dart';
+import 'my_events_page.dart';
 import 'widgets/event_card.dart';
 
 class EventListPage extends ConsumerStatefulWidget {
   const EventListPage({super.key, required this.onOpenCurrentEvent});
 
-  final ValueChanged<CosEvent> onOpenCurrentEvent;
+  final ValueChanged<EventDayItem> onOpenCurrentEvent;
 
   @override
   ConsumerState<EventListPage> createState() => _EventListPageState();
@@ -50,7 +54,7 @@ class _EventListPageState extends ConsumerState<EventListPage> {
       onRefresh: _refreshEvents,
       child: events.when(
         data: (items) {
-          final filtered = _applyFilters(items);
+          final filtered = _applyFilters(expandEventDays(items));
           return CustomScrollView(
             slivers: [
               SliverToBoxAdapter(
@@ -66,11 +70,13 @@ class _EventListPageState extends ConsumerState<EventListPage> {
                         ),
                       ),
                       IconButton.filledTonal(
-                        tooltip: '只看我參加',
-                        isSelected: _joinedOnly,
-                        onPressed: () =>
-                            _updateFilters(joinedOnly: !_joinedOnly),
-                        icon: const Icon(Icons.how_to_reg),
+                        tooltip: '我的活動',
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const MyEventsPage(),
+                          ),
+                        ),
+                        icon: const Icon(Icons.event_available_outlined),
                       ),
                     ],
                   ),
@@ -81,7 +87,9 @@ class _EventListPageState extends ConsumerState<EventListPage> {
               SliverList.builder(
                 itemCount: filtered.length,
                 itemBuilder: (context, index) {
-                  final event = filtered[index];
+                  final item = filtered[index];
+                  final event = item.event;
+                  final status = item.status(DateTime.now());
                   return Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -89,13 +97,21 @@ class _EventListPageState extends ConsumerState<EventListPage> {
                     ),
                     child: EventCard(
                       event: event,
-                      onTap: event.status(DateTime.now()) == EventStatus.active
-                          ? () => widget.onOpenCurrentEvent(event)
+                      title: item.title,
+                      dateText: DateFormat(
+                        'yyyy/MM/dd E',
+                        'zh_TW',
+                      ).format(item.date),
+                      onTap: status == EventStatus.active
+                          ? () => widget.onOpenCurrentEvent(item)
                           : null,
-                      onBookingPressed:
-                          event.status(DateTime.now()) == EventStatus.ended
+                      onBookingPressed: status == EventStatus.ended
                           ? null
-                          : () => _showBookingSheet(context, event),
+                          : () => _showBookingSheet(
+                              context,
+                              event,
+                              dayIndex: item.dayIndex,
+                            ),
                       onDetailPressed: () =>
                           context.push('/events/${event.id}'),
                     ),
@@ -242,8 +258,9 @@ class _EventListPageState extends ConsumerState<EventListPage> {
     );
   }
 
-  List<CosEvent> _applyFilters(List<CosEvent> events) {
-    return events.where((event) {
+  List<EventDayItem> _applyFilters(List<EventDayItem> items) {
+    return items.where((item) {
+      final event = item.event;
       final selected = _selectedDay;
       final matchesDate =
           selected == null ||
@@ -265,9 +282,9 @@ class _EventListPageState extends ConsumerState<EventListPage> {
         _ => true,
       };
       final matchesEnded =
-          !_hideEnded || event.status(DateTime.now()) != EventStatus.ended;
+          !_hideEnded || item.status(DateTime.now()) != EventStatus.ended;
       return matchesDate && matchesJoined && matchesType && matchesEnded;
-    }).toList()..sort((a, b) => a.startDate.compareTo(b.startDate));
+    }).toList()..sort((a, b) => a.date.compareTo(b.date));
   }
 
   Future<void> _restoreFilters() async {
@@ -329,12 +346,17 @@ class _EventListPageState extends ConsumerState<EventListPage> {
     return '${date.year}-$month-$day';
   }
 
-  Future<void> _showBookingSheet(BuildContext context, CosEvent event) async {
+  Future<void> _showBookingSheet(
+    BuildContext context,
+    CosEvent event, {
+    int dayIndex = 1,
+  }) async {
     if (event.status(DateTime.now()) == EventStatus.ended) return;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => _BookingSheet(event: event),
+      builder: (context) =>
+          BookingSheet(event: event, initialDayIndex: dayIndex),
     );
   }
 
@@ -344,16 +366,23 @@ class _EventListPageState extends ConsumerState<EventListPage> {
   }
 }
 
-class _BookingSheet extends ConsumerStatefulWidget {
-  const _BookingSheet({required this.event});
+class BookingSheet extends ConsumerStatefulWidget {
+  const BookingSheet({
+    super.key,
+    required this.event,
+    this.initialDayIndex = 1,
+    this.initialParticipant,
+  });
 
   final CosEvent event;
+  final int initialDayIndex;
+  final EventParticipant? initialParticipant;
 
   @override
-  ConsumerState<_BookingSheet> createState() => _BookingSheetState();
+  ConsumerState<BookingSheet> createState() => _BookingSheetState();
 }
 
-class _BookingSheetState extends ConsumerState<_BookingSheet> {
+class _BookingSheetState extends ConsumerState<BookingSheet> {
   static const _interactionOptions = ['認親', '拍照', '交換無料', '聊天', '一起逛', '找同作品'];
   static const _statusOptions = [
     ('open', '可來找我'),
@@ -372,7 +401,32 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
   String? _outfitImagePath;
   XFile? _pickedOutfitImage;
   WorkTag? _selectedWork;
+  int _dayIndex = 1;
   bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _dayIndex = widget.initialDayIndex;
+    final participant = widget.initialParticipant;
+    if (participant == null) return;
+    _role = _roleFromString(participant.role);
+    _dayIndex = participant.dayIndex;
+    _characterController.text = participant.characterName;
+    _availableTimeController.text = participant.availableTime;
+    _messageController.text = participant.message;
+    _interactionTags.addAll(participant.interactionTags);
+    _presenceStatus = participant.presenceStatus;
+    _outfitImagePath = participant.outfitImageUrl.isEmpty
+        ? null
+        : participant.outfitImageUrl;
+    if (participant.workId.isNotEmpty || participant.workName.isNotEmpty) {
+      _selectedWork = WorkTag(
+        id: participant.workId,
+        name: participant.workName,
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -400,13 +454,36 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
             children: [
               Text(
-                event.isJoined ? '修改出席宣告' : '發布出席宣告',
+                widget.initialParticipant != null ? '修改出角預訂' : '發布出角預訂',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 4),
               Text(
                 '讓同好知道你會去、當天扮什麼、以及歡迎怎麼互動。',
                 style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+              Text('參加日', style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (
+                    var index = 1;
+                    index <= _eventDayCount(event);
+                    index += 1
+                  )
+                    ChoiceChip(
+                      label: Text('D$index'),
+                      avatar: const Icon(
+                        Icons.calendar_today_outlined,
+                        size: 16,
+                      ),
+                      selected: _dayIndex == index,
+                      onSelected: (_) => setState(() => _dayIndex = index),
+                    ),
+                ],
               ),
               const SizedBox(height: 12),
               SegmentedButton<ParticipantRole>(
@@ -496,9 +573,7 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
               OutlinedButton.icon(
                 onPressed: _pickOutfitImage,
                 icon: const Icon(Icons.image_outlined),
-                label: Text(
-                  _outfitImagePath == null ? '上傳當天出的角照片' : '已選擇當天出的角',
-                ),
+                label: Text(_outfitImagePath == null ? '當天長這樣' : '已選擇照片'),
               ),
               if (_outfitImagePath != null) ...[
                 const SizedBox(height: 8),
@@ -521,7 +596,7 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
               const SizedBox(height: 16),
               Row(
                 children: [
-                  if (event.isJoined)
+                  if (widget.initialParticipant != null)
                     Expanded(
                       child: OutlinedButton(
                         onPressed: _submitting
@@ -530,7 +605,8 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
                         child: const Text('取消出席'),
                       ),
                     ),
-                  if (event.isJoined) const SizedBox(width: 12),
+                  if (widget.initialParticipant != null)
+                    const SizedBox(width: 12),
                   Expanded(
                     child: FilledButton(
                       onPressed: _submitting
@@ -541,7 +617,11 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
                               dimension: 18,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : Text(event.isJoined ? '儲存出席' : '我會去'),
+                          : Text(
+                              widget.initialParticipant != null
+                                  ? '儲存出席'
+                                  : '我會去',
+                            ),
                     ),
                   ),
                 ],
@@ -586,6 +666,7 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
             EventBooking(
               eventId: event.id,
               role: _role,
+              dayIndex: _dayIndex,
               workId: _role == ParticipantRole.coser ? _selectedWork?.id : null,
               characterName: _characterController.text,
               outfitImagePath: outfitImageUrl,
@@ -607,6 +688,10 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
     }
   }
 
+  int _eventDayCount(CosEvent event) {
+    return event.endDate.difference(event.startDate).inDays + 1;
+  }
+
   String _mimeTypeForPath(String path) {
     final lower = path.toLowerCase();
     if (lower.endsWith('.png')) return 'image/png';
@@ -617,7 +702,9 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
   Future<void> _removeAttendance(BuildContext context, CosEvent event) async {
     setState(() => _submitting = true);
     try {
-      await ref.read(eventRepositoryProvider).removeBooking(event.id);
+      await ref
+          .read(eventRepositoryProvider)
+          .removeBooking(event.id, dayIndex: _dayIndex);
       await _refreshAfterAttendanceChanged(event.id);
       if (context.mounted) Navigator.pop(context);
     } catch (error) {
@@ -628,6 +715,13 @@ class _BookingSheetState extends ConsumerState<_BookingSheet> {
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  ParticipantRole _roleFromString(String value) {
+    return ParticipantRole.values.firstWhere(
+      (role) => role.name == value,
+      orElse: () => ParticipantRole.coser,
+    );
   }
 
   Future<void> _refreshAfterAttendanceChanged(String eventId) async {

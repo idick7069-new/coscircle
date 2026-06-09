@@ -50,9 +50,10 @@ final currentEventCirclesProvider =
 enum LocationFilter { all, followed, circle }
 
 class CurrentEventPage extends ConsumerStatefulWidget {
-  const CurrentEventPage({super.key, this.eventId});
+  const CurrentEventPage({super.key, this.eventId, this.dayIndex = 1});
 
   final String? eventId;
+  final int dayIndex;
 
   @override
   ConsumerState<CurrentEventPage> createState() => _CurrentEventPageState();
@@ -94,6 +95,7 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
     final eventItems = events.whenOrNull(data: (items) => items);
     final event = _currentEvent(eventItems);
     final eventId = event?.id;
+    final dayIndex = event == null ? 1 : _currentDayIndex(event);
     final isResolvingEvent = events.isLoading;
     final locations = event == null
         ? const AsyncData(<SharedLocation>[])
@@ -113,7 +115,10 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
       body: SafeArea(
         child: locations.when(
           data: (items) {
-            _warmMarkerIcons(items);
+            final dayLocations = items
+                .where((item) => item.dayIndex == dayIndex)
+                .toList();
+            _warmMarkerIcons(dayLocations);
             final meetupItems =
                 meetups.whenOrNull(data: (items) => items) ??
                 const <MeetupPoint>[];
@@ -144,7 +149,7 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                       context,
                     ).showSnackBar(const SnackBar(content: Text('已放置集合點草稿')));
                   },
-                  markers: _markersFor(items, meetupItems, eventId),
+                  markers: _markersFor(dayLocations, meetupItems, eventId),
                 ),
                 Positioned(
                   left: 16,
@@ -152,9 +157,10 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                   top: 12,
                   child: _EventMapHeader(
                     event: event,
+                    dayIndex: dayIndex,
                     filter: _filter,
-                    visibleCount: _filtered(items).length,
-                    totalCount: items.length,
+                    visibleCount: _filtered(dayLocations).length,
+                    totalCount: dayLocations.length,
                     onFilterChanged: (value) => setState(() => _filter = value),
                     onRefresh: eventId == null
                         ? null
@@ -363,6 +369,25 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
     return event;
   }
 
+  int _currentDayIndex(CosEvent event) {
+    if (widget.eventId != null) {
+      return widget.dayIndex.clamp(1, _eventDayCount(event));
+    }
+    final today = DateTime.now();
+    final date = DateTime(today.year, today.month, today.day);
+    final start = DateTime(
+      event.startDate.year,
+      event.startDate.month,
+      event.startDate.day,
+    );
+    return date.difference(start).inDays.clamp(0, _eventDayCount(event) - 1) +
+        1;
+  }
+
+  int _eventDayCount(CosEvent event) {
+    return event.endDate.difference(event.startDate).inDays + 1;
+  }
+
   Set<Marker> _markersFor(
     List<SharedLocation> items,
     List<MeetupPoint> meetups,
@@ -477,7 +502,7 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
     final scheme = Theme.of(context).colorScheme;
     final color = location.isCircleMember
         ? scheme.tertiary
-        : participantRoleColor(location.role);
+        : participantRoleColorForScheme(location.role, scheme);
     final placeholderColor = scheme.primaryContainer;
     final placeholderTextColor = scheme.onPrimaryContainer;
 
@@ -1167,7 +1192,10 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                     Container(
                       padding: const EdgeInsets.all(3),
                       decoration: BoxDecoration(
-                        color: participantRoleColor(location.role),
+                        color: participantRoleColorForScheme(
+                          location.role,
+                          Theme.of(context).colorScheme,
+                        ),
                         shape: BoxShape.circle,
                       ),
                       child: CircleAvatar(
@@ -1323,6 +1351,7 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
 class _EventMapHeader extends StatelessWidget {
   const _EventMapHeader({
     required this.event,
+    required this.dayIndex,
     required this.filter,
     required this.visibleCount,
     required this.totalCount,
@@ -1331,6 +1360,7 @@ class _EventMapHeader extends StatelessWidget {
   });
 
   final CosEvent? event;
+  final int dayIndex;
   final LocationFilter filter;
   final int visibleCount;
   final int totalCount;
@@ -1350,7 +1380,7 @@ class _EventMapHeader extends StatelessWidget {
               child: Text(
                 event == null
                     ? '目前無當前活動'
-                    : '${event!.name} · $visibleCount / $totalCount',
+                    : '${event!.name} D$dayIndex · $visibleCount / $totalCount',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
             ),

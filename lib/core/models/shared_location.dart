@@ -6,6 +6,7 @@ class SharedLocation {
     required this.latitude,
     required this.longitude,
     required this.sharedAt,
+    this.dayIndex = 1,
     this.publicCode = '',
     this.avatarUrl = '',
     this.characterName = '',
@@ -22,6 +23,7 @@ class SharedLocation {
   final String userId;
   final String nickname;
   final String role;
+  final int dayIndex;
   final double latitude;
   final double longitude;
   final DateTime sharedAt;
@@ -42,6 +44,7 @@ class SharedLocation {
       userId: json['userId'].toString(),
       nickname: json['nickname']?.toString() ?? '',
       role: json['role']?.toString() ?? '',
+      dayIndex: _intValue(json['dayIndex'], fallback: 1),
       latitude: double.parse(json['latitude'].toString()),
       longitude: double.parse(json['longitude'].toString()),
       sharedAt: DateTime.parse(json['sharedAt'].toString()),
@@ -63,6 +66,11 @@ class SharedLocation {
   int minutesAgo(DateTime now) {
     return now.difference(sharedAt).inMinutes.clamp(0, 99999);
   }
+}
+
+int _intValue(Object? value, {required int fallback}) {
+  if (value is int) return value;
+  return int.tryParse(value?.toString() ?? '') ?? fallback;
 }
 
 List<String> _stringList(Object? value) {
