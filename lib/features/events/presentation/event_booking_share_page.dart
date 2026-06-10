@@ -37,6 +37,15 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
     Color(0xffffd7df),
     Color(0xfff0e3c7),
   ];
+  static const _labelBackgroundColors = [
+    Color(0xff111111),
+    Color(0xffe83f75),
+    Color(0xff2f80ed),
+    Color(0xff8b5cf6),
+    Color(0xff16a34a),
+    Color(0xfff59e0b),
+    Color(0xffef4444),
+  ];
 
   final _boundaryKey = GlobalKey();
   final _previewKey = GlobalKey();
@@ -45,6 +54,8 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
   late final Map<int, _EditableTransform> _photoTransforms;
   late final Map<int, _EditableTransform> _labelTransforms;
   late final Map<int, double> _labelFontSizes;
+  late final Map<int, Color> _labelBackgroundColorByDay;
+  late final Map<int, double> _labelBorderRadiusByDay;
   late final TextEditingController _messageController;
   _SelectedShareLayer? _selectedLayer;
   _EditableTransform _gestureStartTransform = const _EditableTransform();
@@ -74,6 +85,13 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
     };
     _labelFontSizes = {
       for (var index = 1; index <= _dayCount; index += 1) index: 80,
+    };
+    _labelBackgroundColorByDay = {
+      for (var index = 1; index <= _dayCount; index += 1)
+        index: _labelBackgroundColors.first,
+    };
+    _labelBorderRadiusByDay = {
+      for (var index = 1; index <= _dayCount; index += 1) index: 36,
     };
     _messageController = TextEditingController(text: _primaryBooking.message);
   }
@@ -153,6 +171,8 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
                           labelControllers: _labelControllers,
                           labelTransforms: _labelTransforms,
                           labelFontSizes: _labelFontSizes,
+                          labelBackgroundColors: _labelBackgroundColorByDay,
+                          labelBorderRadii: _labelBorderRadiusByDay,
                           message: _messageController.text,
                           selectedLayer: _sharing ? null : _selectedLayer,
                           onLayerSelected: (layer) {
@@ -250,6 +270,9 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
                           offset: Offset(22, 260),
                         );
                         _labelFontSizes[index] = 80;
+                        _labelBackgroundColorByDay[index] =
+                            _labelBackgroundColors.first;
+                        _labelBorderRadiusByDay[index] = 36;
                         debugPrint(
                           '[BookingShare] reset D$index labelFontSize=80',
                         );
@@ -257,6 +280,60 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
                     },
                     icon: const Icon(Icons.refresh),
                     label: const Text('重置'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const SizedBox(width: 68, child: Text('背景')),
+                  Expanded(
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final color in _labelBackgroundColors)
+                          _ColorSwatchButton(
+                            color: color,
+                            selected:
+                                (_labelBackgroundColorByDay[index] ??
+                                    _labelBackgroundColors.first) ==
+                                color,
+                            onTap: () {
+                              debugPrint(
+                                '[BookingShare] set D$index labelBackgroundColor=${_hexColor(color)}',
+                              );
+                              setState(
+                                () => _labelBackgroundColorByDay[index] = color,
+                              );
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 68,
+                    child: Text(
+                      '圓角 ${(_labelBorderRadiusByDay[index] ?? 36).round()}',
+                    ),
+                  ),
+                  Expanded(
+                    child: Slider(
+                      min: 0,
+                      max: 100,
+                      value: _labelBorderRadiusByDay[index] ?? 36,
+                      onChanged: (value) {
+                        debugPrint(
+                          '[BookingShare] set D$index labelBorderRadius=$value',
+                        );
+                        setState(() => _labelBorderRadiusByDay[index] = value);
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -382,6 +459,8 @@ class _ShareCanvas extends StatelessWidget {
     required this.labelControllers,
     required this.labelTransforms,
     required this.labelFontSizes,
+    required this.labelBackgroundColors,
+    required this.labelBorderRadii,
     required this.message,
     required this.selectedLayer,
     required this.onLayerSelected,
@@ -395,6 +474,8 @@ class _ShareCanvas extends StatelessWidget {
   final Map<int, TextEditingController> labelControllers;
   final Map<int, _EditableTransform> labelTransforms;
   final Map<int, double> labelFontSizes;
+  final Map<int, Color> labelBackgroundColors;
+  final Map<int, double> labelBorderRadii;
   final String message;
   final _SelectedShareLayer? selectedLayer;
   final ValueChanged<_SelectedShareLayer> onLayerSelected;
@@ -468,6 +549,11 @@ class _ShareCanvas extends StatelessWidget {
                             labelTransforms[dayIndex] ??
                             const _EditableTransform(offset: Offset(22, 260)),
                         labelFontSize: labelFontSizes[dayIndex] ?? 80,
+                        labelBackgroundColor:
+                            labelBackgroundColors[dayIndex] ??
+                            const Color(0xff111111),
+                        labelBorderRadius: labelBorderRadii[dayIndex] ?? 36,
+                        showDayLabel: dayCount > 1,
                         selectedLayer: selectedLayer,
                         onLayerSelected: onLayerSelected,
                         accent: _strongColor(backgroundColor),
@@ -546,20 +632,16 @@ class _InfoPanel extends StatelessWidget {
                 fontWeight: FontWeight.w900,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              participant.nickname,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.black,
-                fontSize: 38,
-                fontWeight: FontWeight.w900,
-              ),
+            const SizedBox(height: 12),
+            _Box(
+              label: 'CN / 名字',
+              text: participant.nickname,
+              maxLines: 2,
+              contentFontSize: 66,
+              centerContent: true,
             ),
             const SizedBox(height: 12),
-            _Box(label: 'CN / 名字', text: participant.nickname, maxLines: 2),
-            const SizedBox(height: 12),
-            _Box(label: '留言', text: message, maxLines: 5),
+            _Box(label: '留言', text: message, maxLines: 5, contentFontSize: 44),
             const SizedBox(height: 8),
             Text(
               '#${event.name.replaceAll(' ', '')} #cosplay #CosCircle',
@@ -579,11 +661,19 @@ class _InfoPanel extends StatelessWidget {
 }
 
 class _Box extends StatelessWidget {
-  const _Box({required this.label, required this.text, required this.maxLines});
+  const _Box({
+    required this.label,
+    required this.text,
+    required this.maxLines,
+    this.contentFontSize = 22,
+    this.centerContent = false,
+  });
 
   final String label;
   final String text;
   final int maxLines;
+  final double contentFontSize;
+  final bool centerContent;
 
   @override
   Widget build(BuildContext context) {
@@ -594,15 +684,45 @@ class _Box extends StatelessWidget {
         decoration: BoxDecoration(
           border: Border.all(color: Colors.orange, width: 3),
         ),
-        child: Text(
-          text.isEmpty ? label : '$label\n$text',
-          maxLines: maxLines + 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.black,
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisAlignment: centerContent
+              ? MainAxisAlignment.center
+              : MainAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.black,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            if (text.isNotEmpty)
+              Expanded(
+                child: Align(
+                  alignment: centerContent
+                      ? Alignment.center
+                      : Alignment.topLeft,
+                  child: Text(
+                    text,
+                    textAlign: centerContent
+                        ? TextAlign.center
+                        : TextAlign.start,
+                    maxLines: maxLines,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontSize: contentFontSize,
+                      fontWeight: FontWeight.w900,
+                      height: 1.04,
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -618,6 +738,9 @@ class _DayColumn extends StatelessWidget {
     required this.labelController,
     required this.labelTransform,
     required this.labelFontSize,
+    required this.labelBackgroundColor,
+    required this.labelBorderRadius,
+    required this.showDayLabel,
     required this.selectedLayer,
     required this.onLayerSelected,
     required this.accent,
@@ -630,6 +753,9 @@ class _DayColumn extends StatelessWidget {
   final TextEditingController labelController;
   final _EditableTransform labelTransform;
   final double labelFontSize;
+  final Color labelBackgroundColor;
+  final double labelBorderRadius;
+  final bool showDayLabel;
   final _SelectedShareLayer? selectedLayer;
   final ValueChanged<_SelectedShareLayer> onLayerSelected;
   final Color accent;
@@ -642,23 +768,22 @@ class _DayColumn extends StatelessWidget {
     debugPrint('[BookingShare] canvas D$dayIndex labelFontSize=$labelFontSize');
     return Column(
       children: [
-        Text(
-          'D$dayIndex',
-          style: const TextStyle(
-            color: Colors.black,
-            fontSize: 48,
-            fontWeight: FontWeight.w900,
+        if (showDayLabel) ...[
+          Text(
+            'D$dayIndex',
+            style: const TextStyle(
+              color: Colors.black,
+              fontSize: 48,
+              fontWeight: FontWeight.w900,
+            ),
           ),
-        ),
-        const SizedBox(height: 10),
+          const SizedBox(height: 10),
+        ],
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              return Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: accent, width: 4),
-                ),
+              return ColoredBox(
+                color: Colors.white,
                 child: Stack(
                   clipBehavior: Clip.hardEdge,
                   children: [
@@ -675,8 +800,8 @@ class _DayColumn extends StatelessWidget {
                               participant!.outfitImageUrl,
                             )!,
                             fit: BoxFit.cover,
-                            width: constraints.maxWidth,
-                            height: constraints.maxHeight,
+                            width: constraints.maxWidth * 1.18,
+                            height: constraints.maxHeight * 1.18,
                           ),
                         ),
                       )
@@ -700,8 +825,10 @@ class _DayColumn extends StatelessWidget {
                         onSelected: () => onLayerSelected(labelLayer),
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.62),
-                            borderRadius: BorderRadius.circular(999),
+                            color: labelBackgroundColor,
+                            borderRadius: BorderRadius.circular(
+                              labelBorderRadius,
+                            ),
                           ),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
@@ -713,11 +840,20 @@ class _DayColumn extends StatelessWidget {
                                   ? participant?.characterName ?? ''
                                   : labelController.text.trim(),
                               style: TextStyle(
-                                color: Colors.white,
+                                color: _readableTextColor(labelBackgroundColor),
                                 fontSize: labelFontSize,
                                 fontWeight: FontWeight.w900,
                               ),
                             ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: accent, width: 4),
                           ),
                         ),
                       ),
@@ -857,7 +993,9 @@ class _TransformableLayerState extends State<_TransformableLayer> {
   double _clampCenter(double value, double halfExtent, double maxExtent) {
     final minValue = halfExtent;
     final maxValue = maxExtent - halfExtent;
-    if (minValue > maxValue) return maxExtent / 2;
+    if (minValue > maxValue) {
+      return value.clamp(maxValue, minValue).toDouble();
+    }
     return value.clamp(minValue, maxValue).toDouble();
   }
 }
@@ -877,6 +1015,52 @@ class _MoveHandle extends StatelessWidget {
       child: const Padding(
         padding: EdgeInsets.all(7),
         child: Icon(Icons.open_with, color: Colors.white, size: 22),
+      ),
+    );
+  }
+}
+
+class _ColorSwatchButton extends StatelessWidget {
+  const _ColorSwatchButton({
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: onTap,
+      child: Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: selected
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.outlineVariant,
+            width: selected ? 3 : 1,
+          ),
+          boxShadow: selected
+              ? const [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: selected
+            ? Icon(Icons.check, size: 18, color: _readableTextColor(color))
+            : null,
       ),
     );
   }
@@ -1053,4 +1237,14 @@ String _dateText(CosEvent event) {
     return DateFormat('yyyy/MM/dd').format(event.startDate);
   }
   return '${DateFormat('yyyy/MM/dd').format(event.startDate)} - ${DateFormat('MM/dd').format(event.endDate)}';
+}
+
+Color _readableTextColor(Color backgroundColor) {
+  return backgroundColor.computeLuminance() > 0.48
+      ? Colors.black
+      : Colors.white;
+}
+
+String _hexColor(Color color) {
+  return '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
 }
