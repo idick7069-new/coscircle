@@ -21,6 +21,7 @@ import '../../../core/providers/event_providers.dart';
 import '../../../core/repositories/location_repository.dart';
 import '../../../core/repositories/social_repository.dart';
 import '../../../core/services/local_notification_service.dart';
+import '../../../core/utils/event_day_display.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../core/utils/participant_role_style.dart';
 import 'widgets/current_event_overlays.dart';
@@ -1380,7 +1381,7 @@ class _EventMapHeader extends StatelessWidget {
               child: Text(
                 event == null
                     ? '目前無當前活動'
-                    : '${event!.name} D$dayIndex · $visibleCount / $totalCount',
+                    : '${currentEventTitle(event!, dayIndex)} · $visibleCount / $totalCount',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
             ),

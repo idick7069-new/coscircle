@@ -6,6 +6,7 @@ import '../../../core/models/event.dart';
 import '../../../core/models/participant.dart';
 import '../../../core/providers/event_providers.dart';
 import '../../../core/repositories/event_repository.dart';
+import '../../../core/utils/event_day_display.dart';
 import '../../../core/utils/participant_role_style.dart';
 import 'event_booking_share_page.dart';
 import 'event_list_page.dart';
@@ -181,7 +182,7 @@ class _MyBookingItem {
 
   DateTime get date => event.startDate.add(Duration(days: dayIndex - 1));
 
-  String get title => '${event.name} D$dayIndex';
+  String get title => eventDayTitle(event, dayIndex);
 
   bool get isEnded {
     final today = DateTime.now();

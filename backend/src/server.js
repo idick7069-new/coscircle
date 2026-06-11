@@ -17,6 +17,7 @@ const devUserId = 1;
 const scrypt = promisify(crypto.scrypt);
 const eventScraperEnabled = process.env.EVENT_SCRAPER_ENABLED !== 'false';
 const eventScraperTimeZone = process.env.EVENT_SCRAPER_TIME_ZONE ?? 'Asia/Taipei';
+const maxUploadImageBytes = 5 * 1024 * 1024;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -275,8 +276,12 @@ app.post('/api/uploads/image', async (req, res, next) => {
     }
 
     const bytes = Buffer.from(bytesBase64, 'base64');
-    if (bytes.length === 0 || bytes.length > 5 * 1024 * 1024) {
+    if (bytes.length === 0 || bytes.length > maxUploadImageBytes) {
       res.status(400).json({ error: 'invalid_image_size' });
+      return;
+    }
+    if (!isValidImageBytes(bytes, extension)) {
+      res.status(400).json({ error: 'invalid_image_bytes' });
       return;
     }
 
@@ -448,45 +453,86 @@ app.post('/api/admin/events/sync-doujin', syncDoujinEvents);
 
 app.post('/api/admin/events', async (req, res, next) => {
   try {
-    const {
-      category = '綜合',
-      name,
-      startDate,
-      endDate,
-      venue,
-      detailedAddress,
-      fee = '',
-      organizer = '',
-      description = '',
-      status = 'approved',
-      imageUrl = '',
-      sourceUrl = '',
-      sourceType = 1,
-      sourceName = '管理後台',
-    } = req.body;
+    const payload = normalizeAdminEventPayload(req.body);
+    if (!payload.ok) {
+      res.status(400).json({ error: payload.error });
+      return;
+    }
     const [result] = await pool.execute(
       `INSERT INTO events
         (source_key, source_type, source_name, source_url, image_url, category, name, start_date, end_date, venue, detailed_address, fee, organizer, description, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         `admin-${Date.now()}`,
-        sourceType,
-        sourceName,
-        sourceUrl,
-        imageUrl,
-        category,
-        name,
-        startDate,
-        endDate ?? startDate,
-        venue,
-        detailedAddress || venue,
-        fee,
-        organizer,
-        description,
-        status,
+        payload.sourceType,
+        payload.sourceName,
+        payload.sourceUrl,
+        payload.imageUrl,
+        payload.category,
+        payload.name,
+        payload.startDate,
+        payload.endDate,
+        payload.venue,
+        payload.detailedAddress,
+        payload.fee,
+        payload.organizer,
+        payload.description,
+        payload.status,
       ],
     );
     res.status(201).json({ id: result.insertId });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put('/api/admin/events/:eventId', async (req, res, next) => {
+  try {
+    const payload = normalizeAdminEventPayload(req.body);
+    if (!payload.ok) {
+      res.status(400).json({ error: payload.error });
+      return;
+    }
+    const [result] = await pool.execute(
+      `UPDATE events
+          SET source_type = ?,
+              source_name = ?,
+              source_url = ?,
+              image_url = ?,
+              category = ?,
+              name = ?,
+              start_date = ?,
+              end_date = ?,
+              venue = ?,
+              detailed_address = ?,
+              fee = ?,
+              organizer = ?,
+              description = ?,
+              status = ?
+        WHERE id = ?`,
+      [
+        payload.sourceType,
+        payload.sourceName,
+        payload.sourceUrl,
+        payload.imageUrl,
+        payload.category,
+        payload.name,
+        payload.startDate,
+        payload.endDate,
+        payload.venue,
+        payload.detailedAddress,
+        payload.fee,
+        payload.organizer,
+        payload.description,
+        payload.status,
+        req.params.eventId,
+      ],
+    );
+    if (result.affectedRows === 0) {
+      res.status(404).json({ error: 'event_not_found' });
+      return;
+    }
+    res.status(204).end();
   } catch (error) {
     next(error);
   }
@@ -1483,6 +1529,54 @@ function isDateOnly(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
+function normalizeAdminEventPayload(body) {
+  const category = String(body.category ?? '綜合').trim() || '綜合';
+  const name = String(body.name ?? '').trim();
+  const startDate = String(body.startDate ?? '').trim();
+  const endDate = String(body.endDate ?? startDate).trim();
+  const venue = String(body.venue ?? '').trim();
+  const detailedAddress = String(body.detailedAddress ?? '').trim() || venue;
+  const fee = String(body.fee ?? '').trim();
+  const organizer = String(body.organizer ?? '').trim();
+  const description = String(body.description ?? '').trim();
+  const imageUrl = String(body.imageUrl ?? '').trim();
+  const sourceUrl = String(body.sourceUrl ?? '').trim();
+  const sourceType = Number.parseInt(body.sourceType ?? 3, 10);
+  const sourceName = String(body.sourceName ?? '管理後台').trim() || '管理後台';
+  const status = String(body.status ?? 'approved').trim();
+
+  if (!name) return { ok: false, error: 'event_name_required' };
+  if (!venue) return { ok: false, error: 'event_venue_required' };
+  if (!isDateOnly(startDate) || !isDateOnly(endDate)) {
+    return { ok: false, error: 'invalid_date' };
+  }
+  if (endDate < startDate) return { ok: false, error: 'end_before_start' };
+  if (!['pending', 'approved', 'rejected'].includes(status)) {
+    return { ok: false, error: 'invalid_status' };
+  }
+  if (!Number.isFinite(sourceType) || sourceType <= 0) {
+    return { ok: false, error: 'invalid_source_type' };
+  }
+
+  return {
+    ok: true,
+    category,
+    name,
+    startDate,
+    endDate,
+    venue,
+    detailedAddress,
+    fee,
+    organizer,
+    description,
+    imageUrl,
+    sourceUrl,
+    sourceType,
+    sourceName,
+    status,
+  };
+}
+
 function normalizeDateTimeForSql(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -1694,6 +1788,38 @@ function imageExtension(mimeType) {
     'image/png': 'png',
     'image/webp': 'webp',
   }[String(mimeType ?? '').toLowerCase()];
+}
+
+function isValidImageBytes(bytes, extension) {
+  if (extension === 'jpg') {
+    return (
+      bytes.length >= 3 &&
+      bytes[0] === 0xff &&
+      bytes[1] === 0xd8 &&
+      bytes[2] === 0xff
+    );
+  }
+  if (extension === 'png') {
+    return (
+      bytes.length >= 8 &&
+      bytes[0] === 0x89 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x4e &&
+      bytes[3] === 0x47 &&
+      bytes[4] === 0x0d &&
+      bytes[5] === 0x0a &&
+      bytes[6] === 0x1a &&
+      bytes[7] === 0x0a
+    );
+  }
+  if (extension === 'webp') {
+    return (
+      bytes.length >= 12 &&
+      bytes.toString('ascii', 0, 4) === 'RIFF' &&
+      bytes.toString('ascii', 8, 12) === 'WEBP'
+    );
+  }
+  return false;
 }
 
 function publicUploadUrl(req, fileName) {

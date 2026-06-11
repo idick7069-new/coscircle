@@ -135,8 +135,7 @@ class AdminDashboardPage extends ConsumerWidget {
                     for (final event in items)
                       _AdminEventTile(
                         event: event,
-                        onEditDates: () =>
-                            _showEditEventDatesSheet(context, ref, event),
+                        onEdit: () => _showEditEventSheet(context, ref, event),
                         onDelete: () => _confirmDelete(context, ref, event),
                       ),
                   ],
@@ -197,16 +196,21 @@ class AdminDashboardPage extends ConsumerWidget {
     EventSubmission submission, {
     required bool approve,
   }) async {
-    if (approve) {
-      await ref.read(adminRepositoryProvider).approveSubmission(submission.id);
-    } else {
-      await ref.read(adminRepositoryProvider).rejectSubmission(submission.id);
+    try {
+      if (approve) {
+        await ref
+            .read(adminRepositoryProvider)
+            .approveSubmission(submission.id);
+      } else {
+        await ref.read(adminRepositoryProvider).rejectSubmission(submission.id);
+      }
+      await _refresh(ref);
+      if (!context.mounted) return;
+      _showAdminToast(context, approve ? '投稿已核准並上架' : '投稿已拒絕');
+    } catch (error) {
+      if (!context.mounted) return;
+      _showAdminToast(context, '投稿審核失敗：$error');
     }
-    await _refresh(ref);
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(approve ? '投稿已核准並上架' : '投稿已拒絕')));
   }
 
   Future<void> _confirmDelete(
@@ -233,12 +237,15 @@ class AdminDashboardPage extends ConsumerWidget {
     );
     if (confirmed != true) return;
 
-    await ref.read(adminRepositoryProvider).deleteEvent(event.id);
-    await _refresh(ref);
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('活動已刪除')));
+    try {
+      await ref.read(adminRepositoryProvider).deleteEvent(event.id);
+      await _refresh(ref);
+      if (!context.mounted) return;
+      _showAdminToast(context, '活動已刪除');
+    } catch (error) {
+      if (!context.mounted) return;
+      _showAdminToast(context, '刪除活動失敗：$error');
+    }
   }
 
   Future<void> _confirmDeleteUser(
@@ -270,18 +277,14 @@ class AdminDashboardPage extends ConsumerWidget {
       await ref.read(adminRepositoryProvider).deleteUser(user.id);
       await _refresh(ref);
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('使用者已刪除')));
+      _showAdminToast(context, '使用者已刪除');
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('刪除使用者失敗：$error')));
+      _showAdminToast(context, '刪除使用者失敗：$error');
     }
   }
 
-  Future<void> _showEditEventDatesSheet(
+  Future<void> _showEditEventSheet(
     BuildContext context,
     WidgetRef ref,
     CosEvent event,
@@ -289,9 +292,12 @@ class AdminDashboardPage extends ConsumerWidget {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => _EditEventDatesSheet(
+      builder: (context) => _EventEditorSheet(
         event: event,
-        onSaved: () async => _refresh(ref),
+        onSaved: () async {
+          await _refresh(ref);
+          if (context.mounted) _showAdminToast(context, '活動已更新');
+        },
       ),
     );
   }
@@ -303,21 +309,33 @@ class AdminDashboardPage extends ConsumerWidget {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => _CreateEventSheet(onCreated: () => _refresh(ref)),
+      builder: (context) => _EventEditorSheet(
+        onSaved: () async {
+          await _refresh(ref);
+          if (context.mounted) _showAdminToast(context, '活動已建立');
+        },
+      ),
     );
+  }
+
+  void _showAdminToast(BuildContext context, String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
-class _CreateEventSheet extends ConsumerStatefulWidget {
-  const _CreateEventSheet({required this.onCreated});
+class _EventEditorSheet extends ConsumerStatefulWidget {
+  const _EventEditorSheet({this.event, required this.onSaved});
 
-  final VoidCallback onCreated;
+  final CosEvent? event;
+  final Future<void> Function() onSaved;
 
   @override
-  ConsumerState<_CreateEventSheet> createState() => _CreateEventSheetState();
+  ConsumerState<_EventEditorSheet> createState() => _EventEditorSheetState();
 }
 
-class _CreateEventSheetState extends ConsumerState<_CreateEventSheet> {
+class _EventEditorSheetState extends ConsumerState<_EventEditorSheet> {
   final _name = TextEditingController();
   final _category = TextEditingController(text: '綜合');
   final _startDate = TextEditingController(
@@ -331,6 +349,38 @@ class _CreateEventSheetState extends ConsumerState<_CreateEventSheet> {
   final _fee = TextEditingController();
   final _organizer = TextEditingController();
   final _description = TextEditingController();
+  final _imageUrl = TextEditingController();
+  final _sourceUrl = TextEditingController();
+  final _sourceType = TextEditingController(text: '3');
+  final _sourceName = TextEditingController(text: '管理後台');
+  String _status = 'approved';
+  bool _saving = false;
+  String? _errorText;
+
+  bool get _isEditing => widget.event != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final event = widget.event;
+    if (event == null) return;
+    _name.text = event.name;
+    _category.text = event.category;
+    _startDate.text = DateFormat('yyyy-MM-dd').format(event.startDate);
+    _endDate.text = DateFormat('yyyy-MM-dd').format(event.endDate);
+    _venue.text = event.venue;
+    _detailedAddress.text = event.detailedAddress;
+    _fee.text = event.fee;
+    _organizer.text = event.organizer;
+    _description.text = event.description;
+    _imageUrl.text = event.imageUrl;
+    _sourceUrl.text = event.sourceUrl;
+    _sourceType.text = event.sourceType.toString();
+    _sourceName.text = event.sourceName;
+    _status = _validStatuses.contains(event.reviewStatus)
+        ? event.reviewStatus
+        : 'approved';
+  }
 
   @override
   void dispose() {
@@ -343,6 +393,10 @@ class _CreateEventSheetState extends ConsumerState<_CreateEventSheet> {
     _fee.dispose();
     _organizer.dispose();
     _description.dispose();
+    _imageUrl.dispose();
+    _sourceUrl.dispose();
+    _sourceType.dispose();
+    _sourceName.dispose();
     super.dispose();
   }
 
@@ -359,7 +413,10 @@ class _CreateEventSheetState extends ConsumerState<_CreateEventSheet> {
         child: ListView(
           shrinkWrap: true,
           children: [
-            Text('新增活動', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              _isEditing ? '編輯活動' : '新增活動',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 12),
             TextField(
               controller: _name,
@@ -424,121 +481,56 @@ class _CreateEventSheetState extends ConsumerState<_CreateEventSheet> {
               decoration: const InputDecoration(labelText: '活動描述'),
               maxLines: 3,
             ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: () async {
-                await ref
-                    .read(adminRepositoryProvider)
-                    .createEvent(
-                      category: _category.text.trim().isEmpty
-                          ? '綜合'
-                          : _category.text.trim(),
-                      name: _name.text.trim(),
-                      startDate: DateTime.parse(_startDate.text.trim()),
-                      endDate: DateTime.parse(_endDate.text.trim()),
-                      venue: _venue.text.trim(),
-                      detailedAddress: _detailedAddress.text.trim().isEmpty
-                          ? _venue.text.trim()
-                          : _detailedAddress.text.trim(),
-                      fee: _fee.text.trim(),
-                      organizer: _organizer.text.trim(),
-                      description: _description.text.trim(),
-                    );
-                widget.onCreated();
-                if (context.mounted) Navigator.pop(context);
+            const SizedBox(height: 12),
+            TextField(
+              controller: _imageUrl,
+              decoration: const InputDecoration(labelText: '活動圖片 URL'),
+              keyboardType: TextInputType.url,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _sourceUrl,
+              decoration: const InputDecoration(labelText: '原活動網址'),
+              keyboardType: TextInputType.url,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _sourceType,
+                    decoration: const InputDecoration(
+                      labelText: '來源類型',
+                      helperText: '1 同人誌中心 / 2 投稿 / 3 後台',
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _sourceName,
+                    decoration: const InputDecoration(labelText: '來源名稱'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _status,
+              decoration: const InputDecoration(labelText: '審核狀態'),
+              items: _validStatuses
+                  .map(
+                    (status) => DropdownMenuItem(
+                      value: status,
+                      child: Text(_statusLabel(status)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() => _status = value);
               },
-              icon: const Icon(Icons.save),
-              label: const Text('建立'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pickDate(TextEditingController controller) async {
-    final current = DateTime.tryParse(controller.text.trim()) ?? DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: current,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2035),
-    );
-    if (picked == null) return;
-    controller.text = DateFormat('yyyy-MM-dd').format(picked);
-  }
-}
-
-class _EditEventDatesSheet extends ConsumerStatefulWidget {
-  const _EditEventDatesSheet({required this.event, required this.onSaved});
-
-  final CosEvent event;
-  final Future<void> Function() onSaved;
-
-  @override
-  ConsumerState<_EditEventDatesSheet> createState() =>
-      _EditEventDatesSheetState();
-}
-
-class _EditEventDatesSheetState extends ConsumerState<_EditEventDatesSheet> {
-  late final TextEditingController _startDate;
-  late final TextEditingController _endDate;
-  bool _saving = false;
-  String? _errorText;
-
-  @override
-  void initState() {
-    super.initState();
-    _startDate = TextEditingController(
-      text: DateFormat('yyyy-MM-dd').format(widget.event.startDate),
-    );
-    _endDate = TextEditingController(
-      text: DateFormat('yyyy-MM-dd').format(widget.event.endDate),
-    );
-  }
-
-  @override
-  void dispose() {
-    _startDate.dispose();
-    _endDate.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          16,
-          16,
-          MediaQuery.of(context).viewInsets.bottom + 16,
-        ),
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            Text('調整活動時間', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            Text(widget.event.name),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _startDate,
-              readOnly: true,
-              decoration: const InputDecoration(
-                labelText: '開始日期',
-                suffixIcon: Icon(Icons.calendar_month),
-              ),
-              onTap: () => _pickDate(_startDate),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _endDate,
-              readOnly: true,
-              decoration: const InputDecoration(
-                labelText: '結束日期',
-                suffixIcon: Icon(Icons.calendar_month),
-              ),
-              onTap: () => _pickDate(_endDate),
             ),
             if (_errorText != null) ...[
               const SizedBox(height: 10),
@@ -556,7 +548,7 @@ class _EditEventDatesSheetState extends ConsumerState<_EditEventDatesSheet> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.save),
-              label: const Text('儲存時間'),
+              label: Text(_isEditing ? '儲存活動' : '建立活動'),
             ),
           ],
         ),
@@ -590,26 +582,97 @@ class _EditEventDatesSheetState extends ConsumerState<_EditEventDatesSheet> {
       setState(() => _errorText = '結束日期不能早於開始日期');
       return;
     }
+    final sourceType = int.tryParse(_sourceType.text.trim());
+    if (sourceType == null || sourceType <= 0) {
+      setState(() => _errorText = '來源類型請輸入正整數');
+      return;
+    }
 
     setState(() {
       _saving = true;
       _errorText = null;
     });
     try {
-      await ref
-          .read(adminRepositoryProvider)
-          .updateEventDates(
-            eventId: widget.event.id,
-            startDate: start,
-            endDate: end,
-          );
+      final repository = ref.read(adminRepositoryProvider);
+      final category = _category.text.trim().isEmpty
+          ? '綜合'
+          : _category.text.trim();
+      final venue = _venue.text.trim();
+      final detailedAddress = _detailedAddress.text.trim().isEmpty
+          ? venue
+          : _detailedAddress.text.trim();
+      final sourceName = _sourceName.text.trim().isEmpty
+          ? _sourceNameForType(sourceType)
+          : _sourceName.text.trim();
+      final event = widget.event;
+      if (event == null) {
+        await repository.createEvent(
+          category: category,
+          name: _name.text.trim(),
+          startDate: start,
+          endDate: end,
+          venue: venue,
+          detailedAddress: detailedAddress,
+          fee: _fee.text.trim(),
+          organizer: _organizer.text.trim(),
+          description: _description.text.trim(),
+          imageUrl: _imageUrl.text.trim(),
+          sourceUrl: _sourceUrl.text.trim(),
+          sourceType: sourceType,
+          sourceName: sourceName,
+          status: _status,
+        );
+      } else {
+        await repository.updateEvent(
+          eventId: event.id,
+          category: category,
+          name: _name.text.trim(),
+          startDate: start,
+          endDate: end,
+          venue: venue,
+          detailedAddress: detailedAddress,
+          fee: _fee.text.trim(),
+          organizer: _organizer.text.trim(),
+          description: _description.text.trim(),
+          imageUrl: _imageUrl.text.trim(),
+          sourceUrl: _sourceUrl.text.trim(),
+          sourceType: sourceType,
+          sourceName: sourceName,
+          status: _status,
+        );
+      }
       await widget.onSaved();
       if (mounted) Navigator.pop(context);
     } catch (error) {
-      if (mounted) setState(() => _errorText = '儲存失敗：$error');
+      if (mounted) {
+        setState(() => _errorText = '儲存失敗：$error');
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('儲存活動失敗：$error')));
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  static const _validStatuses = ['pending', 'approved', 'rejected'];
+
+  static String _statusLabel(String status) {
+    return switch (status) {
+      'pending' => '待審核',
+      'approved' => '已上架',
+      'rejected' => '已退回',
+      _ => status,
+    };
+  }
+
+  static String _sourceNameForType(int sourceType) {
+    return switch (sourceType) {
+      1 => '同人誌中心',
+      2 => '投稿活動',
+      3 => '管理後台',
+      _ => '其他來源',
+    };
   }
 }
 
@@ -682,12 +745,12 @@ class _StatsGrid extends StatelessWidget {
 class _AdminEventTile extends StatelessWidget {
   const _AdminEventTile({
     required this.event,
-    required this.onEditDates,
+    required this.onEdit,
     required this.onDelete,
   });
 
   final CosEvent event;
-  final VoidCallback onEditDates;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   @override
@@ -707,9 +770,9 @@ class _AdminEventTile extends StatelessWidget {
           spacing: 2,
           children: [
             IconButton(
-              tooltip: '調整時間',
-              onPressed: onEditDates,
-              icon: const Icon(Icons.edit_calendar_outlined),
+              tooltip: '編輯活動',
+              onPressed: onEdit,
+              icon: const Icon(Icons.edit_outlined),
             ),
             IconButton(
               tooltip: '刪除',

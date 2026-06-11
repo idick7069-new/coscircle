@@ -40,6 +40,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   bool _initialized = false;
   bool _editing = false;
   bool _saving = false;
+  static const _maxUploadBytes = 5 * 1024 * 1024;
+  static const _allowedImageMimeTypes = {
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+  };
 
   @override
   void initState() {
@@ -189,7 +195,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       if (pickedAvatar != null) {
         final uploadedUrl = await repository.uploadImage(
           bytes: await pickedAvatar.readAsBytes(),
-          mimeType: _mimeTypeForPath(pickedAvatar.path),
+          mimeType: _mimeTypeForImage(pickedAvatar),
         );
         if (uploadedUrl.isNotEmpty) avatarUrl = uploadedUrl;
       }
@@ -202,7 +208,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         if (picked == null) continue;
         final uploadedUrl = await repository.uploadImage(
           bytes: await picked.readAsBytes(),
-          mimeType: _mimeTypeForPath(picked.path),
+          mimeType: _mimeTypeForImage(picked),
         );
         if (uploadedUrl.isNotEmpty) otherPhotoUrls[index] = uploadedUrl;
       }
@@ -254,6 +260,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       imageQuality: 82,
     );
     if (image == null || !mounted) return;
+    if (!await _validatePickedImage(image)) return;
     setState(() {
       _avatarUrl = image.path;
       _pickedAvatar = image;
@@ -266,6 +273,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       imageQuality: 82,
     );
     if (image == null || !mounted) return;
+    if (!await _validatePickedImage(image)) return;
     setState(() {
       while (_otherPhotoUrls.length <= index) {
         _otherPhotoUrls = [..._otherPhotoUrls, ''];
@@ -290,7 +298,39 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     final lower = path.toLowerCase();
     if (lower.endsWith('.png')) return 'image/png';
     if (lower.endsWith('.webp')) return 'image/webp';
-    return 'image/jpeg';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    return '';
+  }
+
+  String _mimeTypeForImage(XFile image) {
+    final pickedMimeType = image.mimeType?.toLowerCase();
+    if (pickedMimeType != null &&
+        _allowedImageMimeTypes.contains(pickedMimeType)) {
+      return pickedMimeType;
+    }
+    return _mimeTypeForPath(image.path);
+  }
+
+  Future<bool> _validatePickedImage(XFile image) async {
+    final mimeType = _mimeTypeForImage(image);
+    if (!_allowedImageMimeTypes.contains(mimeType)) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('僅支援 JPG、PNG、WebP 圖片')));
+      }
+      return false;
+    }
+    final length = await image.length();
+    if (length > _maxUploadBytes) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('圖片大小不可超過 5MB')));
+      }
+      return false;
+    }
+    return true;
   }
 
   bool _sameStringSet(List<String> left, List<String> right) {
@@ -501,114 +541,141 @@ class _EditProfileForm extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Center(
-          child: Stack(
-            alignment: Alignment.bottomRight,
-            children: [
-              CircleAvatar(
-                radius: 42,
-                backgroundImage: pickedImageProvider(avatarUrl),
-                child: avatarUrl.isEmpty
-                    ? const Icon(Icons.person, size: 38)
-                    : null,
-              ),
-              IconButton.filled(
-                tooltip: '上傳頭像',
-                onPressed: saving ? null : onPickAvatar,
-                icon: const Icon(Icons.photo_camera),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        TextField(
-          controller: nickname,
-          decoration: const InputDecoration(labelText: '暱稱'),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: facebook,
-          decoration: const InputDecoration(labelText: 'Facebook 網址'),
-        ),
-        const SizedBox(height: 10),
-        Row(
+        _ProfileFormSection(
+          title: '基本資料',
+          icon: Icons.badge_outlined,
+          initiallyExpanded: true,
           children: [
-            Expanded(
-              child: TextField(
-                controller: age,
-                decoration: const InputDecoration(labelText: '年齡'),
+            Center(
+              child: Stack(
+                alignment: Alignment.bottomRight,
+                children: [
+                  CircleAvatar(
+                    radius: 42,
+                    backgroundImage: pickedImageProvider(avatarUrl),
+                    child: avatarUrl.isEmpty
+                        ? const Icon(Icons.person, size: 38)
+                        : null,
+                  ),
+                  IconButton.filled(
+                    tooltip: '上傳頭像',
+                    onPressed: saving ? null : onPickAvatar,
+                    icon: const Icon(Icons.photo_camera),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                initialValue: _genderLabels.containsKey(gender)
-                    ? gender
-                    : 'private',
-                decoration: const InputDecoration(labelText: '性別'),
-                items: [
-                  for (final entry in _genderLabels.entries)
-                    DropdownMenuItem(
-                      value: entry.key,
-                      child: Text(entry.value),
-                    ),
-                ],
-                onChanged: saving
-                    ? null
-                    : (value) => onGenderChanged(value ?? 'private'),
+            const SizedBox(height: 14),
+            TextField(
+              controller: nickname,
+              decoration: const InputDecoration(labelText: '暱稱'),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: age,
+                    decoration: const InputDecoration(labelText: '年齡'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _genderLabels.containsKey(gender)
+                        ? gender
+                        : 'private',
+                    decoration: const InputDecoration(labelText: '性別'),
+                    items: [
+                      for (final entry in _genderLabels.entries)
+                        DropdownMenuItem(
+                          value: entry.key,
+                          child: Text(entry.value),
+                        ),
+                    ],
+                    onChanged: saving
+                        ? null
+                        : (value) => onGenderChanged(value ?? 'private'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: bio,
+              decoration: const InputDecoration(labelText: '自我介紹'),
+              maxLines: 4,
+            ),
+          ],
+        ),
+        _ProfileFormSection(
+          title: '地區與跑場',
+          icon: Icons.explore_outlined,
+          children: [
+            _RegionSelector(
+              label: '座標',
+              selected: regions,
+              onChanged: onRegionsChanged,
+              enabled: !saving,
+            ),
+            const SizedBox(height: 10),
+            _RegionSelector(
+              label: '跑場範圍',
+              selected: travelRegions,
+              onChanged: onTravelRegionsChanged,
+              enabled: !saving,
+              action: TextButton.icon(
+                onPressed: saving || regions.isEmpty ? null : onUseSameRegions,
+                icon: const Icon(Icons.copy_all_outlined),
+                label: Text(travelSameRegion ? '已同座標' : '同座標'),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 10),
-        _RegionSelector(
-          label: '座標',
-          selected: regions,
-          onChanged: onRegionsChanged,
-          enabled: !saving,
+        _ProfileFormSection(
+          title: '坑單',
+          icon: Icons.label_important_outline,
+          children: [
+            WorkMultiSelector(
+              label: '深坑',
+              selected: deepPitWorks,
+              onChanged: onDeepPitWorksChanged,
+            ),
+            const SizedBox(height: 10),
+            WorkMultiSelector(
+              label: '淺坑',
+              selected: shallowPitWorks,
+              onChanged: onShallowPitWorksChanged,
+            ),
+          ],
         ),
-        const SizedBox(height: 10),
-        _RegionSelector(
-          label: '跑場範圍',
-          selected: travelRegions,
-          onChanged: onTravelRegionsChanged,
-          enabled: !saving,
-          action: TextButton.icon(
-            onPressed: saving || regions.isEmpty ? null : onUseSameRegions,
-            icon: const Icon(Icons.copy_all_outlined),
-            label: Text(travelSameRegion ? '已同座標' : '同座標'),
-          ),
+        _ProfileFormSection(
+          title: '社群與雷點',
+          icon: Icons.forum_outlined,
+          children: [
+            TextField(
+              controller: facebook,
+              decoration: const InputDecoration(labelText: 'Facebook 網址'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: landmine,
+              decoration: const InputDecoration(labelText: '雷點'),
+              maxLines: 3,
+            ),
+          ],
         ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: bio,
-          decoration: const InputDecoration(labelText: '自我介紹'),
-          maxLines: 4,
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: landmine,
-          decoration: const InputDecoration(labelText: '雷點'),
-          maxLines: 3,
-        ),
-        const SizedBox(height: 10),
-        WorkMultiSelector(
-          label: '深坑',
-          selected: deepPitWorks,
-          onChanged: onDeepPitWorksChanged,
-        ),
-        const SizedBox(height: 10),
-        WorkMultiSelector(
-          label: '淺坑',
-          selected: shallowPitWorks,
-          onChanged: onShallowPitWorksChanged,
-        ),
-        const SizedBox(height: 12),
-        _EditableOtherPhotoGrid(
-          photoUrls: otherPhotoUrls,
-          enabled: !saving,
-          onPick: onPickOtherPhoto,
-          onRemove: onRemoveOtherPhoto,
+        _ProfileFormSection(
+          title: '其他照片',
+          icon: Icons.photo_library_outlined,
+          children: [
+            _EditableOtherPhotoGrid(
+              photoUrls: otherPhotoUrls,
+              enabled: !saving,
+              onPick: onPickOtherPhoto,
+              onRemove: onRemoveOtherPhoto,
+            ),
+          ],
         ),
         const SizedBox(height: 14),
         SizedBox(
@@ -625,6 +692,38 @@ class _EditProfileForm extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ProfileFormSection extends StatelessWidget {
+  const _ProfileFormSection({
+    required this.title,
+    required this.icon,
+    required this.children,
+    this.initiallyExpanded = false,
+  });
+
+  final String title;
+  final IconData icon;
+  final List<Widget> children;
+  final bool initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ExpansionTile(
+        initiallyExpanded: initiallyExpanded,
+        leading: Icon(icon),
+        title: Text(
+          title,
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+        ),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        children: children,
+      ),
     );
   }
 }

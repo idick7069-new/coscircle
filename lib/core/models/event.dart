@@ -16,6 +16,7 @@ class CosEvent {
     this.sourceType = 1,
     this.sourceName = '同人誌中心',
     this.sourceUrl = '',
+    this.reviewStatus = 'approved',
     this.isJoined = false,
     this.hasFollowedParticipants = false,
     this.hasCircleMembers = false,
@@ -35,6 +36,7 @@ class CosEvent {
   final int sourceType;
   final String sourceName;
   final String sourceUrl;
+  final String reviewStatus;
   final bool isJoined;
   final bool hasFollowedParticipants;
   final bool hasCircleMembers;
@@ -64,6 +66,7 @@ class CosEvent {
       sourceType: sourceType,
       sourceName: json['sourceName']?.toString() ?? _sourceNameFor(sourceType),
       sourceUrl: json['sourceUrl']?.toString() ?? '',
+      reviewStatus: json['status']?.toString() ?? 'approved',
       isJoined: json['isJoined'] == true || json['isJoined'] == 1,
       hasFollowedParticipants:
           json['hasFollowedParticipants'] == true ||
@@ -100,6 +103,7 @@ class CosEvent {
       sourceType: sourceType,
       sourceName: sourceName,
       sourceUrl: sourceUrl,
+      reviewStatus: reviewStatus,
       isJoined: isJoined ?? this.isJoined,
       hasFollowedParticipants: hasFollowedParticipants,
       hasCircleMembers: hasCircleMembers,

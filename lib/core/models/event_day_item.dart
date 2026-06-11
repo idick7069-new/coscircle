@@ -1,4 +1,5 @@
 import 'event.dart';
+import '../utils/event_day_display.dart';
 
 class EventDayItem {
   const EventDayItem({required this.event, required this.dayIndex});
@@ -10,7 +11,7 @@ class EventDayItem {
 
   String get id => '${event.id}:$dayIndex';
 
-  String get title => '${event.name} D$dayIndex';
+  String get title => eventDayTitle(event, dayIndex);
 
   bool get isJoined => event.isJoined;
 

@@ -84,6 +84,11 @@ class AdminRepository {
     required String fee,
     required String organizer,
     required String description,
+    required String imageUrl,
+    required String sourceUrl,
+    required int sourceType,
+    required String sourceName,
+    required String status,
   }) async {
     await _apiClient.post(
       '/admin/events',
@@ -97,6 +102,49 @@ class AdminRepository {
         'fee': fee,
         'organizer': organizer,
         'description': description,
+        'imageUrl': imageUrl,
+        'sourceUrl': sourceUrl,
+        'sourceType': sourceType,
+        'sourceName': sourceName,
+        'status': status,
+      },
+    );
+  }
+
+  Future<void> updateEvent({
+    required String eventId,
+    required String category,
+    required String name,
+    required DateTime startDate,
+    required DateTime endDate,
+    required String venue,
+    required String detailedAddress,
+    required String fee,
+    required String organizer,
+    required String description,
+    required String imageUrl,
+    required String sourceUrl,
+    required int sourceType,
+    required String sourceName,
+    required String status,
+  }) async {
+    await _apiClient.put(
+      '/admin/events/$eventId',
+      data: {
+        'category': category,
+        'name': name,
+        'startDate': _dateOnly(startDate),
+        'endDate': _dateOnly(endDate),
+        'venue': venue,
+        'detailedAddress': detailedAddress,
+        'fee': fee,
+        'organizer': organizer,
+        'description': description,
+        'imageUrl': imageUrl,
+        'sourceUrl': sourceUrl,
+        'sourceType': sourceType,
+        'sourceName': sourceName,
+        'status': status,
       },
     );
   }

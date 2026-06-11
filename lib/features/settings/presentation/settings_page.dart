@@ -174,18 +174,24 @@ class _SubmitEventSheetState extends ConsumerState<_SubmitEventSheet> {
                 Expanded(
                   child: TextField(
                     controller: _startDate,
+                    readOnly: true,
                     decoration: const InputDecoration(
-                      labelText: '開始日期 yyyy-MM-dd',
+                      labelText: '開始日期',
+                      suffixIcon: Icon(Icons.calendar_month),
                     ),
+                    onTap: () => _pickDate(_startDate),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
                     controller: _endDate,
+                    readOnly: true,
                     decoration: const InputDecoration(
-                      labelText: '結束日期 yyyy-MM-dd',
+                      labelText: '結束日期',
+                      suffixIcon: Icon(Icons.calendar_month),
                     ),
+                    onTap: () => _pickDate(_endDate),
                   ),
                 ),
               ],
@@ -209,12 +215,20 @@ class _SubmitEventSheetState extends ConsumerState<_SubmitEventSheet> {
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: () async {
+                final startDate = DateTime.parse(_startDate.text.trim());
+                final endDate = DateTime.parse(_endDate.text.trim());
+                if (endDate.isBefore(startDate)) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('結束日期不能早於開始日期')));
+                  return;
+                }
                 await ref
                     .read(submissionRepositoryProvider)
                     .submitEvent(
                       name: _name.text.trim(),
-                      startDate: DateTime.parse(_startDate.text.trim()),
-                      endDate: DateTime.parse(_endDate.text.trim()),
+                      startDate: startDate,
+                      endDate: endDate,
                       venue: _venue.text.trim(),
                       detailedAddress: _detailedAddress.text.trim().isEmpty
                           ? _venue.text.trim()
@@ -234,6 +248,18 @@ class _SubmitEventSheetState extends ConsumerState<_SubmitEventSheet> {
         ),
       ),
     );
+  }
+
+  Future<void> _pickDate(TextEditingController controller) async {
+    final current = DateTime.tryParse(controller.text.trim()) ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+    );
+    if (picked == null) return;
+    controller.text = DateFormat('yyyy-MM-dd').format(picked);
   }
 }
 
