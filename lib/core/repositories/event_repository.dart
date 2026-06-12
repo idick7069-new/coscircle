@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_client.dart';
@@ -40,7 +41,8 @@ class ApiEventRepository implements EventRepository {
           .map((row) => CosEvent.fromJson(row as Map<String, dynamic>))
           .toList();
     } catch (_) {
-      return _fallback.fetchEvents();
+      if (kDebugMode) return _fallback.fetchEvents();
+      rethrow;
     }
   }
 
@@ -53,7 +55,8 @@ class ApiEventRepository implements EventRepository {
           .map((row) => EventParticipant.fromJson(row as Map<String, dynamic>))
           .toList();
     } catch (_) {
-      return _fallback.fetchParticipants(eventId);
+      if (kDebugMode) return _fallback.fetchParticipants(eventId);
+      rethrow;
     }
   }
 
@@ -85,7 +88,11 @@ class ApiEventRepository implements EventRepository {
         },
       );
     } catch (_) {
-      await _fallback.upsertBooking(booking);
+      if (kDebugMode) {
+        await _fallback.upsertBooking(booking);
+        return;
+      }
+      rethrow;
     }
   }
 
@@ -97,7 +104,11 @@ class ApiEventRepository implements EventRepository {
         query: dayIndex == null ? null : {'dayIndex': dayIndex},
       );
     } catch (_) {
-      await _fallback.removeBooking(eventId, dayIndex: dayIndex);
+      if (kDebugMode) {
+        await _fallback.removeBooking(eventId, dayIndex: dayIndex);
+        return;
+      }
+      rethrow;
     }
   }
 }

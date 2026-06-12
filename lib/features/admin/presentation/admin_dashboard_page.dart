@@ -7,6 +7,7 @@ import '../../../core/models/admin_user.dart';
 import '../../../core/models/event.dart';
 import '../../../core/models/event_submission.dart';
 import '../../../core/repositories/admin_repository.dart';
+import '../../../core/utils/error_message.dart';
 
 final adminStatsProvider = FutureProvider.autoDispose<AdminStats>((ref) {
   return ref.watch(adminRepositoryProvider).fetchStats();
@@ -74,8 +75,9 @@ class AdminDashboardPage extends ConsumerWidget {
             children: [
               stats.when(
                 data: (value) => _StatsGrid(stats: value),
-                error: (error, stack) =>
-                    _ErrorPanel(message: '資料庫狀態載入失敗：$error'),
+                error: (error, stack) => _ErrorPanel(
+                  message: '資料庫狀態載入失敗：${userFacingError(error)}',
+                ),
                 loading: () => const _LoadingPanel(message: '載入資料庫狀態...'),
               ),
               const SizedBox(height: 20),
@@ -91,7 +93,8 @@ class AdminDashboardPage extends ConsumerWidget {
                   users: items,
                   onDelete: (user) => _confirmDeleteUser(context, ref, user),
                 ),
-                error: (error, stack) => _ErrorPanel(message: '使用者載入失敗：$error'),
+                error: (error, stack) =>
+                    _ErrorPanel(message: '使用者載入失敗：${userFacingError(error)}'),
                 loading: () => const _LoadingPanel(message: '載入使用者資料...'),
               ),
               const SizedBox(height: 20),
@@ -118,7 +121,8 @@ class AdminDashboardPage extends ConsumerWidget {
                     approve: false,
                   ),
                 ),
-                error: (error, stack) => _ErrorPanel(message: '投稿載入失敗：$error'),
+                error: (error, stack) =>
+                    _ErrorPanel(message: '投稿載入失敗：${userFacingError(error)}'),
                 loading: () => const _LoadingPanel(message: '載入投稿資料...'),
               ),
               const SizedBox(height: 20),
@@ -140,7 +144,8 @@ class AdminDashboardPage extends ConsumerWidget {
                       ),
                   ],
                 ),
-                error: (error, stack) => _ErrorPanel(message: '活動載入失敗：$error'),
+                error: (error, stack) =>
+                    _ErrorPanel(message: '活動載入失敗：${userFacingError(error)}'),
                 loading: () => const _LoadingPanel(message: '載入活動資料...'),
               ),
             ],

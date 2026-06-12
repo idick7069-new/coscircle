@@ -14,6 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/models/circle.dart';
 import '../../../core/models/event.dart';
+import '../../../core/models/event_day_item.dart';
 import '../../../core/models/meetup_point.dart';
 import '../../../core/models/recognition_request.dart';
 import '../../../core/models/shared_location.dart';
@@ -22,6 +23,7 @@ import '../../../core/repositories/location_repository.dart';
 import '../../../core/repositories/social_repository.dart';
 import '../../../core/services/local_notification_service.dart';
 import '../../../core/utils/event_day_display.dart';
+import '../../../core/utils/error_message.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../core/utils/participant_role_style.dart';
 import 'widgets/current_event_overlays.dart';
@@ -51,10 +53,16 @@ final currentEventCirclesProvider =
 enum LocationFilter { all, followed, circle }
 
 class CurrentEventPage extends ConsumerStatefulWidget {
-  const CurrentEventPage({super.key, this.eventId, this.dayIndex = 1});
+  const CurrentEventPage({
+    super.key,
+    this.eventId,
+    this.dayIndex = 1,
+    this.onOpenEvents,
+  });
 
   final String? eventId;
   final int dayIndex;
+  final VoidCallback? onOpenEvents;
 
   @override
   ConsumerState<CurrentEventPage> createState() => _CurrentEventPageState();
@@ -65,8 +73,10 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
   LocationFilter _filter = LocationFilter.all;
   bool _isSharing = false;
   bool _myLocationEnabled = false;
+  bool _hasConfirmedLocationSharing = false;
   LatLng _initialPosition = _defaultPosition;
   LatLng? _draftMeetupPosition;
+  CurrentEventTarget? _selectedTarget;
   GoogleMapController? _mapController;
   Timer? _refreshTimer;
   Map<String, MeetupPoint> _knownMeetups = const {};
@@ -91,12 +101,32 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
   }
 
   @override
+  void didUpdateWidget(covariant CurrentEventPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.eventId != widget.eventId ||
+        oldWidget.dayIndex != widget.dayIndex) {
+      _selectedTarget = null;
+      _resetEventScopedState();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final events = ref.watch(eventsProvider);
     final eventItems = events.whenOrNull(data: (items) => items);
-    final event = _currentEvent(eventItems);
+    final switchTargets = _currentEventTargets(eventItems);
+    final widgetTarget = widget.eventId == null
+        ? null
+        : CurrentEventTarget(
+            eventId: widget.eventId!,
+            dayIndex: widget.dayIndex,
+          );
+    final effectiveTarget = _selectedTarget ?? widgetTarget;
+    final event = _currentEvent(eventItems, effectiveTarget);
     final eventId = event?.id;
-    final dayIndex = event == null ? 1 : _currentDayIndex(event);
+    final dayIndex = event == null
+        ? 1
+        : _currentDayIndex(event, effectiveTarget);
     final isResolvingEvent = events.isLoading;
     final locations = event == null
         ? const AsyncData(<SharedLocation>[])
@@ -162,6 +192,12 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                     filter: _filter,
                     visibleCount: _filtered(dayLocations).length,
                     totalCount: dayLocations.length,
+                    switchTargets: switchTargets,
+                    selectedTarget: CurrentEventTarget(
+                      eventId: event?.id ?? '',
+                      dayIndex: dayIndex,
+                    ),
+                    onTargetChanged: _selectCurrentTarget,
                     onFilterChanged: (value) => setState(() => _filter = value),
                     onRefresh: eventId == null
                         ? null
@@ -219,10 +255,27 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                     child: Card(
                       child: Padding(
                         padding: const EdgeInsets.all(18),
-                        child: Text(
-                          '目前無當前活動',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.titleMedium,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '目前無當前活動',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              '先到活動清單加入今天或即將參加的場次，再回來分享位置、集合與認親。',
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 14),
+                            FilledButton.icon(
+                              onPressed: widget.onOpenEvents,
+                              icon: const Icon(Icons.event_available),
+                              label: const Text('去活動清單'),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -305,11 +358,34 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
 
   void _refreshCurrentEventData() {
     final events = ref.read(eventsProvider).whenOrNull(data: (items) => items);
-    final event = _currentEvent(events);
+    final event = _currentEvent(events, _effectiveTarget);
     if (event == null) return;
     ref.invalidate(sharedLocationsProvider(event.id));
     ref.invalidate(meetupPointsProvider(event.id));
     ref.invalidate(recognitionRequestsProvider(event.id));
+  }
+
+  void _selectCurrentTarget(CurrentEventTarget target) {
+    setState(() {
+      _selectedTarget = target;
+      _resetEventScopedState();
+    });
+    ref
+        .read(selectedCurrentEventTargetProvider.notifier)
+        .select(target.eventId, dayIndex: target.dayIndex);
+  }
+
+  void _resetEventScopedState() {
+    _draftMeetupPosition = null;
+    _knownMeetups = const {};
+    _hasMeetupSnapshot = false;
+  }
+
+  CurrentEventTarget? get _effectiveTarget {
+    if (_selectedTarget != null) return _selectedTarget;
+    final eventId = widget.eventId;
+    if (eventId == null) return null;
+    return CurrentEventTarget(eventId: eventId, dayIndex: widget.dayIndex);
   }
 
   void _detectMeetupNotifications(List<MeetupPoint> meetups) {
@@ -360,19 +436,31 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
     return start.difference(today).inDays.abs();
   }
 
-  CosEvent? _currentEvent(List<CosEvent>? events) {
+  List<EventDayItem> _currentEventTargets(List<CosEvent>? events) {
+    if (events == null) return const [];
+    final now = DateTime.now();
+    final targets = expandEventDays(events)
+        .where(
+          (item) => item.isJoined && item.status(now) == EventStatus.active,
+        )
+        .toList();
+    targets.sort((a, b) => a.date.compareTo(b.date));
+    return targets;
+  }
+
+  CosEvent? _currentEvent(List<CosEvent>? events, CurrentEventTarget? target) {
     if (events == null) return null;
     final now = DateTime.now();
-    final id = widget.eventId ?? _defaultCurrentEventId(events);
+    final id = target?.eventId ?? _defaultCurrentEventId(events);
     if (id == null) return null;
     final event = events.where((event) => event.id == id).firstOrNull;
     if (event == null || event.status(now) != EventStatus.active) return null;
     return event;
   }
 
-  int _currentDayIndex(CosEvent event) {
-    if (widget.eventId != null) {
-      return widget.dayIndex.clamp(1, _eventDayCount(event));
+  int _currentDayIndex(CosEvent event, CurrentEventTarget? target) {
+    if (target != null) {
+      return target.dayIndex.clamp(1, _eventDayCount(event));
     }
     final today = DateTime.now();
     final date = DateTime(today.year, today.month, today.day);
@@ -1118,6 +1206,8 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
   }
 
   Future<void> _shareLocation(String eventId) async {
+    final confirmed = await _confirmLocationSharing();
+    if (confirmed != true) return;
     setState(() => _isSharing = true);
     try {
       final position = await _currentPosition();
@@ -1136,14 +1226,50 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
       ).showSnackBar(const SnackBar(content: Text('已分享最新位置')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('分享位置失敗：$error')));
+      final message = userFacingError(error);
+      final permanentlyDenied = '$error'.contains('永久拒絕');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('分享位置失敗：$message'),
+          action: permanentlyDenied
+              ? SnackBarAction(
+                  label: '開啟設定',
+                  onPressed: Geolocator.openAppSettings,
+                )
+              : null,
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() => _isSharing = false);
       }
     }
+  }
+
+  Future<bool?> _confirmLocationSharing() {
+    if (_hasConfirmedLocationSharing) return Future.value(true);
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('分享現場位置'),
+        content: const Text(
+          '你的座標只會提供給同活動中與你有關係的人查看，例如你自己、已關注對象或同小圈圈成員。位置只會在你主動按下分享時更新。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('先不要'),
+          ),
+          FilledButton(
+            onPressed: () {
+              _hasConfirmedLocationSharing = true;
+              Navigator.pop(context, true);
+            },
+            child: const Text('分享位置'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<Position> _currentPosition() async {
@@ -1356,6 +1482,9 @@ class _EventMapHeader extends StatelessWidget {
     required this.filter,
     required this.visibleCount,
     required this.totalCount,
+    required this.switchTargets,
+    required this.selectedTarget,
+    required this.onTargetChanged,
     required this.onFilterChanged,
     required this.onRefresh,
   });
@@ -1365,6 +1494,9 @@ class _EventMapHeader extends StatelessWidget {
   final LocationFilter filter;
   final int visibleCount;
   final int totalCount;
+  final List<EventDayItem> switchTargets;
+  final CurrentEventTarget selectedTarget;
+  final ValueChanged<CurrentEventTarget> onTargetChanged;
   final ValueChanged<LocationFilter> onFilterChanged;
   final VoidCallback? onRefresh;
 
@@ -1385,6 +1517,38 @@ class _EventMapHeader extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
             ),
+            if (switchTargets.length > 1)
+              PopupMenuButton<CurrentEventTarget>(
+                tooltip: '切換當前活動',
+                icon: const Icon(Icons.swap_horiz),
+                onSelected: onTargetChanged,
+                itemBuilder: (context) => [
+                  for (final item in switchTargets)
+                    PopupMenuItem(
+                      value: CurrentEventTarget(
+                        eventId: item.event.id,
+                        dayIndex: item.dayIndex,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _sameTarget(item, selectedTarget)
+                                ? Icons.radio_button_checked
+                                : Icons.radio_button_unchecked,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              '${item.title} · ${DateFormat('MM/dd E', 'zh_TW').format(item.date)}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
             if (onRefresh != null)
               IconButton(
                 tooltip: '重新整理',
@@ -1411,5 +1575,9 @@ class _EventMapHeader extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  bool _sameTarget(EventDayItem item, CurrentEventTarget target) {
+    return item.event.id == target.eventId && item.dayIndex == target.dayIndex;
   }
 }

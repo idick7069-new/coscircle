@@ -5,9 +5,12 @@ import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../../core/api/api_client.dart';
 import '../../../core/repositories/auth_repository.dart';
 import '../../../core/repositories/profile_repository.dart';
 import '../../../core/repositories/submission_repository.dart';
+import '../../../core/services/oobe_service.dart';
+import '../../../core/utils/error_message.dart';
 import '../../admin/presentation/admin_dashboard_page.dart';
 import 'theme_settings_page.dart';
 
@@ -69,6 +72,33 @@ class SettingsPage extends ConsumerWidget {
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const ThemeSettingsPage()),
                 ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.wifi_tethering_outlined),
+                title: const Text('連線狀態'),
+                subtitle: const Text('檢查手機是否能連到後端服務'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ConnectionStatusPage(),
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.school_outlined),
+                title: const Text('重新觀看新手教學'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  final profile = await ref
+                      .read(profileRepositoryProvider)
+                      .currentProfile();
+                  if (profile != null) {
+                    await ref.read(oobeServiceProvider).reset(profile.id);
+                  }
+                  if (context.mounted) context.go('/onboarding');
+                },
               ),
               const Divider(height: 1),
               ListTile(
@@ -137,6 +167,7 @@ class _SubmitEventSheetState extends ConsumerState<_SubmitEventSheet> {
   final _venue = TextEditingController();
   final _detailedAddress = TextEditingController();
   final _description = TextEditingController();
+  bool _submitting = false;
 
   @override
   void dispose() {
@@ -214,34 +245,13 @@ class _SubmitEventSheetState extends ConsumerState<_SubmitEventSheet> {
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
-              onPressed: () async {
-                final startDate = DateTime.parse(_startDate.text.trim());
-                final endDate = DateTime.parse(_endDate.text.trim());
-                if (endDate.isBefore(startDate)) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('結束日期不能早於開始日期')));
-                  return;
-                }
-                await ref
-                    .read(submissionRepositoryProvider)
-                    .submitEvent(
-                      name: _name.text.trim(),
-                      startDate: startDate,
-                      endDate: endDate,
-                      venue: _venue.text.trim(),
-                      detailedAddress: _detailedAddress.text.trim().isEmpty
-                          ? _venue.text.trim()
-                          : _detailedAddress.text.trim(),
-                      description: _description.text.trim(),
-                    );
-                if (!context.mounted) return;
-                Navigator.pop(context);
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(const SnackBar(content: Text('已送出投稿，等待管理者審核')));
-              },
-              icon: const Icon(Icons.send),
+              onPressed: _submitting ? null : _submit,
+              icon: _submitting
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.send),
               label: const Text('送出審核'),
             ),
           ],
@@ -260,6 +270,159 @@ class _SubmitEventSheetState extends ConsumerState<_SubmitEventSheet> {
     );
     if (picked == null) return;
     controller.text = DateFormat('yyyy-MM-dd').format(picked);
+  }
+
+  Future<void> _submit() async {
+    final startDate = DateTime.parse(_startDate.text.trim());
+    final endDate = DateTime.parse(_endDate.text.trim());
+    if (_name.text.trim().isEmpty || _venue.text.trim().isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('請填寫活動名稱與活動地點')));
+      return;
+    }
+    if (endDate.isBefore(startDate)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('結束日期不能早於開始日期')));
+      return;
+    }
+
+    setState(() => _submitting = true);
+    try {
+      await ref
+          .read(submissionRepositoryProvider)
+          .submitEvent(
+            name: _name.text.trim(),
+            startDate: startDate,
+            endDate: endDate,
+            venue: _venue.text.trim(),
+            detailedAddress: _detailedAddress.text.trim().isEmpty
+                ? _venue.text.trim()
+                : _detailedAddress.text.trim(),
+            description: _description.text.trim(),
+          );
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已送出投稿，等待管理者審核')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('投稿失敗：${userFacingError(error)}')));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+}
+
+class ConnectionStatusPage extends ConsumerWidget {
+  const ConnectionStatusPage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final apiClient = ref.watch(apiClientProvider);
+    return Scaffold(
+      appBar: AppBar(title: const Text('連線狀態')),
+      body: FutureBuilder<_ConnectionStatus>(
+        future: _check(apiClient),
+        builder: (context, snapshot) {
+          final status = snapshot.data;
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Card(
+                child: ListTile(
+                  leading: Icon(
+                    status?.ok == true
+                        ? Icons.check_circle_outline
+                        : Icons.info_outline,
+                    color: status?.ok == true
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                  ),
+                  title: Text(status?.ok == true ? '後端連線正常' : '正在檢查後端'),
+                  subtitle: Text(apiClient.baseUrl),
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (snapshot.connectionState == ConnectionState.waiting)
+                const Center(child: CircularProgressIndicator())
+              else if (snapshot.hasError)
+                _ConnectionHelp(message: userFacingError(snapshot.error!))
+              else
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(status?.message ?? 'CosCircle API 可正常連線'),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder: (_) => const ConnectionStatusPage(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('重新檢查'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<_ConnectionStatus> _check(ApiClient apiClient) async {
+    final response = await apiClient.health();
+    final data = response.data;
+    final name = data is Map ? data['name']?.toString() : null;
+    return _ConnectionStatus(
+      ok: response.statusCode == 200,
+      message: name == null || name.isEmpty ? '後端服務可連線' : '$name 可連線',
+    );
+  }
+}
+
+class _ConnectionStatus {
+  const _ConnectionStatus({required this.ok, required this.message});
+
+  final bool ok;
+  final String message;
+}
+
+class _ConnectionHelp extends StatelessWidget {
+  const _ConnectionHelp({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '連線失敗',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            Text(message),
+            const SizedBox(height: 12),
+            const Text('請確認後端已啟動，且手機與電腦位於同一個 Wi-Fi。'),
+          ],
+        ),
+      ),
+    );
   }
 }
 

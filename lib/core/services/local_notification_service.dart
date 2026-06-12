@@ -15,6 +15,10 @@ class LocalNotificationService {
     await _plugin.initialize(
       settings: const InitializationSettings(android: android, iOS: ios),
     );
+    _initialized = true;
+  }
+
+  Future<void> _requestPermissionIfNeeded() async {
     await _plugin
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
@@ -25,11 +29,11 @@ class LocalNotificationService {
           IOSFlutterLocalNotificationsPlugin
         >()
         ?.requestPermissions(alert: true, badge: true, sound: true);
-    _initialized = true;
   }
 
   Future<void> showMeetupChanged(String message) async {
     await initialize();
+    await _requestPermissionIfNeeded();
     await _plugin.show(
       id: DateTime.now().millisecondsSinceEpoch.remainder(1000000),
       title: 'CosCircle',

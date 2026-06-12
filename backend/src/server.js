@@ -15,11 +15,34 @@ const app = express();
 const pool = createPool();
 const devUserId = 1;
 const scrypt = promisify(crypto.scrypt);
+const isProduction = process.env.NODE_ENV === 'production';
 const eventScraperEnabled = process.env.EVENT_SCRAPER_ENABLED !== 'false';
 const eventScraperTimeZone = process.env.EVENT_SCRAPER_TIME_ZONE ?? 'Asia/Taipei';
 const maxUploadImageBytes = 5 * 1024 * 1024;
+const corsOrigins = String(process.env.CORS_ORIGINS ?? '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
-app.use(cors());
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      if (!isProduction && corsOrigins.length === 0) {
+        callback(null, true);
+        return;
+      }
+      if (corsOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('cors_origin_not_allowed'));
+    },
+  }),
+);
 app.use(express.json({ limit: '10mb' }));
 app.use('/uploads', express.static(uploadDir));
 
@@ -31,11 +54,41 @@ function encodeInteractionTags(value) {
   return tags.length === 0 ? null : tags.join(',');
 }
 
+function createRateLimiter({ windowMs, max }) {
+  const buckets = new Map();
+  return (req, res, next) => {
+    const now = Date.now();
+    const userKey = req.user?.id ?? req.ip ?? 'unknown';
+    const key = `${req.method}:${req.baseUrl}:${userKey}`;
+    const current = buckets.get(key);
+    if (!current || current.resetAt <= now) {
+      buckets.set(key, { count: 1, resetAt: now + windowMs });
+      next();
+      return;
+    }
+    current.count += 1;
+    if (current.count > max) {
+      res
+        .status(429)
+        .set('Retry-After', Math.ceil((current.resetAt - now) / 1000).toString())
+        .json({ error: 'rate_limit_exceeded' });
+      return;
+    }
+    next();
+  };
+}
+
 if (eventScraperEnabled) {
   scheduleDailyEventImport();
 }
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, name: 'CosCircle API' }));
+
+app.use('/api/auth', createRateLimiter({ windowMs: 15 * 60 * 1000, max: 30 }));
+app.use('/api/uploads', createRateLimiter({ windowMs: 60 * 60 * 1000, max: 80 }));
+app.use('/api/events/submissions', createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20 }));
+app.use('/api/circles/join', createRateLimiter({ windowMs: 15 * 60 * 1000, max: 30 }));
+app.use('/api/recognitions', createRateLimiter({ windowMs: 15 * 60 * 1000, max: 60 }));
 
 app.post('/api/auth/register', async (req, res, next) => {
   try {
@@ -64,7 +117,7 @@ app.post('/api/auth/register', async (req, res, next) => {
     );
     const profile = await fetchUserProfile(result.insertId);
     console.info('[auth/register] success', { email, userId: result.insertId });
-    res.status(201).json({ token: sessionToken, user: profile });
+    res.status(201).json({ token: sessionToken, user: profile, isNewUser: true });
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {
       console.warn('[auth/register] duplicate email', {
@@ -120,7 +173,11 @@ app.post('/api/auth/login', async (req, res, next) => {
       user.id,
     ]);
     console.info('[auth/login] success', { email, userId: user.id });
-    res.json({ token: sessionToken, user: await fetchUserProfile(user.id) });
+    res.json({
+      token: sessionToken,
+      user: await fetchUserProfile(user.id),
+      isNewUser: false,
+    });
   } catch (error) {
     console.error('[auth/login] error', {
       email: normalizeEmail(req.body.email),
@@ -140,6 +197,78 @@ app.post('/api/auth/logout', async (req, res, next) => {
     }
     res.status(204).end();
   } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/auth/social', async (req, res, next) => {
+  try {
+    const provider = String(req.body.provider ?? '').trim().toLowerCase();
+    const accessToken = String(req.body.accessToken ?? '').trim();
+    if (!['facebook', 'line'].includes(provider) || accessToken.length < 12) {
+      res.status(400).json({ error: 'invalid_social_login' });
+      return;
+    }
+
+    const socialProfile = await fetchSocialProfile(provider, accessToken);
+    if (!socialProfile?.id) {
+      res.status(401).json({ error: 'invalid_social_token' });
+      return;
+    }
+
+    const sessionToken = createSessionToken();
+    const [existingRows] = await pool.execute(
+      `SELECT id
+         FROM users
+        WHERE provider = ?
+          AND provider_user_id = ?
+        LIMIT 1`,
+      [provider, socialProfile.id],
+    );
+    let userId = existingRows[0]?.id;
+    let isNewUser = false;
+    if (userId) {
+      await pool.execute(
+        `UPDATE users
+            SET session_token = ?,
+                email = COALESCE(email, ?),
+                nickname = CASE
+                  WHEN nickname = '' OR nickname = '圈圈新朋友' THEN ?
+                  ELSE nickname
+                END
+          WHERE id = ?`,
+        [sessionToken, socialProfile.email, socialProfile.nickname, userId],
+      );
+    } else {
+      isNewUser = true;
+      const [result] = await pool.execute(
+        `INSERT INTO users (
+           provider, provider_user_id, public_code, email, password_hash, session_token,
+           nickname, avatar_url, facebook_url, bio
+         )
+         VALUES (?, ?, ?, ?, NULL, ?, ?, ?, '', '')`,
+        [
+          provider,
+          socialProfile.id,
+          createPublicCode(),
+          socialProfile.email,
+          sessionToken,
+          socialProfile.nickname,
+          socialProfile.avatarUrl,
+        ],
+      );
+      userId = result.insertId;
+    }
+    res.json({
+      token: sessionToken,
+      user: await fetchUserProfile(userId),
+      isNewUser,
+    });
+  } catch (error) {
+    if (error?.message === 'invalid_social_token') {
+      res.status(401).json({ error: 'invalid_social_token' });
+      return;
+    }
     next(error);
   }
 });
@@ -532,6 +661,7 @@ app.put('/api/admin/events/:eventId', async (req, res, next) => {
       res.status(404).json({ error: 'event_not_found' });
       return;
     }
+    await recordAdminAction(req, 'event.update', req.params.eventId, payload);
     res.status(204).end();
   } catch (error) {
     next(error);
@@ -549,7 +679,14 @@ async function syncDoujinEvents(_req, res, next) {
 
 app.delete('/api/admin/events/:eventId', async (req, res, next) => {
   try {
-    await pool.execute('DELETE FROM events WHERE id = ?', [req.params.eventId]);
+    const [result] = await pool.execute('DELETE FROM events WHERE id = ?', [
+      req.params.eventId,
+    ]);
+    if (result.affectedRows === 0) {
+      res.status(404).json({ error: 'event_not_found' });
+      return;
+    }
+    await recordAdminAction(req, 'event.delete', req.params.eventId);
     res.status(204).end();
   } catch (error) {
     next(error);
@@ -579,6 +716,10 @@ app.put('/api/admin/events/:eventId/dates', async (req, res, next) => {
       res.status(404).json({ error: 'event_not_found' });
       return;
     }
+    await recordAdminAction(req, 'event.update_dates', req.params.eventId, {
+      startDate,
+      endDate,
+    });
     res.status(204).end();
   } catch (error) {
     next(error);
@@ -603,6 +744,7 @@ app.delete('/api/admin/users/:userId', async (req, res, next) => {
       res.status(404).json({ error: 'user_not_found' });
       return;
     }
+    await recordAdminAction(req, 'user.delete', userId);
     res.status(204).end();
   } catch (error) {
     next(error);
@@ -667,6 +809,13 @@ app.post('/api/admin/event-submissions/:submissionId/approve', async (req, res, 
         WHERE id = ?`,
       [submission.id],
     );
+    await recordAdminAction(
+      req,
+      'submission.approve',
+      submission.id,
+      { eventId: result.insertId },
+      connection,
+    );
     await connection.commit();
     res.status(201).json({ eventId: result.insertId });
   } catch (error) {
@@ -679,13 +828,18 @@ app.post('/api/admin/event-submissions/:submissionId/approve', async (req, res, 
 
 app.post('/api/admin/event-submissions/:submissionId/reject', async (req, res, next) => {
   try {
-    await pool.execute(
+    const [result] = await pool.execute(
       `UPDATE event_submissions
           SET review_status = 'rejected'
         WHERE id = ?
           AND review_status = 'pending'`,
       [req.params.submissionId],
     );
+    if (result.affectedRows === 0) {
+      res.status(404).json({ error: 'pending_submission_not_found' });
+      return;
+    }
+    await recordAdminAction(req, 'submission.reject', req.params.submissionId);
     res.status(204).end();
   } catch (error) {
     next(error);
@@ -911,8 +1065,28 @@ app.get('/api/following', async (req, res, next) => {
 
 app.post('/api/events/submissions', async (req, res, next) => {
   try {
-    const { name, startDate, endDate, venue, detailedAddress, description } =
-      req.body;
+    const name = String(req.body.name ?? '').trim();
+    const startDate = String(req.body.startDate ?? '').trim();
+    const endDate = String(req.body.endDate ?? startDate).trim();
+    const venue = String(req.body.venue ?? '').trim();
+    const detailedAddress = String(req.body.detailedAddress ?? '').trim() || venue;
+    const description = String(req.body.description ?? '').trim();
+    if (!name) {
+      res.status(400).json({ error: 'event_name_required' });
+      return;
+    }
+    if (!venue) {
+      res.status(400).json({ error: 'event_venue_required' });
+      return;
+    }
+    if (!isDateOnly(startDate) || !isDateOnly(endDate)) {
+      res.status(400).json({ error: 'invalid_date' });
+      return;
+    }
+    if (endDate < startDate) {
+      res.status(400).json({ error: 'end_before_start' });
+      return;
+    }
     const [result] = await pool.execute(
       `INSERT INTO event_submissions
         (name, start_date, end_date, venue, detailed_address, description)
@@ -922,8 +1096,8 @@ app.post('/api/events/submissions', async (req, res, next) => {
         startDate,
         endDate,
         venue,
-        detailedAddress || venue,
-        description ?? null,
+        detailedAddress,
+        description || null,
       ]
     );
     res.status(201).json({ id: result.insertId, reviewStatus: 'pending' });
@@ -945,10 +1119,31 @@ app.post('/api/events/:eventId/bookings', async (req, res, next) => {
       presenceStatus,
       message,
     } = req.body;
+    const normalizedRole = String(role ?? '').trim();
+    if (!['coser', 'photographer', 'manager', 'self'].includes(normalizedRole)) {
+      res.status(400).json({ error: 'invalid_booking_role' });
+      return;
+    }
     const normalizedDayIndex = Math.max(
       1,
       Number.parseInt(dayIndex, 10) || 1,
     );
+    const [[event]] = await pool.execute(
+      `SELECT start_date AS startDate, end_date AS endDate, status
+         FROM events
+        WHERE id = ?
+        LIMIT 1`,
+      [req.params.eventId],
+    );
+    if (!event || event.status !== 'approved') {
+      res.status(404).json({ error: 'event_not_found' });
+      return;
+    }
+    const eventDayCount = daysBetweenDates(event.startDate, event.endDate) + 1;
+    if (normalizedDayIndex > eventDayCount) {
+      res.status(400).json({ error: 'invalid_day_index' });
+      return;
+    }
     await pool.execute(
       `INSERT INTO event_bookings (
          event_id, user_id, day_index, role, work_id, character_name, outfit_image_url,
@@ -967,7 +1162,7 @@ app.post('/api/events/:eventId/bookings', async (req, res, next) => {
         req.params.eventId,
         req.userId,
         normalizedDayIndex,
-        role,
+        normalizedRole,
         workId || null,
         characterName ?? null,
         outfitImageUrl ?? null,
@@ -1137,8 +1332,13 @@ app.get('/api/events/:eventId/locations', async (req, res, next) => {
              WHERE my_circles.user_id = ?
           )
         WHERE shared_locations.event_id = ?
+          AND (
+            shared_locations.user_id = ?
+            OR follows.followed_user_id IS NOT NULL
+            OR circle_members.user_id IS NOT NULL
+          )
         ORDER BY shared_locations.shared_at DESC`,
-      [req.userId, req.userId, req.userId, req.params.eventId],
+      [req.userId, req.userId, req.userId, req.params.eventId, req.userId],
     );
     res.json(rows);
   } catch (error) {
@@ -1149,13 +1349,23 @@ app.get('/api/events/:eventId/locations', async (req, res, next) => {
 app.put('/api/events/:eventId/location', async (req, res, next) => {
   try {
     const { latitude, longitude } = req.body;
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+      res.status(400).json({ error: 'invalid_latitude' });
+      return;
+    }
+    if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
+      res.status(400).json({ error: 'invalid_longitude' });
+      return;
+    }
     await pool.execute(
       `INSERT INTO shared_locations (event_id, user_id, latitude, longitude, shared_at)
        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
        ON DUPLICATE KEY UPDATE latitude = VALUES(latitude),
          longitude = VALUES(longitude),
          shared_at = CURRENT_TIMESTAMP`,
-      [req.params.eventId, req.userId, latitude, longitude]
+      [req.params.eventId, req.userId, lat, lng]
     );
     res.status(204).end();
   } catch (error) {
@@ -1389,12 +1599,18 @@ app.post('/api/recognitions/:requestId/respond', async (req, res, next) => {
 });
 
 app.use((error, _req, res, _next) => {
+  if (error?.message === 'cors_origin_not_allowed') {
+    res.status(403).json({ error: 'cors_origin_not_allowed' });
+    return;
+  }
   console.error(error);
   res.status(500).json({ error: 'internal_server_error' });
 });
 
 const port = Number(process.env.PORT ?? 8080);
-await ensureDevUser();
+if (!isProduction) {
+  await ensureDevUser();
+}
 await ensureCollaborationTables();
 
 app.listen(port, () => {
@@ -1459,6 +1675,21 @@ async function ensureDevUser() {
 
 async function ensureCollaborationTables() {
   await pool.execute(
+    `CREATE TABLE IF NOT EXISTS admin_audit_logs (
+      id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+      admin_user_id BIGINT UNSIGNED NOT NULL,
+      action VARCHAR(64) NOT NULL,
+      target_id VARCHAR(64) NULL,
+      payload_json JSON NULL,
+      ip_address VARCHAR(64) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      KEY idx_admin_audit_logs_admin (admin_user_id),
+      KEY idx_admin_audit_logs_action (action),
+      KEY idx_admin_audit_logs_created (created_at),
+      FOREIGN KEY (admin_user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+  );
+  await pool.execute(
     `CREATE TABLE IF NOT EXISTS event_meeting_points (
       id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
       event_id BIGINT UNSIGNED NOT NULL,
@@ -1496,6 +1727,27 @@ async function ensureCollaborationTables() {
   );
 }
 
+async function recordAdminAction(
+  req,
+  action,
+  targetId,
+  payload = null,
+  connection = pool,
+) {
+  await connection.execute(
+    `INSERT INTO admin_audit_logs
+      (admin_user_id, action, target_id, payload_json, ip_address)
+     VALUES (?, ?, ?, ?, ?)`,
+    [
+      req.userId,
+      action,
+      targetId == null ? null : String(targetId),
+      payload == null ? null : JSON.stringify(payload),
+      req.ip ?? null,
+    ],
+  );
+}
+
 function normalizeEmail(value) {
   return String(value ?? '').trim().toLowerCase();
 }
@@ -1525,8 +1777,49 @@ function createPublicCode() {
   return crypto.randomBytes(12).toString('hex');
 }
 
+async function fetchSocialProfile(provider, accessToken) {
+  if (provider === 'facebook') {
+    const url = new URL('https://graph.facebook.com/me');
+    url.searchParams.set('fields', 'id,name,email,picture.type(large)');
+    url.searchParams.set('access_token', accessToken);
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('invalid_social_token');
+    const data = await response.json();
+    return {
+      id: data.id?.toString() ?? '',
+      email: data.email?.toString() || null,
+      nickname: data.name?.toString() || 'Facebook 使用者',
+      avatarUrl: data.picture?.data?.url?.toString() || '',
+    };
+  }
+  if (provider === 'line') {
+    const response = await fetch('https://api.line.me/v2/profile', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) throw new Error('invalid_social_token');
+    const data = await response.json();
+    return {
+      id: data.userId?.toString() ?? '',
+      email: null,
+      nickname: data.displayName?.toString() || 'LINE 使用者',
+      avatarUrl: data.pictureUrl?.toString() || '',
+    };
+  }
+  return null;
+}
+
 function isDateOnly(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function daysBetweenDates(start, end) {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    return 0;
+  }
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+  return Math.floor((endDate - startDate) / millisecondsPerDay);
 }
 
 function normalizeAdminEventPayload(body) {
@@ -1671,6 +1964,10 @@ async function fetchUserProfileByPublicCode(publicCode, viewerUserId = null) {
   if (!rows[0]) return null;
   const { id, ...profile } = rows[0];
   const pitWorks = await fetchUserPitWorks(id);
+  profile.landmine = '';
+  if (profile.gender === '不公開') {
+    profile.gender = '';
+  }
   return {
     ...normalizeProfileJsonFields(profile),
     pitWorks,
@@ -1765,7 +2062,7 @@ function sameStringSet(left, right) {
 
 async function createInviteCode(connection) {
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    const code = `CC-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    const code = `CC-${crypto.randomBytes(8).toString('base64url').toUpperCase()}`;
     const [rows] = await connection.execute(
       'SELECT id FROM circles WHERE invite_code = ?',
       [code],

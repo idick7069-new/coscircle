@@ -128,25 +128,38 @@ class AdminRepository {
     required String sourceName,
     required String status,
   }) async {
-    await _apiClient.put(
-      '/admin/events/$eventId',
-      data: {
-        'category': category,
-        'name': name,
-        'startDate': _dateOnly(startDate),
-        'endDate': _dateOnly(endDate),
-        'venue': venue,
-        'detailedAddress': detailedAddress,
-        'fee': fee,
-        'organizer': organizer,
-        'description': description,
-        'imageUrl': imageUrl,
-        'sourceUrl': sourceUrl,
-        'sourceType': sourceType,
-        'sourceName': sourceName,
-        'status': status,
-      },
-    );
+    try {
+      await _apiClient.put(
+        '/admin/events/$eventId',
+        data: {
+          'category': category,
+          'name': name,
+          'startDate': _dateOnly(startDate),
+          'endDate': _dateOnly(endDate),
+          'venue': venue,
+          'detailedAddress': detailedAddress,
+          'fee': fee,
+          'organizer': organizer,
+          'description': description,
+          'imageUrl': imageUrl,
+          'sourceUrl': sourceUrl,
+          'sourceType': sourceType,
+          'sourceName': sourceName,
+          'status': status,
+        },
+      );
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 404) {
+        final code = (error.response?.data is Map)
+            ? (error.response?.data as Map)['error']?.toString()
+            : null;
+        if (code == 'event_not_found') {
+          throw Exception('找不到這筆活動，可能已被刪除，請重新整理活動列表');
+        }
+        throw Exception('後端尚未載入完整活動編輯 API，請重啟 backend 後再試');
+      }
+      rethrow;
+    }
   }
 
   Future<void> deleteEvent(String eventId) async {

@@ -14,6 +14,7 @@ import '../../../core/models/work.dart';
 import '../../../core/providers/event_providers.dart';
 import '../../../core/repositories/event_repository.dart';
 import '../../../core/repositories/profile_repository.dart';
+import '../../../core/utils/error_message.dart';
 import '../../works/presentation/work_selector.dart';
 import 'my_events_page.dart';
 import 'widgets/event_card.dart';
@@ -122,7 +123,8 @@ class _EventListPageState extends ConsumerState<EventListPage> {
             ],
           );
         },
-        error: (error, stack) => Center(child: Text('活動載入失敗：$error')),
+        error: (error, stack) =>
+            Center(child: Text('活動載入失敗：${userFacingError(error)}')),
         loading: () => const Center(child: CircularProgressIndicator()),
       ),
     );

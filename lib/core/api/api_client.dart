@@ -5,8 +5,21 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final apiClientProvider = Provider<ApiClient>((ref) {
-  return ApiClient(baseUrl: const String.fromEnvironment('API_BASE_URL'));
+  return ApiClient(baseUrl: _validatedConfiguredBaseUrl());
 });
+
+const _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
+
+String _validatedConfiguredBaseUrl() {
+  if (!kReleaseMode) return _configuredBaseUrl;
+  if (_configuredBaseUrl.isEmpty) {
+    throw StateError('Release builds require API_BASE_URL.');
+  }
+  if (!Uri.parse(_configuredBaseUrl).isScheme('https')) {
+    throw StateError('Release API_BASE_URL must use HTTPS.');
+  }
+  return _configuredBaseUrl;
+}
 
 class ApiClient {
   ApiClient({required String baseUrl})
@@ -18,7 +31,9 @@ class ApiClient {
           receiveTimeout: const Duration(seconds: 10),
         ),
       ) {
-    debugPrint('[ApiClient] baseUrl=${_dio.options.baseUrl}');
+    if (kDebugMode) {
+      debugPrint('[ApiClient] baseUrl=${_dio.options.baseUrl}');
+    }
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
@@ -54,6 +69,10 @@ class ApiClient {
 
   Future<Response<dynamic>> delete(String path, {Map<String, dynamic>? query}) {
     return _dio.delete(path, queryParameters: query);
+  }
+
+  Future<Response<dynamic>> health() {
+    return _dio.get('/health');
   }
 }
 

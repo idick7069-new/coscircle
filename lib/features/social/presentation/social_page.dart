@@ -5,6 +5,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../core/models/circle.dart';
 import '../../../core/repositories/social_repository.dart';
+import '../../../core/utils/error_message.dart';
 import '../../../core/utils/picked_image_provider.dart';
 
 final circlesProvider = FutureProvider.autoDispose<List<CircleGroup>>((ref) {
@@ -92,11 +93,12 @@ class SocialPage extends ConsumerWidget {
                       circles.when(
                         data: (items) {
                           if (items.isEmpty) {
-                            return const Card(
-                              child: Padding(
-                                padding: EdgeInsets.all(16),
-                                child: Text('尚未加入任何小圈圈'),
-                              ),
+                            return _EmptyActionCard(
+                              icon: Icons.groups_outlined,
+                              title: '尚未加入任何小圈圈',
+                              message: '建立自己的小圈圈，或掃描朋友的邀請碼加入。',
+                              actionLabel: '掃描邀請碼',
+                              onAction: () => context.push('/scan-circle'),
                             );
                           }
                           return Column(
@@ -130,7 +132,7 @@ class SocialPage extends ConsumerWidget {
                         error: (error, stack) => Card(
                           child: Padding(
                             padding: const EdgeInsets.all(16),
-                            child: Text('小圈圈載入失敗：$error'),
+                            child: Text('小圈圈載入失敗：${userFacingError(error)}'),
                           ),
                         ),
                         loading: () => const Padding(
@@ -149,11 +151,12 @@ class SocialPage extends ConsumerWidget {
                         return ListView(
                           padding: const EdgeInsets.all(16),
                           children: [
-                            Card(
-                              child: Padding(
-                                padding: EdgeInsets.all(16),
-                                child: Text('尚未關注任何人'),
-                              ),
+                            _EmptyActionCard(
+                              icon: Icons.favorite_border,
+                              title: '尚未關注任何人',
+                              message: '掃描對方的個人 QRCode，活動現場認親會更快。',
+                              actionLabel: '掃描個人 QR',
+                              onAction: () => context.push('/scan-profile'),
                             ),
                           ],
                         );
@@ -180,7 +183,7 @@ class SocialPage extends ConsumerWidget {
                         Card(
                           child: Padding(
                             padding: const EdgeInsets.all(16),
-                            child: Text('關注清單載入失敗：$error'),
+                            child: Text('關注清單載入失敗：${userFacingError(error)}'),
                           ),
                         ),
                       ],
@@ -414,6 +417,53 @@ class _CircleDialogState extends ConsumerState<_CircleDialog> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _EmptyActionCard extends StatelessWidget {
+  const _EmptyActionCard({
+    required this.icon,
+    required this.title,
+    required this.message,
+    required this.actionLabel,
+    required this.onAction,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final String actionLabel;
+  final VoidCallback onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: scheme.primary),
+            const SizedBox(height: 10),
+            Text(
+              title,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 6),
+            Text(message),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: onAction,
+              icon: const Icon(Icons.qr_code_scanner),
+              label: Text(actionLabel),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:intl/intl.dart';
@@ -255,9 +255,11 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
                       max: 300,
                       value: _labelFontSizes[index] ?? 80,
                       onChanged: (value) {
-                        debugPrint(
-                          '[BookingShare] set D$index labelFontSize=$value',
-                        );
+                        if (kDebugMode) {
+                          debugPrint(
+                            '[BookingShare] set D$index labelFontSize=$value',
+                          );
+                        }
                         setState(() => _labelFontSizes[index] = value);
                       },
                     ),
@@ -273,9 +275,11 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
                         _labelBackgroundColorByDay[index] =
                             _labelBackgroundColors.first;
                         _labelBorderRadiusByDay[index] = 36;
-                        debugPrint(
-                          '[BookingShare] reset D$index labelFontSize=80',
-                        );
+                        if (kDebugMode) {
+                          debugPrint(
+                            '[BookingShare] reset D$index labelFontSize=80',
+                          );
+                        }
                       });
                     },
                     icon: const Icon(Icons.refresh),
@@ -301,9 +305,11 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
                                     _labelBackgroundColors.first) ==
                                 color,
                             onTap: () {
-                              debugPrint(
-                                '[BookingShare] set D$index labelBackgroundColor=${_hexColor(color)}',
-                              );
+                              if (kDebugMode) {
+                                debugPrint(
+                                  '[BookingShare] set D$index labelBackgroundColor=${_hexColor(color)}',
+                                );
+                              }
                               setState(
                                 () => _labelBackgroundColorByDay[index] = color,
                               );
@@ -328,9 +334,11 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
                       max: 100,
                       value: _labelBorderRadiusByDay[index] ?? 36,
                       onChanged: (value) {
-                        debugPrint(
-                          '[BookingShare] set D$index labelBorderRadius=$value',
-                        );
+                        if (kDebugMode) {
+                          debugPrint(
+                            '[BookingShare] set D$index labelBorderRadius=$value',
+                          );
+                        }
                         setState(() => _labelBorderRadiusByDay[index] = value);
                       },
                     ),
@@ -765,7 +773,11 @@ class _DayColumn extends StatelessWidget {
     final date = event.startDate.add(Duration(days: dayIndex - 1));
     final photoLayer = _SelectedShareLayer.photo(dayIndex);
     final labelLayer = _SelectedShareLayer.label(dayIndex);
-    debugPrint('[BookingShare] canvas D$dayIndex labelFontSize=$labelFontSize');
+    if (kDebugMode) {
+      debugPrint(
+        '[BookingShare] canvas D$dayIndex labelFontSize=$labelFontSize',
+      );
+    }
     return Column(
       children: [
         if (showDayLabel) ...[

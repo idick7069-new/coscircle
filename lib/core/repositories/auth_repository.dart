@@ -11,17 +11,33 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
 });
 
 class AuthSession {
-  const AuthSession({required this.token, required this.user});
+  const AuthSession({
+    required this.token,
+    required this.user,
+    this.isNewUser = false,
+  });
 
   final String token;
   final UserProfile user;
+  final bool isNewUser;
 
   factory AuthSession.fromJson(Map<String, dynamic> json) {
     return AuthSession(
       token: json['token']?.toString() ?? '',
       user: UserProfile.fromJson(json['user'] as Map<String, dynamic>),
+      isNewUser: json['isNewUser'] == true || json['isNewUser'] == 1,
     );
   }
+}
+
+enum SocialLoginProvider {
+  facebook('facebook', 'Facebook'),
+  line('line', 'LINE');
+
+  const SocialLoginProvider(this.apiValue, this.label);
+
+  final String apiValue;
+  final String label;
 }
 
 class AuthRepository {
@@ -39,10 +55,14 @@ class AuthRepository {
     try {
       await _apiClient.get('/me');
       return token;
-    } catch (_) {
+    } on DioException catch (error) {
+      final statusCode = error.response?.statusCode;
+      if (statusCode != 401 && statusCode != 403) return token;
       await prefs.remove(_tokenKey);
       _apiClient.setAuthToken(null);
       return null;
+    } catch (_) {
+      return token;
     }
   }
 
@@ -73,6 +93,18 @@ class AuthRepository {
     return session;
   }
 
+  Future<AuthSession> socialLogin({
+    required SocialLoginProvider provider,
+    required String accessToken,
+  }) async {
+    final session = await _authenticate(
+      '/auth/social',
+      data: {'provider': provider.apiValue, 'accessToken': accessToken},
+    );
+    await _saveToken(session.token);
+    return session;
+  }
+
   Future<void> logout() async {
     try {
       await _apiClient.post('/auth/logout');
@@ -89,29 +121,35 @@ class AuthRepository {
   }) async {
     try {
       final response = await _apiClient.post(path, data: data);
-      debugPrint(
-        '[Auth] $path success status=${response.statusCode} '
-        'email=${_safeEmail(data['email'])}',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '[Auth] $path success status=${response.statusCode} '
+          'email=${_safeEmail(data['email'])}',
+        );
+      }
       return AuthSession.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (error, stackTrace) {
       final response = error.response;
-      debugPrint(
-        '[Auth] $path failed '
-        'email=${_safeEmail(data['email'])} '
-        'type=${error.type} '
-        'status=${response?.statusCode} '
-        'message=${error.message} '
-        'body=${response?.data}',
-      );
-      debugPrintStack(stackTrace: stackTrace, label: '[Auth] DioException');
+      if (kDebugMode) {
+        debugPrint(
+          '[Auth] $path failed '
+          'email=${_safeEmail(data['email'])} '
+          'type=${error.type} '
+          'status=${response?.statusCode} '
+          'message=${error.message} '
+          'body=${response?.data}',
+        );
+        debugPrintStack(stackTrace: stackTrace, label: '[Auth] DioException');
+      }
       rethrow;
     } catch (error, stackTrace) {
-      debugPrint(
-        '[Auth] $path unexpected error '
-        'email=${_safeEmail(data['email'])} error=$error',
-      );
-      debugPrintStack(stackTrace: stackTrace, label: '[Auth] Unexpected');
+      if (kDebugMode) {
+        debugPrint(
+          '[Auth] $path unexpected error '
+          'email=${_safeEmail(data['email'])} error=$error',
+        );
+        debugPrintStack(stackTrace: stackTrace, label: '[Auth] Unexpected');
+      }
       rethrow;
     }
   }
@@ -123,7 +161,9 @@ class AuthRepository {
   }
 
   void _logAuthAttempt(String action, String email) {
-    debugPrint('[Auth] $action attempt email=${_safeEmail(email)}');
+    if (kDebugMode) {
+      debugPrint('[Auth] $action attempt email=${_safeEmail(email)}');
+    }
   }
 
   String _safeEmail(Object? value) {

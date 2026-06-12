@@ -32,6 +32,29 @@ flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8080/api
 
 Google Map 需要在 Android / iOS 原生設定 API key 後才能正常顯示地圖。
 
+正式版建置時必須指定 HTTPS API：
+
+```sh
+flutter build apk --release --dart-define=API_BASE_URL=https://api.example.com/api
+```
+
+Release build 不會使用預設開發 IP，也不允許 `http://` API。
+
+Android release 簽章請建立 `android/key.properties`，並以 Gradle property 指定地圖 key：
+
+```properties
+storePassword=...
+keyPassword=...
+keyAlias=upload
+storeFile=/absolute/path/upload-keystore.jks
+```
+
+```sh
+flutter build apk --release \
+  --dart-define=API_BASE_URL=https://api.example.com/api \
+  -PGOOGLE_MAPS_API_KEY=your_google_maps_key
+```
+
 ## 後端啟動
 
 ```sh
@@ -40,6 +63,12 @@ npm install
 cp .env.example .env
 npm run dev
 ```
+
+Production 請設定：
+
+- `NODE_ENV=production`：不會自動建立開發 admin。
+- `CORS_ORIGINS=https://your-admin.example.com,https://your-web.example.com`：限制瀏覽器來源。
+- MySQL 帳號密碼請改成正式憑證，不要使用 `.env.example` 的示範值。
 
 建立資料庫後依序執行：
 

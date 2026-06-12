@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/repositories/auth_repository.dart';
+import '../../../core/repositories/profile_repository.dart';
+import '../../../core/services/oobe_service.dart';
+import '../../../core/utils/error_message.dart';
 import '../../../shared/widgets/app_page.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -116,6 +119,36 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               label: Text(_isRegister ? '建立帳號' : '登入'),
             ),
           ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              const Expanded(child: Divider()),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text(
+                  '或使用社群帳號',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+              const Expanded(child: Divider()),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _SocialLoginButton(
+            icon: Icons.facebook,
+            label: '使用 Facebook 登入',
+            onPressed: _loading
+                ? null
+                : () => _showSocialTokenDialog(SocialLoginProvider.facebook),
+          ),
+          const SizedBox(height: 10),
+          _SocialLoginButton(
+            icon: Icons.chat_bubble_outline,
+            label: '使用 LINE 登入',
+            onPressed: _loading
+                ? null
+                : () => _showSocialTokenDialog(SocialLoginProvider.line),
+          ),
         ],
       ),
     );
@@ -124,7 +157,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   Future<void> _restoreSession() async {
     final token = await ref.read(authRepositoryProvider).restoreToken();
     if (!mounted || token == null || token.isEmpty) return;
-    context.go('/');
+    await _goAfterRestoredAuth();
   }
 
   Future<void> _submit() async {
@@ -145,25 +178,125 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     });
     try {
       final auth = ref.read(authRepositoryProvider);
+      late final AuthSession session;
       if (_isRegister) {
-        await auth.register(
+        session = await auth.register(
           nickname: nickname,
           email: email,
           password: password,
         );
       } else {
-        await auth.login(email: email, password: password);
+        session = await auth.login(email: email, password: password);
       }
-      if (mounted) context.go('/');
-    } catch (_) {
+      if (mounted) await _goAfterAuth(session);
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _errorText = _isRegister
-            ? '註冊失敗，請確認 Email 是否已被使用'
-            : '登入失敗，請確認 Email 或密碼';
+            ? '註冊失敗：${userFacingError(error)}'
+            : '登入失敗：${userFacingError(error)}';
       });
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _showSocialTokenDialog(SocialLoginProvider provider) async {
+    final tokenController = TextEditingController();
+    final token = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${provider.label} 登入'),
+        content: TextField(
+          controller: tokenController,
+          decoration: InputDecoration(
+            labelText: '${provider.label} access token',
+            helperText: '正式版可接原生 SDK，這裡先支援 token 登入流程。',
+          ),
+          minLines: 1,
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, tokenController.text),
+            child: const Text('登入'),
+          ),
+        ],
+      ),
+    );
+    tokenController.dispose();
+    if (token == null || token.trim().isEmpty) return;
+    await _socialLogin(provider, token.trim());
+  }
+
+  Future<void> _socialLogin(
+    SocialLoginProvider provider,
+    String accessToken,
+  ) async {
+    setState(() {
+      _loading = true;
+      _errorText = null;
+    });
+    try {
+      final session = await ref
+          .read(authRepositoryProvider)
+          .socialLogin(provider: provider, accessToken: accessToken);
+      if (mounted) await _goAfterAuth(session);
+    } catch (error) {
+      if (!mounted) return;
+      setState(
+        () => _errorText = '${provider.label} 登入失敗：${userFacingError(error)}',
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _goAfterRestoredAuth() async {
+    final profile = await ref.read(profileRepositoryProvider).currentProfile();
+    if (!mounted || profile == null) return;
+    final completed = await ref
+        .read(oobeServiceProvider)
+        .isCompleted(profile.id);
+    if (!mounted) return;
+    context.go(completed ? '/' : '/onboarding');
+  }
+
+  Future<void> _goAfterAuth(AuthSession session) async {
+    final oobe = ref.read(oobeServiceProvider);
+    if (!session.isNewUser) {
+      await oobe.markCompleted(session.user.id);
+    }
+    final completed = await oobe.isCompleted(session.user.id);
+    if (!mounted) return;
+    context.go(session.isNewUser || !completed ? '/onboarding' : '/');
+  }
+}
+
+class _SocialLoginButton extends StatelessWidget {
+  const _SocialLoginButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(label),
+      ),
+    );
   }
 }

@@ -8,6 +8,7 @@ import '../../../core/models/event.dart';
 import '../../../core/models/participant.dart';
 import '../../../core/providers/event_providers.dart';
 import '../../../core/repositories/event_repository.dart';
+import '../../../core/utils/error_message.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../core/utils/participant_role_style.dart';
 import '../../../shared/widgets/app_page.dart';
@@ -128,7 +129,8 @@ class EventDetailPage extends ConsumerWidget {
             ],
           );
         },
-        error: (error, stack) => Center(child: Text('活動載入失敗：$error')),
+        error: (error, stack) =>
+            Center(child: Text('活動載入失敗：${userFacingError(error)}')),
         loading: () => const Center(child: CircularProgressIndicator()),
       ),
     );
@@ -312,7 +314,7 @@ class _ParticipantsSection extends ConsumerWidget {
           ],
         );
       },
-      error: (error, stack) => Text('參加者載入失敗：$error'),
+      error: (error, stack) => Text('參加者載入失敗：${userFacingError(error)}'),
       loading: () => const Center(child: CircularProgressIndicator()),
     );
   }

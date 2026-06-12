@@ -73,19 +73,29 @@ class ApiProfileRepository implements ProfileRepository {
   @override
   Future<UserProfile> saveProfile(UserProfile profile) async {
     try {
-      debugPrint('[Profile] PUT /me avatarUrl=${profile.avatarUrl}');
+      if (kDebugMode) {
+        debugPrint('[Profile] PUT /me avatarUrl=${profile.avatarUrl}');
+      }
       final response = await _apiClient.put('/me', data: profile.toJson());
-      debugPrint('[Profile] PUT /me success status=${response.statusCode}');
+      if (kDebugMode) {
+        debugPrint('[Profile] PUT /me success status=${response.statusCode}');
+      }
       return UserProfile.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (error) {
-      debugPrint(
-        '[Profile] PUT /me failed status=${error.response?.statusCode} '
-        'body=${error.response?.data} message=${error.message}',
-      );
-      return _fallback.saveProfile(profile);
+      if (kDebugMode) {
+        debugPrint(
+          '[Profile] PUT /me failed status=${error.response?.statusCode} '
+          'body=${error.response?.data} message=${error.message}',
+        );
+        return _fallback.saveProfile(profile);
+      }
+      rethrow;
     } catch (error) {
-      debugPrint('[Profile] PUT /me unexpected error=$error');
-      return _fallback.saveProfile(profile);
+      if (kDebugMode) {
+        debugPrint('[Profile] PUT /me unexpected error=$error');
+        return _fallback.saveProfile(profile);
+      }
+      rethrow;
     }
   }
 
@@ -95,26 +105,33 @@ class ApiProfileRepository implements ProfileRepository {
     required String mimeType,
   }) async {
     try {
-      debugPrint(
-        '[Profile] POST /uploads/image mimeType=$mimeType bytes=${bytes.length}',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '[Profile] POST /uploads/image '
+          'mimeType=$mimeType bytes=${bytes.length}',
+        );
+      }
       final response = await _apiClient.post(
         '/uploads/image',
         data: {'bytesBase64': base64Encode(bytes), 'mimeType': mimeType},
       );
       final url =
           (response.data as Map<String, dynamic>)['url']?.toString() ?? '';
-      debugPrint(
-        '[Profile] POST /uploads/image success '
-        'status=${response.statusCode} url=$url',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '[Profile] POST /uploads/image success '
+          'status=${response.statusCode} url=$url',
+        );
+      }
       return url;
     } on DioException catch (error) {
-      debugPrint(
-        '[Profile] POST /uploads/image failed '
-        'status=${error.response?.statusCode} '
-        'body=${error.response?.data} message=${error.message}',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '[Profile] POST /uploads/image failed '
+          'status=${error.response?.statusCode} '
+          'body=${error.response?.data} message=${error.message}',
+        );
+      }
       rethrow;
     }
   }
