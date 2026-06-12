@@ -288,6 +288,9 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                     bottom: 16,
                     child: _MapActionDock(
                       circleItems: circleItems,
+                      visibleCount: _filtered(dayLocations).length,
+                      totalCount: dayLocations.length,
+                      activeMeetup: activeMeetup,
                       isSharing: _isSharing,
                       onMeetup: circleItems.isEmpty
                           ? null
@@ -1593,12 +1596,18 @@ class _EventMapHeader extends StatelessWidget {
 class _MapActionDock extends StatelessWidget {
   const _MapActionDock({
     required this.circleItems,
+    required this.visibleCount,
+    required this.totalCount,
+    required this.activeMeetup,
     required this.isSharing,
     required this.onMeetup,
     required this.onShareLocation,
   });
 
   final List<CircleGroup> circleItems;
+  final int visibleCount;
+  final int totalCount;
+  final MeetupPoint? activeMeetup;
   final bool isSharing;
   final VoidCallback? onMeetup;
   final VoidCallback? onShareLocation;
@@ -1637,6 +1646,30 @@ class _MapActionDock extends StatelessWidget {
           Row(
             children: [
               Expanded(
+                child: _RadarMetric(
+                  icon: Icons.location_on_outlined,
+                  label: '現場同好',
+                  value: '$visibleCount / $totalCount',
+                  color: scheme.primary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _RadarMetric(
+                  icon: Icons.flag_outlined,
+                  label: '集合點',
+                  value: activeMeetup == null
+                      ? '尚未設定'
+                      : activeMeetup!.circleName,
+                  color: scheme.secondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
                 child: FilledButton.icon(
                   onPressed: onMeetup,
                   icon: const Icon(Icons.flag_outlined),
@@ -1664,6 +1697,57 @@ class _MapActionDock extends StatelessWidget {
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _RadarMetric extends StatelessWidget {
+  const _RadarMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(label, style: Theme.of(context).textTheme.labelSmall),
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

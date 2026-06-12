@@ -486,30 +486,57 @@ class _CircleCard extends StatelessWidget {
       child: CosCard(
         padding: EdgeInsets.zero,
         child: ExpansionTile(
+          tilePadding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
           leading: CosIconBubble(
             icon: Icons.groups_2_outlined,
             color: circle.isOwner ? scheme.primary : scheme.secondary,
+            size: 48,
           ),
-          title: Text(
-            circle.name,
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          subtitle: Column(
+          title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '${circle.memberCount} 位成員${circle.isOwner ? ' · 我建立的' : ''}',
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      circle.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  if (circle.isOwner)
+                    CosBadge(
+                      label: '我建立的',
+                      icon: Icons.star_border_rounded,
+                      color: scheme.primary,
+                    ),
+                ],
               ),
+              const SizedBox(height: 4),
               if (circle.description.isNotEmpty)
                 Text(
                   circle.description,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-              const SizedBox(height: 6),
-              _MemberAvatarStrip(members: circle.members),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _MemberAvatarStrip(members: circle.members),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '${circle.memberCount} 位成員一起約場、認親和交換作品',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
           trailing: PopupMenuButton<String>(
@@ -525,49 +552,46 @@ class _CircleCard extends StatelessWidget {
           ),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           children: [
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                CosBadge(
-                  label: circle.inviteCode,
-                  icon: Icons.vpn_key_outlined,
-                  highlighted: true,
-                ),
-                IconButton.filledTonal(
-                  tooltip: '顯示邀請 QRCode',
-                  onPressed: () => _showCircleQr(context),
-                  icon: const Icon(Icons.qr_code_2),
-                ),
-                Text(
-                  circle.inviteUrl,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+            _CircleInviteBand(
+              circle: circle,
+              onShowQr: () => _showCircleQr(context),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             for (final member in circle.members)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: CircleAvatar(
-                  backgroundImage: pickedImageProvider(member.avatarUrl),
-                  child: member.avatarUrl.isEmpty
-                      ? Text(member.nickname.characters.firstOrNull ?? '?')
-                      : null,
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest.withValues(
+                      alpha: 0.42,
+                    ),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 2,
+                    ),
+                    leading: CircleAvatar(
+                      backgroundImage: pickedImageProvider(member.avatarUrl),
+                      child: member.avatarUrl.isEmpty
+                          ? Text(member.nickname.characters.firstOrNull ?? '?')
+                          : null,
+                    ),
+                    title: Text(
+                      member.nickname.isEmpty ? '未命名使用者' : member.nickname,
+                    ),
+                    subtitle: Text(member.isOwner ? '建立者' : '同好成員'),
+                    onTap: () => onOpenMember(member),
+                    trailing: !circle.isOwner || member.isOwner
+                        ? const Icon(Icons.chevron_right)
+                        : IconButton(
+                            tooltip: '移除成員',
+                            onPressed: () => onRemoveMember?.call(member),
+                            icon: const Icon(Icons.person_remove_outlined),
+                          ),
+                  ),
                 ),
-                title: Text(
-                  member.nickname.isEmpty ? '未命名使用者' : member.nickname,
-                ),
-                subtitle: member.isOwner ? const Text('建立者') : null,
-                onTap: () => onOpenMember(member),
-                trailing: !circle.isOwner || member.isOwner
-                    ? null
-                    : IconButton(
-                        tooltip: '移除成員',
-                        onPressed: () => onRemoveMember?.call(member),
-                        icon: const Icon(Icons.person_remove_outlined),
-                      ),
               ),
           ],
         ),
@@ -601,6 +625,81 @@ class _CircleCard extends StatelessWidget {
             child: const Text('關閉'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CircleInviteBand extends StatelessWidget {
+  const _CircleInviteBand({required this.circle, required this.onShowQr});
+
+  final CircleGroup circle;
+  final VoidCallback onShowQr;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            scheme.primaryContainer.withValues(alpha: 0.62),
+            scheme.secondaryContainer.withValues(alpha: 0.5),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.7)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            CosIconBubble(
+              icon: Icons.qr_code_2,
+              color: scheme.primary,
+              size: 42,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      CosBadge(
+                        label: circle.inviteCode,
+                        icon: Icons.vpn_key_outlined,
+                        highlighted: true,
+                      ),
+                      Text(
+                        '邀請碼',
+                        style: Theme.of(context).textTheme.labelMedium,
+                      ),
+                    ],
+                  ),
+                  if (circle.inviteUrl.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      circle.inviteUrl,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton.filledTonal(
+              tooltip: '顯示邀請 QRCode',
+              onPressed: onShowQr,
+              icon: const Icon(Icons.qr_code_scanner),
+            ),
+          ],
+        ),
       ),
     );
   }

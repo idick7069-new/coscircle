@@ -536,83 +536,118 @@ class _ShareCanvas extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final days = [for (var index = 1; index <= dayCount; index += 1) index];
-    return ColoredBox(
-      color: backgroundColor,
+    final accent = _strongColor(backgroundColor);
+    final secondary = _shiftHue(accent, 42);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.alphaBlend(
+              Colors.white.withValues(alpha: 0.18),
+              backgroundColor,
+            ),
+            backgroundColor,
+            Color.alphaBlend(accent.withValues(alpha: 0.24), backgroundColor),
+          ],
+        ),
+      ),
       child: Stack(
         children: [
           Positioned(
-            left: 0,
-            top: 0,
-            right: 0,
-            height: 82,
-            child: ColoredBox(
-              color: _strongColor(backgroundColor),
-              child: Center(
-                child: Text(
-                  '${event.name} / COSPLAY 參加預定',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 42,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 8,
-                    shadows: [Shadow(color: Colors.black, blurRadius: 2)],
-                  ),
+            left: -160,
+            top: -170,
+            width: 540,
+            height: 540,
+            child: _CanvasOrb(color: accent.withValues(alpha: 0.28)),
+          ),
+          Positioned(
+            right: -120,
+            bottom: -210,
+            width: 620,
+            height: 620,
+            child: _CanvasOrb(color: secondary.withValues(alpha: 0.2)),
+          ),
+          Positioned(
+            left: 42,
+            right: 42,
+            top: 34,
+            child: _TicketHeader(event: event, accent: accent),
+          ),
+          Positioned(
+            left: 42,
+            top: 154,
+            width: 470,
+            bottom: 42,
+            child: _InfoPanel(
+              event: event,
+              participant: primary,
+              message: message,
+              accent: accent,
+              secondary: secondary,
+            ),
+          ),
+          Positioned(
+            left: 548,
+            right: 42,
+            top: 154,
+            bottom: 42,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.42),
+                borderRadius: BorderRadius.circular(42),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.72),
+                  width: 3,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(26),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final dayIndex in days)
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          child: _DayColumn(
+                            event: event,
+                            dayIndex: dayIndex,
+                            participant: bookings
+                                .where((item) => item.dayIndex == dayIndex)
+                                .firstOrNull,
+                            photoTransform:
+                                photoTransforms[dayIndex] ??
+                                const _EditableTransform(),
+                            labelController: labelControllers[dayIndex]!,
+                            labelTransform:
+                                labelTransforms[dayIndex] ??
+                                const _EditableTransform(
+                                  offset: Offset(22, 260),
+                                ),
+                            labelFontSize: labelFontSizes[dayIndex] ?? 80,
+                            labelBackgroundColor:
+                                labelBackgroundColors[dayIndex] ??
+                                const Color(0xff111111),
+                            labelBorderRadius: labelBorderRadii[dayIndex] ?? 36,
+                            showDayLabel: dayCount > 1,
+                            selectedLayer: selectedLayer,
+                            onLayerSelected: onLayerSelected,
+                            accent: accent,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
           ),
           Positioned(
-            left: 30,
-            top: 116,
-            width: 430,
-            bottom: 32,
-            child: _InfoPanel(
-              event: event,
-              participant: primary,
-              message: message,
-            ),
-          ),
-          Positioned(
-            left: 500,
-            right: 24,
-            top: 116,
-            bottom: 32,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final dayIndex in days)
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      child: _DayColumn(
-                        event: event,
-                        dayIndex: dayIndex,
-                        participant: bookings
-                            .where((item) => item.dayIndex == dayIndex)
-                            .firstOrNull,
-                        photoTransform:
-                            photoTransforms[dayIndex] ??
-                            const _EditableTransform(),
-                        labelController: labelControllers[dayIndex]!,
-                        labelTransform:
-                            labelTransforms[dayIndex] ??
-                            const _EditableTransform(offset: Offset(22, 260)),
-                        labelFontSize: labelFontSizes[dayIndex] ?? 80,
-                        labelBackgroundColor:
-                            labelBackgroundColors[dayIndex] ??
-                            const Color(0xff111111),
-                        labelBorderRadius: labelBorderRadii[dayIndex] ?? 36,
-                        showDayLabel: dayCount > 1,
-                        selectedLayer: selectedLayer,
-                        onLayerSelected: onLayerSelected,
-                        accent: _strongColor(backgroundColor),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+            left: 532,
+            top: 184,
+            bottom: 72,
+            child: _TicketPerforation(color: accent.withValues(alpha: 0.35)),
           ),
         ],
       ),
@@ -623,6 +658,142 @@ class _ShareCanvas extends StatelessWidget {
     final hsl = HSLColor.fromColor(color);
     return hsl.withSaturation(0.72).withLightness(0.44).toColor();
   }
+
+  Color _shiftHue(Color color, double degrees) {
+    final hsl = HSLColor.fromColor(color);
+    return hsl.withHue((hsl.hue + degrees) % 360).toColor();
+  }
+}
+
+class _CanvasOrb extends StatelessWidget {
+  const _CanvasOrb({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(colors: [color, color.withValues(alpha: 0)]),
+      ),
+    );
+  }
+}
+
+class _TicketHeader extends StatelessWidget {
+  const _TicketHeader({required this.event, required this.accent});
+
+  final CosEvent event;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(34),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.42)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 22),
+        child: Row(
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: Icon(Icons.auto_awesome, color: accent, size: 42),
+            ),
+            const SizedBox(width: 24),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'CosCircle Meetup Pass',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.4,
+                    ),
+                  ),
+                  Text(
+                    '${event.name} / COSPLAY 參加預定',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 44,
+                      fontWeight: FontWeight.w900,
+                      height: 1.04,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 18),
+            _HeaderPill(label: _dateText(event), color: accent),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderPill extends StatelessWidget {
+  const _HeaderPill({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 25,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TicketPerforation extends StatelessWidget {
+  const _TicketPerforation({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        for (var index = 0; index < 13; index += 1)
+          Container(
+            width: 16,
+            height: 16,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+      ],
+    );
+  }
 }
 
 class _InfoPanel extends StatelessWidget {
@@ -630,59 +801,94 @@ class _InfoPanel extends StatelessWidget {
     required this.event,
     required this.participant,
     required this.message,
+    required this.accent,
+    required this.secondary,
   });
 
   final CosEvent event;
   final EventParticipant participant;
   final String message;
+  final Color accent;
+  final Color secondary;
 
   @override
   Widget build(BuildContext context) {
     final role = participantRoleLabel(participant.role);
-    return ColoredBox(
-      color: Colors.white,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.86),
+        borderRadius: BorderRadius.circular(42),
+        border: Border.all(color: Colors.white, width: 3),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.14),
+            blurRadius: 32,
+            offset: const Offset(0, 18),
+          ),
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Row(
+              children: [
+                Container(
+                  width: 76,
+                  height: 76,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: [accent, secondary]),
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: const Icon(
+                    Icons.theater_comedy_outlined,
+                    color: Colors.white,
+                    size: 42,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    '找同好 / 約碰面 / 交換作品',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: accent,
+                      fontSize: 25,
+                      fontWeight: FontWeight.w900,
+                      height: 1.06,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
             Expanded(
               flex: 2,
-              child: Center(
+              child: Align(
+                alignment: Alignment.centerLeft,
                 child: Text(
                   event.name,
-                  textAlign: TextAlign.center,
+                  textAlign: TextAlign.start,
                   maxLines: 4,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.black,
-                    fontSize: 34,
+                    fontSize: 38,
                     fontWeight: FontWeight.w900,
-                    height: 1.05,
+                    height: 1.02,
                   ),
                 ),
               ),
             ),
-            Text(
-              _dateText(event),
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.black,
-                fontSize: 24,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 7,
-              ),
+            _MetaStrip(
+              icon: Icons.event_available_outlined,
+              label: _dateText(event),
+              color: secondary,
             ),
             const SizedBox(height: 12),
-            Text(
-              role,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.black,
-                fontSize: 38,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
+            _MetaStrip(icon: Icons.badge_outlined, label: role, color: accent),
             const SizedBox(height: 12),
             _Box(
               label: 'CN / 名字',
@@ -690,9 +896,16 @@ class _InfoPanel extends StatelessWidget {
               maxLines: 2,
               contentFontSize: 66,
               centerContent: true,
+              accent: accent,
             ),
             const SizedBox(height: 12),
-            _Box(label: '留言', text: message, maxLines: 5, contentFontSize: 44),
+            _Box(
+              label: '留言',
+              text: message,
+              maxLines: 5,
+              contentFontSize: 44,
+              accent: secondary,
+            ),
             const SizedBox(height: 8),
             Text(
               '#${event.name.replaceAll(' ', '')} #cosplay #CosCircle',
@@ -711,11 +924,56 @@ class _InfoPanel extends StatelessWidget {
   }
 }
 
+class _MetaStrip extends StatelessWidget {
+  const _MetaStrip({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: color.withValues(alpha: 0.26), width: 2),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 30),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 25,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _Box extends StatelessWidget {
   const _Box({
     required this.label,
     required this.text,
     required this.maxLines,
+    required this.accent,
     this.contentFontSize = 22,
     this.centerContent = false,
   });
@@ -723,6 +981,7 @@ class _Box extends StatelessWidget {
   final String label;
   final String text;
   final int maxLines;
+  final Color accent;
   final double contentFontSize;
   final bool centerContent;
 
@@ -731,9 +990,11 @@ class _Box extends StatelessWidget {
     return Expanded(
       flex: maxLines,
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.orange, width: 3),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: accent.withValues(alpha: 0.34), width: 3),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -745,8 +1006,8 @@ class _Box extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.black,
+              style: TextStyle(
+                color: accent,
                 fontSize: 22,
                 fontWeight: FontWeight.w800,
               ),
@@ -824,21 +1085,48 @@ class _DayColumn extends StatelessWidget {
     return Column(
       children: [
         if (showDayLabel) ...[
-          Text(
-            'D$dayIndex',
-            style: const TextStyle(
-              color: Colors.black,
-              fontSize: 48,
-              fontWeight: FontWeight.w900,
+          Align(
+            alignment: Alignment.centerLeft,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: accent,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
+                ),
+                child: Text(
+                  'DAY $dayIndex',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
         ],
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              return ColoredBox(
-                color: Colors.white,
+              return DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(34),
+                  border: Border.all(color: Colors.white, width: 7),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.16),
+                      blurRadius: 30,
+                      offset: const Offset(0, 16),
+                    ),
+                  ],
+                ),
                 child: Stack(
                   clipBehavior: Clip.hardEdge,
                   children: [
@@ -861,13 +1149,41 @@ class _DayColumn extends StatelessWidget {
                         ),
                       )
                     else
-                      const Center(
-                        child: Text(
-                          '未發布此日照片',
-                          style: TextStyle(
-                            color: Colors.black45,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(26),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: accent.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(28),
+                              border: Border.all(
+                                color: accent.withValues(alpha: 0.2),
+                                width: 2,
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.add_photo_alternate_outlined,
+                                    color: accent,
+                                    size: 46,
+                                  ),
+                                  const SizedBox(height: 10),
+                                  const Text(
+                                    '未發布此日照片',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Colors.black54,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -908,7 +1224,8 @@ class _DayColumn extends StatelessWidget {
                       child: IgnorePointer(
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            border: Border.all(color: accent, width: 4),
+                            borderRadius: BorderRadius.circular(34),
+                            border: Border.all(color: accent, width: 5),
                           ),
                         ),
                       ),
@@ -920,13 +1237,21 @@ class _DayColumn extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        Text(
-          DateFormat('M/d (E)', 'zh_TW').format(date),
-          style: const TextStyle(
-            color: Colors.black,
-            fontSize: 42,
-            fontWeight: FontWeight.w900,
-            shadows: [Shadow(color: Colors.white, blurRadius: 3)],
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.78),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            child: Text(
+              DateFormat('M/d (E)', 'zh_TW').format(date),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 32,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
           ),
         ),
       ],

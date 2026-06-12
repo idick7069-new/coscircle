@@ -101,6 +101,8 @@ class PublicProfilePage extends ConsumerWidget {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 14),
+                    _PublicSignalRow(profile: value),
                     if (value.id.isNotEmpty) ...[
                       const SizedBox(height: 14),
                       SizedBox(
@@ -222,7 +224,7 @@ class PublicProfilePage extends ConsumerWidget {
                     Text('照片牆', style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 8),
                     if (value.otherPhotoUrls.isEmpty)
-                      const Text('尚未新增其他照片')
+                      const _PublicPhotoEmptyState()
                     else
                       _PublicOtherPhotoGrid(photoUrls: value.otherPhotoUrls),
                   ],
@@ -244,6 +246,88 @@ String _publicGenderLabel(String value) {
     'female' => '生理女',
     _ => '不公開',
   };
+}
+
+class _PublicSignalRow extends StatelessWidget {
+  const _PublicSignalRow({required this.profile});
+
+  final UserProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalWorks =
+        profile.deepPitWorks.length + profile.shallowPitWorks.length;
+    return Row(
+      children: [
+        Expanded(
+          child: _PublicMiniStat(
+            icon: Icons.label_important_outline,
+            label: '坑單',
+            value: '$totalWorks',
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _PublicMiniStat(
+            icon: Icons.photo_library_outlined,
+            label: '照片',
+            value: '${profile.otherPhotoUrls.length}',
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _PublicMiniStat(
+            icon: profile.isFollowed
+                ? Icons.person_pin_circle_outlined
+                : Icons.person_add_alt_1_outlined,
+            label: '關係',
+            value: profile.isFollowed ? '已關注' : '可關注',
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PublicMiniStat extends StatelessWidget {
+  const _PublicMiniStat({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.54),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        child: Column(
+          children: [
+            Icon(icon, color: scheme.primary, size: 20),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+            ),
+            Text(label, style: Theme.of(context).textTheme.labelSmall),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _PublicInfoTile extends StatelessWidget {
@@ -300,6 +384,40 @@ class _PublicWorkTags extends StatelessWidget {
             ],
           ),
       ],
+    );
+  }
+}
+
+class _PublicPhotoEmptyState extends StatelessWidget {
+  const _PublicPhotoEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.7)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Row(
+          children: [
+            CosIconBubble(
+              icon: Icons.photo_library_outlined,
+              color: scheme.secondary,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                '對方還沒有放照片牆，可以先從坑單和自我介紹開話題。',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

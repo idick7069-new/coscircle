@@ -439,6 +439,12 @@ class _ProfileSummary extends StatelessWidget {
                   ),
                 ],
               ),
+              const SizedBox(height: 14),
+              _ProfileSignalRow(profile: profile),
+              if (profile.publicCode.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                _ProfileQrInvite(profile: profile),
+              ],
             ],
           ),
         ),
@@ -519,13 +525,188 @@ class _ProfileSummary extends StatelessWidget {
               Text('照片牆', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               if (profile.otherPhotoUrls.isEmpty)
-                Text('尚未新增其他照片', style: Theme.of(context).textTheme.bodySmall)
+                const _PhotoEmptyState()
               else
                 _OtherPhotoGrid(photoUrls: profile.otherPhotoUrls),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ProfileSignalRow extends StatelessWidget {
+  const _ProfileSignalRow({required this.profile});
+
+  final UserProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalWorks =
+        profile.deepPitWorks.length + profile.shallowPitWorks.length;
+    return Row(
+      children: [
+        Expanded(
+          child: _ProfileMiniStat(
+            icon: Icons.label_important_outline,
+            label: '坑單',
+            value: '$totalWorks',
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _ProfileMiniStat(
+            icon: Icons.photo_library_outlined,
+            label: '照片',
+            value: '${profile.otherPhotoUrls.length}',
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _ProfileMiniStat(
+            icon: Icons.directions_run_outlined,
+            label: '跑場',
+            value: '${profile.travelRegions.length}',
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProfileMiniStat extends StatelessWidget {
+  const _ProfileMiniStat({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.54),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        child: Column(
+          children: [
+            Icon(icon, color: scheme.primary, size: 20),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+            ),
+            Text(label, style: Theme.of(context).textTheme.labelSmall),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileQrInvite extends StatelessWidget {
+  const _ProfileQrInvite({required this.profile});
+
+  final UserProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            scheme.primaryContainer.withValues(alpha: 0.7),
+            scheme.secondaryContainer.withValues(alpha: 0.55),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: QrImageView(
+                  data: profile.publicCode,
+                  version: QrVersions.auto,
+                  size: 72,
+                  backgroundColor: Colors.white,
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '現場交換名片',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '讓同好掃描後追蹤、看坑單和照片牆。',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PhotoEmptyState extends StatelessWidget {
+  const _PhotoEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.7)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Row(
+          children: [
+            CosIconBubble(
+              icon: Icons.add_photo_alternate_outlined,
+              color: scheme.secondary,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                '尚未新增照片，可以放幾張代表作，讓同好更快認出你的角色。',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
