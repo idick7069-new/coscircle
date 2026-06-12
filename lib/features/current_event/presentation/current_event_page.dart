@@ -26,6 +26,7 @@ import '../../../core/utils/event_day_display.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../core/utils/participant_role_style.dart';
+import '../../../shared/widgets/cos_ui.dart';
 import 'widgets/current_event_overlays.dart';
 
 final sharedLocationsProvider = FutureProvider.autoDispose
@@ -1502,77 +1503,97 @@ class _EventMapHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            const Icon(Icons.event_available),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                event == null
-                    ? '目前無當前活動'
-                    : '${currentEventTitle(event!, dayIndex)} · $visibleCount / $totalCount',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-            if (switchTargets.length > 1)
-              PopupMenuButton<CurrentEventTarget>(
-                tooltip: '切換當前活動',
-                icon: const Icon(Icons.swap_horiz),
-                onSelected: onTargetChanged,
-                itemBuilder: (context) => [
-                  for (final item in switchTargets)
-                    PopupMenuItem(
-                      value: CurrentEventTarget(
-                        eventId: item.event.id,
-                        dayIndex: item.dayIndex,
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _sameTarget(item, selectedTarget)
-                                ? Icons.radio_button_checked
-                                : Icons.radio_button_unchecked,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              '${item.title} · ${DateFormat('MM/dd E', 'zh_TW').format(item.date)}',
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            if (onRefresh != null)
-              IconButton(
-                tooltip: '重新整理',
-                onPressed: onRefresh,
-                icon: const Icon(Icons.refresh),
-              ),
-            PopupMenuButton<LocationFilter>(
-              tooltip: '篩選',
-              initialValue: filter,
-              onSelected: onFilterChanged,
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: LocationFilter.all, child: Text('全部')),
-                PopupMenuItem(
-                  value: LocationFilter.followed,
-                  child: Text('僅顯示關注'),
+    final scheme = Theme.of(context).colorScheme;
+    return CosCard(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          CosIconBubble(
+            icon: Icons.location_on_outlined,
+            color: scheme.primary,
+            size: 40,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  event == null
+                      ? '目前無當前活動'
+                      : currentEventTitle(event!, dayIndex),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-                PopupMenuItem(
-                  value: LocationFilter.circle,
-                  child: Text('僅顯示小圈圈'),
+                const SizedBox(height: 2),
+                Text(
+                  event == null
+                      ? '從活動頁加入場次後會顯示現場資訊'
+                      : '$visibleCount / $totalCount 位同好可見',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),
-          ],
-        ),
+          ),
+          if (switchTargets.length > 1)
+            PopupMenuButton<CurrentEventTarget>(
+              tooltip: '切換當前活動',
+              icon: const Icon(Icons.swap_horiz),
+              onSelected: onTargetChanged,
+              itemBuilder: (context) => [
+                for (final item in switchTargets)
+                  PopupMenuItem(
+                    value: CurrentEventTarget(
+                      eventId: item.event.id,
+                      dayIndex: item.dayIndex,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _sameTarget(item, selectedTarget)
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_unchecked,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '${item.title} · ${DateFormat('MM/dd E', 'zh_TW').format(item.date)}',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          if (onRefresh != null)
+            IconButton(
+              tooltip: '重新整理',
+              onPressed: onRefresh,
+              icon: const Icon(Icons.refresh),
+            ),
+          PopupMenuButton<LocationFilter>(
+            tooltip: '篩選',
+            initialValue: filter,
+            onSelected: onFilterChanged,
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: LocationFilter.all, child: Text('全部')),
+              PopupMenuItem(
+                value: LocationFilter.followed,
+                child: Text('僅顯示關注'),
+              ),
+              PopupMenuItem(
+                value: LocationFilter.circle,
+                child: Text('僅顯示小圈圈'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

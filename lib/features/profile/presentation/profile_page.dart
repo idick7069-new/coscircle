@@ -8,6 +8,7 @@ import '../../../core/models/profile.dart';
 import '../../../core/models/work.dart';
 import '../../../core/repositories/profile_repository.dart';
 import '../../../core/utils/picked_image_provider.dart';
+import '../../../shared/widgets/cos_ui.dart';
 import '../../works/presentation/work_selector.dart';
 
 const _profileRegionOptions = ['北部', '中部', '南部', '離島', '海外'];
@@ -80,28 +81,21 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '個人資訊',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
+            CosPageHeader(
+              title: 'Cos 名片',
+              subtitle: '讓同好快速認識你的作品、地區和交流方式',
+              leading: const CosIconBubble(icon: Icons.badge_outlined),
+              actions: [
                 IconButton.filledTonal(
                   tooltip: '分享個人資訊',
                   onPressed: () => _showShareSheet(context, profile),
                   icon: const Icon(Icons.qr_code_2),
                 ),
-                const SizedBox(width: 8),
                 IconButton.filledTonal(
                   tooltip: '掃描個人 QRCode',
                   onPressed: () => context.push('/scan-profile'),
                   icon: const Icon(Icons.qr_code_scanner),
                 ),
-                const SizedBox(width: 8),
                 IconButton.filled(
                   tooltip: _editing ? '取消編輯' : '編輯',
                   onPressed: () {
@@ -386,27 +380,69 @@ class _ProfileSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Center(
-          child: CircleAvatar(
-            radius: 44,
-            backgroundImage: pickedImageProvider(profile.avatarUrl),
-            child: profile.avatarUrl.isEmpty
-                ? const Icon(Icons.person, size: 40)
-                : null,
+        CosCard(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [scheme.primary, scheme.secondary],
+                  ),
+                ),
+                child: CircleAvatar(
+                  radius: 48,
+                  backgroundColor: scheme.surfaceContainerLowest,
+                  backgroundImage: pickedImageProvider(profile.avatarUrl),
+                  child: profile.avatarUrl.isEmpty
+                      ? Icon(Icons.person, size: 42, color: scheme.primary)
+                      : null,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                profile.nickname.isEmpty ? '尚未設定暱稱' : profile.nickname,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  CosBadge(
+                    label: profile.regions.isEmpty
+                        ? '尚未設定座標'
+                        : profile.regions.join('、'),
+                    icon: Icons.explore_outlined,
+                  ),
+                  CosBadge(
+                    label: profile.deepPitWorks.isEmpty
+                        ? '深坑待補'
+                        : '${profile.deepPitWorks.length} 個深坑',
+                    icon: Icons.label_important_outline,
+                    color: scheme.secondary,
+                  ),
+                  CosBadge(
+                    label: _genderLabels[profile.gender] ?? '不公開',
+                    icon: Icons.person_outline,
+                    color: scheme.tertiary,
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 10),
-        Text(
-          profile.nickname.isEmpty ? '尚未設定暱稱' : profile.nickname,
-          textAlign: TextAlign.center,
-          style: Theme.of(
-            context,
-          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         _InfoTile(
           icon: Icons.article_outlined,
           label: '自我介紹',
@@ -444,7 +480,7 @@ class _ProfileSummary extends StatelessWidget {
           label: '雷點',
           value: profile.landmine.isEmpty ? '尚未填寫' : profile.landmine,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         Text('深坑', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 6),
         if (profile.deepPitWorks.isEmpty)

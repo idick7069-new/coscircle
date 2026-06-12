@@ -6,7 +6,7 @@ import '../../../../core/models/event.dart';
 import '../../../../core/models/participant.dart';
 import '../../../../core/providers/event_providers.dart';
 import '../../../../core/utils/picked_image_provider.dart';
-import '../../../../core/utils/participant_role_style.dart';
+import '../../../../shared/widgets/cos_ui.dart';
 
 class EventCard extends ConsumerWidget {
   const EventCard({
@@ -46,82 +46,86 @@ class EventCard extends ConsumerWidget {
         : Theme.of(context).colorScheme.onSurface;
     final scheme = Theme.of(context).colorScheme;
 
-    return Card(
-      color: isEnded
-          ? scheme.surfaceContainerHighest.withValues(alpha: 0.7)
-          : null,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+    return Opacity(
+      opacity: isEnded ? 0.72 : 1,
+      child: CosCard(
         onTap: isEnded ? null : onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: DefaultTextStyle.merge(
-            style: TextStyle(color: textColor),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _EventImage(
-                  imageUrl: event.imageUrl,
-                  isEnded: isEnded,
-                  statusText: statusText,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 116),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final compactActions = constraints.maxWidth < 250;
-                        return Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Wrap(
-                              spacing: 5,
-                              runSpacing: 4,
-                              children: [
-                                _EventTag(label: event.category),
-                                _EventTag(
-                                  label: statusText,
-                                  highlighted: status == EventStatus.active,
+        padding: const EdgeInsets.all(10),
+        child: DefaultTextStyle.merge(
+          style: TextStyle(color: textColor),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _EventImage(
+                imageUrl: event.imageUrl,
+                isEnded: isEnded,
+                statusText: statusText,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 126),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final compactActions = constraints.maxWidth < 250;
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              CosBadge(label: event.category),
+                              CosBadge(
+                                label: statusText,
+                                highlighted: status == EventStatus.active,
+                                color: status == EventStatus.active
+                                    ? scheme.secondary
+                                    : scheme.tertiary,
+                              ),
+                              CosBadge(
+                                label: event.sourceName,
+                                icon: event.sourceType == 1
+                                    ? Icons.public
+                                    : Icons.how_to_vote_outlined,
+                                color: scheme.tertiary,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            title ?? event.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w900,
+                                  color: textColor,
                                 ),
-                                _EventTag(
-                                  label: event.sourceName,
-                                  icon: event.sourceType == 1
-                                      ? Icons.public
-                                      : Icons.how_to_vote_outlined,
+                          ),
+                          const SizedBox(height: 5),
+                          _IconLine(
+                            icon: Icons.schedule,
+                            iconColor: scheme.tertiary,
+                            text: date,
+                          ),
+                          const SizedBox(height: 4),
+                          _IconLine(
+                            icon: Icons.place_outlined,
+                            iconColor: scheme.secondary,
+                            text: event.venue,
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _ParticipantStrip(
+                                  participants: participants,
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              title ?? event.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                    color: textColor,
-                                  ),
-                            ),
-                            const SizedBox(height: 3),
-                            _IconLine(
-                              icon: Icons.schedule,
-                              iconColor: scheme.tertiary,
-                              text: date,
-                            ),
-                            const SizedBox(height: 3),
-                            _IconLine(
-                              icon: Icons.place_outlined,
-                              iconColor: scheme.secondary,
-                              text: event.venue,
-                            ),
-                            const SizedBox(height: 8),
-                            _ParticipantStrip(participants: participants),
-                            const SizedBox(height: 8),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: Wrap(
+                              ),
+                              const SizedBox(width: 8),
+                              Wrap(
                                 spacing: 6,
                                 runSpacing: 6,
                                 children: [
@@ -145,15 +149,15 @@ class EventCard extends ConsumerWidget {
                                   ),
                                 ],
                               ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -163,7 +167,7 @@ class EventCard extends ConsumerWidget {
   ButtonStyle _compactButtonStyle() {
     return OutlinedButton.styleFrom(
       visualDensity: VisualDensity.compact,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
       minimumSize: const Size(0, 32),
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
@@ -172,7 +176,7 @@ class EventCard extends ConsumerWidget {
   ButtonStyle _compactFilledButtonStyle() {
     return FilledButton.styleFrom(
       visualDensity: VisualDensity.compact,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
       minimumSize: const Size(0, 32),
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
@@ -209,53 +213,6 @@ class _IconLine extends StatelessWidget {
   }
 }
 
-class _EventTag extends StatelessWidget {
-  const _EventTag({required this.label, this.icon, this.highlighted = false});
-
-  final String label;
-  final IconData? icon;
-  final bool highlighted;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      height: 22,
-      padding: const EdgeInsets.symmetric(horizontal: 7),
-      decoration: BoxDecoration(
-        color: highlighted
-            ? scheme.secondary.withValues(alpha: 0.18)
-            : scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: highlighted ? scheme.secondary : scheme.outlineVariant,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(
-              icon,
-              size: 12,
-              color: highlighted ? scheme.secondary : scheme.onSurfaceVariant,
-            ),
-            const SizedBox(width: 3),
-          ],
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: highlighted ? scheme.secondary : scheme.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
-              fontSize: 10.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _EventImage extends StatelessWidget {
   const _EventImage({
     required this.imageUrl,
@@ -271,30 +228,34 @@ class _EventImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final placeholder = Container(
-      width: 92,
-      height: 112,
+      width: 96,
+      height: 128,
       decoration: BoxDecoration(
-        color: scheme.primaryContainer,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [scheme.primaryContainer, scheme.secondaryContainer],
+        ),
         border: Border.all(color: scheme.outlineVariant),
       ),
-      child: Icon(Icons.event, size: 34, color: scheme.onPrimaryContainer),
+      child: Icon(Icons.photo_camera_outlined, size: 34, color: scheme.primary),
     );
 
     final image = imageUrl.isEmpty
         ? placeholder
         : Image(
             image: pickedImageProvider(imageUrl)!,
-            width: 92,
-            height: 112,
+            width: 96,
+            height: 128,
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) => placeholder,
           );
 
     return SizedBox(
-      width: 92,
-      height: 112,
+      width: 96,
+      height: 128,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(20),
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -313,10 +274,10 @@ class _EventImage extends StatelessWidget {
               bottom: 6,
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.58),
+                  color: Colors.black.withValues(alpha: 0.62),
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(
-                    color: isEnded ? scheme.outline : scheme.secondary,
+                    color: isEnded ? scheme.outline : scheme.tertiary,
                   ),
                 ),
                 child: Padding(
@@ -332,8 +293,9 @@ class _EventImage extends StatelessWidget {
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
                       color: isEnded
                           ? scheme.onSurfaceVariant
-                          : scheme.secondary,
+                          : scheme.tertiary,
                       fontSize: 10,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
                 ),
@@ -356,51 +318,47 @@ class _ParticipantStrip extends StatelessWidget {
     return participants.when(
       data: (items) {
         if (items.isEmpty) {
-          return Text(
-            '尚無公開參與者',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodySmall,
+          return Row(
+            children: [
+              Icon(
+                Icons.people_outline,
+                size: 16,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  '尚無公開參與者',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ],
           );
         }
-        return SizedBox(
-          height: 24,
-          child: Stack(
-            children: [
-              for (final entry in items.take(10).indexed)
-                Positioned(
-                  left: entry.$1 * 17,
-                  child: Tooltip(
-                    message: entry.$2.nickname,
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        color: participantRoleColorForScheme(
-                          entry.$2.role,
-                          Theme.of(context).colorScheme,
-                        ),
-                        shape: BoxShape.circle,
-                      ),
-                      child: CircleAvatar(
-                        radius: 10,
-                        backgroundColor: Theme.of(
-                          context,
-                        ).colorScheme.primaryContainer,
-                        backgroundImage: pickedImageProvider(
-                          entry.$2.avatarUrl,
-                        ),
-                        child: entry.$2.avatarUrl.isEmpty
-                            ? Text(
-                                entry.$2.nickname.characters.firstOrNull ?? '?',
-                                style: Theme.of(context).textTheme.labelSmall,
-                              )
-                            : null,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+        return Row(
+          children: [
+            CosAvatarStack(
+              avatars: [
+                for (final item in items) pickedImageProvider(item.avatarUrl),
+              ],
+              names: [for (final item in items) item.nickname],
+              maxVisible: 6,
+              radius: 11,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${items.length} 位同好',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
         );
       },
       error: (error, stackTrace) =>

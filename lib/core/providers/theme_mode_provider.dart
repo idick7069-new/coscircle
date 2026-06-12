@@ -2,8 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum CosCircleThemeMode {
-  neonDark('neon_dark', '深色霓虹', '高對比、潮流、適合瀏覽作品'),
-  morandiLight('morandi_light', '莫蘭迪亮色', '柔和低彩度、日常閱讀更舒服');
+  neonDark('neon_dark', '星夜暗色', '深色舞台、照片聚焦、活動現場辨識清楚'),
+  morandiLight('morandi_light', '社群亮色', '明亮友善、作品標籤清楚、日常瀏覽舒服');
 
   const CosCircleThemeMode(this.storageValue, this.label, this.description);
 

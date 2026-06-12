@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'cos_ui.dart';
+
 class AppPage extends StatelessWidget {
   const AppPage({
     super.key,
@@ -22,17 +24,7 @@ class AppPage extends StatelessWidget {
       floatingActionButton: floatingActionButton,
       body: SafeArea(
         child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                scheme.surfaceContainerLowest,
-                scheme.surfaceContainerLow,
-                scheme.surface,
-              ],
-            ),
-          ),
+          decoration: BoxDecoration(gradient: CosUi.surfaceGradient(scheme)),
           child: Padding(padding: padding, child: child),
         ),
       ),

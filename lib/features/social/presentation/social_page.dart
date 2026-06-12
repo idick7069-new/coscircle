@@ -7,6 +7,7 @@ import '../../../core/models/circle.dart';
 import '../../../core/repositories/social_repository.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../core/utils/picked_image_provider.dart';
+import '../../../shared/widgets/cos_ui.dart';
 
 final circlesProvider = FutureProvider.autoDispose<List<CircleGroup>>((ref) {
   return ref.watch(socialRepositoryProvider).fetchCircles();
@@ -28,34 +29,25 @@ class SocialPage extends ConsumerWidget {
       length: 2,
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '社交',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                IconButton.filledTonal(
-                  tooltip: '掃描個人 QRCode',
-                  onPressed: () => context.push('/scan-profile'),
-                  icon: const Icon(Icons.qr_code_scanner),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  tooltip: '重新整理',
-                  onPressed: () {
-                    ref.invalidate(circlesProvider);
-                    ref.invalidate(followingProvider);
-                  },
-                  icon: const Icon(Icons.refresh),
-                ),
-              ],
-            ),
+          CosPageHeader(
+            title: '同好小圈圈',
+            subtitle: '用 QR、作品和群組把活動現場的人串起來',
+            leading: const CosIconBubble(icon: Icons.diversity_3_outlined),
+            actions: [
+              IconButton.filledTonal(
+                tooltip: '掃描個人 QRCode',
+                onPressed: () => context.push('/scan-profile'),
+                icon: const Icon(Icons.qr_code_scanner),
+              ),
+              IconButton(
+                tooltip: '重新整理',
+                onPressed: () {
+                  ref.invalidate(circlesProvider);
+                  ref.invalidate(followingProvider);
+                },
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
           ),
           const TabBar(
             tabs: [
@@ -439,30 +431,27 @@ class _EmptyActionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: scheme.primary),
-            const SizedBox(height: 10),
-            Text(
-              title,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 6),
-            Text(message),
-            const SizedBox(height: 14),
-            FilledButton.icon(
-              onPressed: onAction,
-              icon: const Icon(Icons.qr_code_scanner),
-              label: Text(actionLabel),
-            ),
-          ],
-        ),
+    return CosCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CosIconBubble(icon: icon, color: scheme.primary),
+          const SizedBox(height: 10),
+          Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 6),
+          Text(message),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: onAction,
+            icon: const Icon(Icons.qr_code_scanner),
+            label: Text(actionLabel),
+          ),
+        ],
       ),
     );
   }
@@ -485,81 +474,97 @@ class _CircleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: ExpansionTile(
-        leading: const CircleAvatar(child: Icon(Icons.groups)),
-        title: Text(
-          circle.name,
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('${circle.memberCount} 位成員${circle.isOwner ? ' · 我建立的' : ''}'),
-            if (circle.description.isNotEmpty)
-              Text(
-                circle.description,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            const SizedBox(height: 6),
-            _MemberAvatarStrip(members: circle.members),
-          ],
-        ),
-        trailing: PopupMenuButton<String>(
-          onSelected: (value) {
-            if (value == 'edit') onEdit?.call();
-            if (value == 'leave') onLeave();
-          },
-          itemBuilder: (context) => [
-            if (onEdit != null)
-              const PopupMenuItem(value: 'edit', child: Text('編輯')),
-            const PopupMenuItem(value: 'leave', child: Text('離開')),
-          ],
-        ),
-        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-        children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: CosCard(
+        padding: EdgeInsets.zero,
+        child: ExpansionTile(
+          leading: CosIconBubble(
+            icon: Icons.groups_2_outlined,
+            color: circle.isOwner ? scheme.primary : scheme.secondary,
+          ),
+          title: Text(
+            circle.name,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Chip(label: Text(circle.inviteCode)),
-              IconButton.filledTonal(
-                tooltip: '顯示邀請 QRCode',
-                onPressed: () => _showCircleQr(context),
-                icon: const Icon(Icons.qr_code_2),
-              ),
               Text(
-                circle.inviteUrl,
-                style: Theme.of(context).textTheme.bodySmall,
+                '${circle.memberCount} 位成員${circle.isOwner ? ' · 我建立的' : ''}',
               ),
+              if (circle.description.isNotEmpty)
+                Text(
+                  circle.description,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              const SizedBox(height: 6),
+              _MemberAvatarStrip(members: circle.members),
             ],
           ),
-          const SizedBox(height: 8),
-          for (final member in circle.members)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: CircleAvatar(
-                backgroundImage: pickedImageProvider(member.avatarUrl),
-                child: member.avatarUrl.isEmpty
-                    ? Text(member.nickname.characters.firstOrNull ?? '?')
-                    : null,
-              ),
-              title: Text(member.nickname.isEmpty ? '未命名使用者' : member.nickname),
-              subtitle: member.isOwner ? const Text('建立者') : null,
-              onTap: () => onOpenMember(member),
-              trailing: !circle.isOwner || member.isOwner
-                  ? null
-                  : IconButton(
-                      tooltip: '移除成員',
-                      onPressed: () => onRemoveMember?.call(member),
-                      icon: const Icon(Icons.person_remove_outlined),
-                    ),
+          trailing: PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'edit') onEdit?.call();
+              if (value == 'leave') onLeave();
+            },
+            itemBuilder: (context) => [
+              if (onEdit != null)
+                const PopupMenuItem(value: 'edit', child: Text('編輯')),
+              const PopupMenuItem(value: 'leave', child: Text('離開')),
+            ],
+          ),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          children: [
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                CosBadge(
+                  label: circle.inviteCode,
+                  icon: Icons.vpn_key_outlined,
+                  highlighted: true,
+                ),
+                IconButton.filledTonal(
+                  tooltip: '顯示邀請 QRCode',
+                  onPressed: () => _showCircleQr(context),
+                  icon: const Icon(Icons.qr_code_2),
+                ),
+                Text(
+                  circle.inviteUrl,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
             ),
-        ],
+            const SizedBox(height: 8),
+            for (final member in circle.members)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(
+                  backgroundImage: pickedImageProvider(member.avatarUrl),
+                  child: member.avatarUrl.isEmpty
+                      ? Text(member.nickname.characters.firstOrNull ?? '?')
+                      : null,
+                ),
+                title: Text(
+                  member.nickname.isEmpty ? '未命名使用者' : member.nickname,
+                ),
+                subtitle: member.isOwner ? const Text('建立者') : null,
+                onTap: () => onOpenMember(member),
+                trailing: !circle.isOwner || member.isOwner
+                    ? null
+                    : IconButton(
+                        tooltip: '移除成員',
+                        onPressed: () => onRemoveMember?.call(member),
+                        icon: const Icon(Icons.person_remove_outlined),
+                      ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -603,30 +608,13 @@ class _MemberAvatarStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (members.isEmpty) return const SizedBox.shrink();
-    return SizedBox(
-      height: 28,
-      child: Stack(
-        children: [
-          for (final entry in members.take(8).indexed)
-            Positioned(
-              left: entry.$1 * 20,
-              child: CircleAvatar(
-                radius: 14,
-                backgroundColor: Theme.of(context).colorScheme.surface,
-                child: CircleAvatar(
-                  radius: 12,
-                  backgroundImage: pickedImageProvider(entry.$2.avatarUrl),
-                  child: entry.$2.avatarUrl.isEmpty
-                      ? Text(
-                          entry.$2.nickname.characters.firstOrNull ?? '?',
-                          style: Theme.of(context).textTheme.labelSmall,
-                        )
-                      : null,
-                ),
-              ),
-            ),
-        ],
-      ),
+    return CosAvatarStack(
+      avatars: [
+        for (final member in members) pickedImageProvider(member.avatarUrl),
+      ],
+      names: [for (final member in members) member.nickname],
+      maxVisible: 8,
+      radius: 12,
     );
   }
 }
@@ -644,26 +632,30 @@ class _FollowedUserCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundImage: pickedImageProvider(user.avatarUrl),
-          child: user.avatarUrl.isEmpty
-              ? Text(user.nickname.characters.firstOrNull ?? '?')
-              : null,
-        ),
-        title: Text(user.nickname.isEmpty ? '未命名使用者' : user.nickname),
-        subtitle: user.bio.isEmpty
-            ? const Text('尚未填寫自我介紹')
-            : Text(user.bio, maxLines: 2, overflow: TextOverflow.ellipsis),
-        onTap: onOpenProfile,
-        trailing: PopupMenuButton<String>(
-          onSelected: (value) {
-            if (value == 'unfollow') onUnfollow();
-          },
-          itemBuilder: (context) => const [
-            PopupMenuItem(value: 'unfollow', child: Text('取消關注')),
-          ],
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: CosCard(
+        padding: EdgeInsets.zero,
+        child: ListTile(
+          leading: CircleAvatar(
+            backgroundImage: pickedImageProvider(user.avatarUrl),
+            child: user.avatarUrl.isEmpty
+                ? Text(user.nickname.characters.firstOrNull ?? '?')
+                : null,
+          ),
+          title: Text(user.nickname.isEmpty ? '未命名使用者' : user.nickname),
+          subtitle: user.bio.isEmpty
+              ? const Text('尚未填寫自我介紹')
+              : Text(user.bio, maxLines: 2, overflow: TextOverflow.ellipsis),
+          onTap: onOpenProfile,
+          trailing: PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'unfollow') onUnfollow();
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'unfollow', child: Text('取消關注')),
+            ],
+          ),
         ),
       ),
     );
@@ -685,13 +677,17 @@ class _ActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: Icon(icon),
-        title: Text(title),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: CosCard(
+        padding: EdgeInsets.zero,
         onTap: onTap,
+        child: ListTile(
+          leading: CosIconBubble(icon: icon, size: 40),
+          title: Text(title),
+          subtitle: Text(subtitle),
+          trailing: const Icon(Icons.chevron_right),
+        ),
       ),
     );
   }

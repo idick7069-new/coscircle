@@ -8,6 +8,7 @@ import '../../events/presentation/event_list_page.dart';
 import '../../profile/presentation/profile_page.dart';
 import '../../settings/presentation/settings_page.dart';
 import '../../social/presentation/social_page.dart';
+import '../../../shared/widgets/cos_ui.dart';
 
 class HomeShellPage extends ConsumerStatefulWidget {
   const HomeShellPage({super.key});
@@ -54,44 +55,53 @@ class _HomeShellPageState extends ConsumerState<HomeShellPage> {
       },
       child: Scaffold(
         body: SafeArea(child: pages[_index]),
-        bottomNavigationBar: DecoratedBox(
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerLowest,
-            border: Border(top: BorderSide(color: scheme.outlineVariant)),
-            boxShadow: [
-              BoxShadow(
-                color: scheme.primary.withValues(alpha: 0.18),
-                blurRadius: 24,
-                offset: const Offset(0, -8),
+        bottomNavigationBar: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(CosUi.radiusXl),
+                border: Border.all(color: scheme.outlineVariant),
+                boxShadow: [CosUi.softShadow(scheme.shadow)],
               ),
-            ],
-          ),
-          child: NavigationBar(
-            selectedIndex: _index,
-            onDestinationSelected: (value) => setState(() => _index = value),
-            destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.person_outline),
-                selectedIcon: Icon(Icons.person),
-                label: '個人',
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(CosUi.radiusXl),
+                child: NavigationBar(
+                  selectedIndex: _index,
+                  onDestinationSelected: (value) =>
+                      setState(() => _index = value),
+                  destinations: const [
+                    NavigationDestination(
+                      icon: Icon(Icons.badge_outlined),
+                      selectedIcon: Icon(Icons.badge),
+                      label: '名片',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.event_note_outlined),
+                      selectedIcon: Icon(Icons.event_note),
+                      label: '活動',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.location_on_outlined),
+                      selectedIcon: Icon(Icons.location_on),
+                      label: '現場',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.diversity_3_outlined),
+                      selectedIcon: Icon(Icons.diversity_3),
+                      label: '同好',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.tune_outlined),
+                      selectedIcon: Icon(Icons.tune),
+                      label: '設定',
+                    ),
+                  ],
+                ),
               ),
-              NavigationDestination(
-                icon: Icon(Icons.event_outlined),
-                selectedIcon: Icon(Icons.event),
-                label: '活動',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.map_outlined),
-                selectedIcon: Icon(Icons.map),
-                label: '當前',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.groups_outlined),
-                selectedIcon: Icon(Icons.groups),
-                label: '社交',
-              ),
-              NavigationDestination(icon: Icon(Icons.menu), label: '其他'),
-            ],
+            ),
           ),
         ),
       ),

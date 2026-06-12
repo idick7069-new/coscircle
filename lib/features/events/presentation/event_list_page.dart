@@ -15,6 +15,7 @@ import '../../../core/providers/event_providers.dart';
 import '../../../core/repositories/event_repository.dart';
 import '../../../core/repositories/profile_repository.dart';
 import '../../../core/utils/error_message.dart';
+import '../../../shared/widgets/cos_ui.dart';
 import '../../works/presentation/work_selector.dart';
 import 'my_events_page.dart';
 import 'widgets/event_card.dart';
@@ -59,28 +60,20 @@ class _EventListPageState extends ConsumerState<EventListPage> {
           return CustomScrollView(
             slivers: [
               SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '活動清單',
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.w800),
+                child: CosPageHeader(
+                  title: '活動發現',
+                  subtitle: '用日期、作品和同好快速找到下一場',
+                  actions: [
+                    IconButton.filledTonal(
+                      tooltip: '我的活動',
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const MyEventsPage(),
                         ),
                       ),
-                      IconButton.filledTonal(
-                        tooltip: '我的活動',
-                        onPressed: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const MyEventsPage(),
-                          ),
-                        ),
-                        icon: const Icon(Icons.event_available_outlined),
-                      ),
-                    ],
-                  ),
+                      icon: const Icon(Icons.event_available_outlined),
+                    ),
+                  ],
                 ),
               ),
               SliverToBoxAdapter(child: _calendar(items)),

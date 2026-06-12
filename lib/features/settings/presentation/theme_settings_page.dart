@@ -31,9 +31,9 @@ class ThemeSettingsPage extends ConsumerWidget {
               selected: selectedMode == CosCircleThemeMode.neonDark,
               colors: const [
                 AppTheme.ink,
-                AppTheme.electricViolet,
-                AppTheme.neonPink,
-                AppTheme.acidGreen,
+                AppTheme.coral,
+                AppTheme.cyan,
+                AppTheme.sun,
               ],
               onTap: () => ref
                   .read(appThemeModeProvider.notifier)
@@ -44,10 +44,10 @@ class ThemeSettingsPage extends ConsumerWidget {
               mode: CosCircleThemeMode.morandiLight,
               selected: selectedMode == CosCircleThemeMode.morandiLight,
               colors: const [
-                Color(0xfff3f7fa),
-                Color(0xff6f8fa6),
-                Color(0xffb58f8f),
-                Color(0xff839a7c),
+                AppTheme.paper,
+                AppTheme.blush,
+                AppTheme.coral,
+                AppTheme.cyan,
               ],
               onTap: () => ref
                   .read(appThemeModeProvider.notifier)
