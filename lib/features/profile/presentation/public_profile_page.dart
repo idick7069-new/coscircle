@@ -255,77 +255,40 @@ class _PublicSignalRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final totalWorks =
         profile.deepPitWorks.length + profile.shallowPitWorks.length;
     return Row(
       children: [
         Expanded(
-          child: _PublicMiniStat(
+          child: CosMetricTile(
             icon: Icons.label_important_outline,
             label: '坑單',
             value: '$totalWorks',
+            color: scheme.primary,
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: _PublicMiniStat(
+          child: CosMetricTile(
             icon: Icons.photo_library_outlined,
             label: '照片',
             value: '${profile.otherPhotoUrls.length}',
+            color: scheme.secondary,
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: _PublicMiniStat(
+          child: CosMetricTile(
             icon: profile.isFollowed
                 ? Icons.person_pin_circle_outlined
                 : Icons.person_add_alt_1_outlined,
             label: '關係',
             value: profile.isFollowed ? '已關注' : '可關注',
+            color: scheme.tertiary,
           ),
         ),
       ],
-    );
-  }
-}
-
-class _PublicMiniStat extends StatelessWidget {
-  const _PublicMiniStat({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.54),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-        child: Column(
-          children: [
-            Icon(icon, color: scheme.primary, size: 20),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
-            ),
-            Text(label, style: Theme.of(context).textTheme.labelSmall),
-          ],
-        ),
-      ),
     );
   }
 }

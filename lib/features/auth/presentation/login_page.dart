@@ -45,43 +45,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       child: ListView(
         children: [
           const SizedBox(height: 28),
-          CosCard(
-            padding: const EdgeInsets.all(22),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const CosLogoMark(size: 64),
-                const SizedBox(height: 18),
-                Text(
-                  'CosCircle',
-                  style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    height: 1,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Cos小圈圈',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  '活動現場找同好、公開出席宣告、分享位置與管理小圈圈。',
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: const [
-                    CosBadge(label: '認親', icon: Icons.waving_hand_outlined),
-                    CosBadge(label: '小圈圈', icon: Icons.diversity_3_outlined),
-                    CosBadge(label: '活動雷達', icon: Icons.radar_outlined),
-                  ],
-                ),
-              ],
-            ),
-          ),
+          const _LoginStageHero(),
           const SizedBox(height: 18),
           CosCard(
             child: Column(
@@ -307,6 +271,109 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final completed = await oobe.isCompleted(session.user.id);
     if (!mounted) return;
     context.go(session.isNewUser || !completed ? '/onboarding' : '/');
+  }
+}
+
+class _LoginStageHero extends StatelessWidget {
+  const _LoginStageHero();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(CosUi.radiusXl),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            scheme.primaryContainer,
+            scheme.secondaryContainer,
+            scheme.tertiaryContainer,
+          ],
+        ),
+        boxShadow: [CosUi.softShadow(scheme.shadow)],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -30,
+            top: -20,
+            child: Icon(
+              Icons.auto_awesome,
+              size: 132,
+              color: scheme.onPrimaryContainer.withValues(alpha: 0.08),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const CosLogoMark(size: 64),
+                    const Spacer(),
+                    CosBadge(
+                      label: 'Cos小圈圈',
+                      icon: Icons.diversity_3_outlined,
+                      highlighted: true,
+                      color: scheme.primary,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'CosCircle',
+                  style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '活動現場找同好、公開出席宣告、分享位置與管理小圈圈。',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: CosMetricTile(
+                        icon: Icons.radar_outlined,
+                        label: '現場雷達',
+                        value: '找人',
+                        color: scheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: CosMetricTile(
+                        icon: Icons.qr_code_2,
+                        label: '快速交換',
+                        value: '名片',
+                        color: scheme.secondary,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: CosMetricTile(
+                        icon: Icons.event_available_outlined,
+                        label: '活動預定',
+                        value: '約場',
+                        color: scheme.tertiary,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

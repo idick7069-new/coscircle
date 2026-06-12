@@ -1646,7 +1646,7 @@ class _MapActionDock extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: _RadarMetric(
+                child: CosMetricTile(
                   icon: Icons.location_on_outlined,
                   label: '現場同好',
                   value: '$visibleCount / $totalCount',
@@ -1655,7 +1655,7 @@ class _MapActionDock extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: _RadarMetric(
+                child: CosMetricTile(
                   icon: Icons.flag_outlined,
                   label: '集合點',
                   value: activeMeetup == null
@@ -1697,57 +1697,6 @@ class _MapActionDock extends StatelessWidget {
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _RadarMetric extends StatelessWidget {
-  const _RadarMetric({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: color.withValues(alpha: 0.18)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(label, style: Theme.of(context).textTheme.labelSmall),
-                  Text(
-                    value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

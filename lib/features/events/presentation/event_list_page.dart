@@ -57,7 +57,8 @@ class _EventListPageState extends ConsumerState<EventListPage> {
       onRefresh: _refreshEvents,
       child: events.when(
         data: (items) {
-          final filtered = _applyFilters(expandEventDays(items));
+          final expanded = expandEventDays(items);
+          final filtered = _applyFilters(expanded);
           return CustomScrollView(
             slivers: [
               SliverToBoxAdapter(
@@ -77,6 +78,9 @@ class _EventListPageState extends ConsumerState<EventListPage> {
                   ],
                 ),
               ),
+              SliverToBoxAdapter(
+                child: _DiscoveryStats(events: items, filtered: filtered),
+              ),
               if (filtered.isNotEmpty)
                 SliverToBoxAdapter(
                   child: _EventSpotlightCard(
@@ -90,40 +94,43 @@ class _EventListPageState extends ConsumerState<EventListPage> {
                 ),
               SliverToBoxAdapter(child: _calendar(items)),
               SliverToBoxAdapter(child: _filterChips()),
-              SliverList.builder(
-                itemCount: filtered.length,
-                itemBuilder: (context, index) {
-                  final item = filtered[index];
-                  final event = item.event;
-                  final status = item.status(DateTime.now());
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 6,
-                    ),
-                    child: EventCard(
-                      event: event,
-                      title: item.title,
-                      dateText: DateFormat(
-                        'yyyy/MM/dd E',
-                        'zh_TW',
-                      ).format(item.date),
-                      onTap: status == EventStatus.active
-                          ? () => widget.onOpenCurrentEvent(item)
-                          : null,
-                      onBookingPressed: status == EventStatus.ended
-                          ? null
-                          : () => _showBookingSheet(
-                              context,
-                              event,
-                              dayIndex: item.dayIndex,
-                            ),
-                      onDetailPressed: () =>
-                          context.push('/events/${event.id}'),
-                    ),
-                  );
-                },
-              ),
+              if (filtered.isEmpty)
+                const SliverToBoxAdapter(child: _EmptyEventResult())
+              else
+                SliverList.builder(
+                  itemCount: filtered.length,
+                  itemBuilder: (context, index) {
+                    final item = filtered[index];
+                    final event = item.event;
+                    final status = item.status(DateTime.now());
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 6,
+                      ),
+                      child: EventCard(
+                        event: event,
+                        title: item.title,
+                        dateText: DateFormat(
+                          'yyyy/MM/dd E',
+                          'zh_TW',
+                        ).format(item.date),
+                        onTap: status == EventStatus.active
+                            ? () => widget.onOpenCurrentEvent(item)
+                            : null,
+                        onBookingPressed: status == EventStatus.ended
+                            ? null
+                            : () => _showBookingSheet(
+                                context,
+                                event,
+                                dayIndex: item.dayIndex,
+                              ),
+                        onDetailPressed: () =>
+                            context.push('/events/${event.id}'),
+                      ),
+                    );
+                  },
+                ),
               const SliverToBoxAdapter(child: SizedBox(height: 24)),
             ],
           );
@@ -137,100 +144,126 @@ class _EventListPageState extends ConsumerState<EventListPage> {
 
   Widget _calendar(List<CosEvent> events) {
     final scheme = Theme.of(context).colorScheme;
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: TableCalendar<CosEvent>(
-          firstDay: DateTime(2026, 1, 1),
-          lastDay: DateTime(2026, 12, 31),
-          focusedDay: _focusedDay,
-          selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-          eventLoader: (day) => events.where((event) {
-            final date = DateTime(day.year, day.month, day.day);
-            return !date.isBefore(event.startDate) &&
-                !date.isAfter(event.endDate);
-          }).toList(),
-          calendarBuilders: CalendarBuilders(
-            markerBuilder: (context, day, events) {
-              if (events.isEmpty) return null;
-              final hasJoined = events.any((event) => event.isJoined);
-              return Positioned(
-                bottom: 6,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final event in events.take(3))
-                      Container(
-                        width: hasJoined && event.isJoined ? 7 : 5,
-                        height: hasJoined && event.isJoined ? 7 : 5,
-                        margin: const EdgeInsets.symmetric(horizontal: 1),
-                        decoration: BoxDecoration(
-                          color: event.isJoined
-                              ? scheme.primary
-                              : scheme.secondary,
-                          shape: BoxShape.circle,
-                          border: event.isJoined
-                              ? Border.all(color: scheme.onPrimary, width: 1)
-                              : null,
-                        ),
-                      ),
-                  ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: CosCard(
+        padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4),
+              child: CosSectionHeader(
+                title: '活動月曆',
+                subtitle: '有標記的日期代表可加入或已參加的場次',
+                icon: Icons.calendar_month_outlined,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TableCalendar<CosEvent>(
+              firstDay: DateTime(2026, 1, 1),
+              lastDay: DateTime(2026, 12, 31),
+              focusedDay: _focusedDay,
+              selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+              eventLoader: (day) => events.where((event) {
+                final date = DateTime(day.year, day.month, day.day);
+                return !date.isBefore(event.startDate) &&
+                    !date.isAfter(event.endDate);
+              }).toList(),
+              calendarBuilders: CalendarBuilders(
+                markerBuilder: (context, day, events) {
+                  if (events.isEmpty) return null;
+                  final hasJoined = events.any((event) => event.isJoined);
+                  return Positioned(
+                    bottom: 6,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final event in events.take(3))
+                          Container(
+                            width: hasJoined && event.isJoined ? 7 : 5,
+                            height: hasJoined && event.isJoined ? 7 : 5,
+                            margin: const EdgeInsets.symmetric(horizontal: 1),
+                            decoration: BoxDecoration(
+                              color: event.isJoined
+                                  ? scheme.primary
+                                  : scheme.secondary,
+                              shape: BoxShape.circle,
+                              border: event.isJoined
+                                  ? Border.all(
+                                      color: scheme.onPrimary,
+                                      width: 1,
+                                    )
+                                  : null,
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              calendarFormat: CalendarFormat.month,
+              availableCalendarFormats: const {CalendarFormat.month: '月'},
+              onDaySelected: (selectedDay, focusedDay) {
+                _updateFilters(
+                  selectedDay: selectedDay,
+                  focusedDay: focusedDay,
+                );
+              },
+              headerStyle: HeaderStyle(
+                formatButtonVisible: false,
+                titleCentered: true,
+                titleTextStyle: Theme.of(context).textTheme.titleMedium!
+                    .copyWith(
+                      color: scheme.onSurface,
+                      fontWeight: FontWeight.w900,
+                    ),
+                leftChevronIcon: Icon(
+                  Icons.chevron_left,
+                  color: scheme.tertiary,
                 ),
-              );
-            },
-          ),
-          calendarFormat: CalendarFormat.month,
-          availableCalendarFormats: const {CalendarFormat.month: '月'},
-          onDaySelected: (selectedDay, focusedDay) {
-            _updateFilters(selectedDay: selectedDay, focusedDay: focusedDay);
-          },
-          headerStyle: HeaderStyle(
-            formatButtonVisible: false,
-            titleCentered: true,
-            titleTextStyle: Theme.of(context).textTheme.titleMedium!.copyWith(
-              color: scheme.onSurface,
-              fontWeight: FontWeight.w900,
+                rightChevronIcon: Icon(
+                  Icons.chevron_right,
+                  color: scheme.tertiary,
+                ),
+              ),
+              daysOfWeekStyle: DaysOfWeekStyle(
+                weekdayStyle: TextStyle(
+                  color: scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w800,
+                ),
+                weekendStyle: TextStyle(
+                  color: scheme.secondary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              calendarStyle: CalendarStyle(
+                outsideDaysVisible: false,
+                defaultTextStyle: TextStyle(color: scheme.onSurface),
+                weekendTextStyle: TextStyle(color: scheme.secondary),
+                markerDecoration: BoxDecoration(
+                  color: scheme.secondary,
+                  shape: BoxShape.circle,
+                ),
+                selectedDecoration: BoxDecoration(
+                  color: scheme.primary,
+                  shape: BoxShape.circle,
+                ),
+                selectedTextStyle: TextStyle(
+                  color: scheme.onPrimary,
+                  fontWeight: FontWeight.w900,
+                ),
+                todayDecoration: BoxDecoration(
+                  color: scheme.tertiary.withValues(alpha: 0.24),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: scheme.tertiary),
+                ),
+                todayTextStyle: TextStyle(
+                  color: scheme.tertiary,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
             ),
-            leftChevronIcon: Icon(Icons.chevron_left, color: scheme.tertiary),
-            rightChevronIcon: Icon(Icons.chevron_right, color: scheme.tertiary),
-          ),
-          daysOfWeekStyle: DaysOfWeekStyle(
-            weekdayStyle: TextStyle(
-              color: scheme.onSurfaceVariant,
-              fontWeight: FontWeight.w800,
-            ),
-            weekendStyle: TextStyle(
-              color: scheme.secondary,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          calendarStyle: CalendarStyle(
-            outsideDaysVisible: false,
-            defaultTextStyle: TextStyle(color: scheme.onSurface),
-            weekendTextStyle: TextStyle(color: scheme.secondary),
-            markerDecoration: BoxDecoration(
-              color: scheme.secondary,
-              shape: BoxShape.circle,
-            ),
-            selectedDecoration: BoxDecoration(
-              color: scheme.primary,
-              shape: BoxShape.circle,
-            ),
-            selectedTextStyle: TextStyle(
-              color: scheme.onPrimary,
-              fontWeight: FontWeight.w900,
-            ),
-            todayDecoration: BoxDecoration(
-              color: scheme.tertiary.withValues(alpha: 0.24),
-              shape: BoxShape.circle,
-              border: Border.all(color: scheme.tertiary),
-            ),
-            todayTextStyle: TextStyle(
-              color: scheme.tertiary,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
+          ],
         ),
       ),
     );
@@ -242,29 +275,43 @@ class _EventListPageState extends ConsumerState<EventListPage> {
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
       child: CosCard(
         padding: const EdgeInsets.all(12),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              for (final filter in filters) ...[
-                ChoiceChip(
-                  label: Text(filter),
-                  selected: _filter == filter,
-                  onSelected: (_) => _updateFilters(filter: filter),
-                ),
-                const SizedBox(width: 8),
-              ],
-              FilterChip(
-                avatar: Icon(
-                  _hideEnded ? Icons.check_box : Icons.check_box_outline_blank,
-                  size: 18,
-                ),
-                label: const Text('隱藏已結束'),
-                selected: _hideEnded,
-                onSelected: (value) => _updateFilters(hideEnded: value),
+        child: Column(
+          children: [
+            CosSectionHeader(
+              title: '快速篩選',
+              subtitle: _selectedDay == null
+                  ? '依參與關係和狀態縮小場次'
+                  : '已鎖定 ${DateFormat('MM/dd E', 'zh_TW').format(_selectedDay!)}',
+              icon: Icons.tune_outlined,
+            ),
+            const SizedBox(height: 10),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final filter in filters) ...[
+                    ChoiceChip(
+                      label: Text(filter),
+                      selected: _filter == filter,
+                      onSelected: (_) => _updateFilters(filter: filter),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  FilterChip(
+                    avatar: Icon(
+                      _hideEnded
+                          ? Icons.check_box
+                          : Icons.check_box_outline_blank,
+                      size: 18,
+                    ),
+                    label: const Text('隱藏已結束'),
+                    selected: _hideEnded,
+                    onSelected: (value) => _updateFilters(hideEnded: value),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -375,6 +422,86 @@ class _EventListPageState extends ConsumerState<EventListPage> {
   Future<void> _refreshEvents() async {
     ref.invalidate(eventParticipantsProvider);
     await Future.wait([ref.refresh(eventsProvider.future)]);
+  }
+}
+
+class _DiscoveryStats extends StatelessWidget {
+  const _DiscoveryStats({required this.events, required this.filtered});
+
+  final List<CosEvent> events;
+  final List<EventDayItem> filtered;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final joined = events.where((event) => event.isJoined).length;
+    final social = events
+        .where(
+          (event) => event.hasFollowedParticipants || event.hasCircleMembers,
+        )
+        .length;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: CosMetricTile(
+              icon: Icons.search_outlined,
+              label: '篩選結果',
+              value: '${filtered.length} 場',
+              color: scheme.primary,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: CosMetricTile(
+              icon: Icons.check_circle_outline,
+              label: '已加入',
+              value: '$joined',
+              color: scheme.secondary,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: CosMetricTile(
+              icon: Icons.diversity_3_outlined,
+              label: '同好訊號',
+              value: '$social',
+              color: scheme.tertiary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyEventResult extends StatelessWidget {
+  const _EmptyEventResult();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+      child: CosCard(
+        child: Row(
+          children: [
+            CosIconBubble(
+              icon: Icons.event_busy_outlined,
+              color: scheme.secondary,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                '目前沒有符合條件的場次，可以放寬篩選或改看其他日期。',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

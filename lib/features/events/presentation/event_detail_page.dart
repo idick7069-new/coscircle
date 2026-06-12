@@ -400,63 +400,102 @@ class _ParticipantsSection extends ConsumerWidget {
     return participants.when(
       data: (items) {
         final myBookings = items.where((item) => item.isMe).toList();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '參加者 ${items.length}',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-                if (items.any((item) => item.isFollowed))
-                  const Chip(label: Text('已有關注者參加')),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (myBookings.isNotEmpty) ...[
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => EventBookingSharePage(
-                          event: event,
-                          bookings: myBookings,
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.image_outlined),
-                  label: const Text('產生預訂分享圖'),
+        final followedCount = items.where((item) => item.isFollowed).length;
+        final circleSignals = items
+            .where((item) => item.userId.isNotEmpty && !item.isMe)
+            .length;
+        final scheme = Theme.of(context).colorScheme;
+        return CosCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CosSectionHeader(
+                title: '現場同好',
+                subtitle: '看誰會去、要出什麼角色，先找到可以開話題的人',
+                icon: Icons.diversity_3_outlined,
+                trailing: CosBadge(
+                  label: '${items.length} 位',
+                  icon: Icons.people_outline,
+                  highlighted: true,
                 ),
               ),
               const SizedBox(height: 12),
-            ],
-            if (items.isEmpty)
-              const Card(
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('目前還沒有人公開預訂'),
-                ),
-              )
-            else
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
+              Row(
                 children: [
-                  for (final participant in items)
-                    _ParticipantAvatar(
-                      participant: participant,
-                      onTap: () =>
-                          _showParticipantSheet(context, ref, participant),
+                  Expanded(
+                    child: CosMetricTile(
+                      icon: Icons.person_pin_circle_outlined,
+                      label: '關注者',
+                      value: '$followedCount',
+                      color: scheme.secondary,
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: CosMetricTile(
+                      icon: Icons.badge_outlined,
+                      label: '可查看名片',
+                      value: '$circleSignals',
+                      color: scheme.tertiary,
+                    ),
+                  ),
                 ],
               ),
-          ],
+              if (myBookings.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => EventBookingSharePage(
+                            event: event,
+                            bookings: myBookings,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.image_outlined),
+                    label: const Text('產生預訂分享圖'),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 14),
+              if (items.isEmpty)
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest.withValues(
+                      alpha: 0.45,
+                    ),
+                    borderRadius: BorderRadius.circular(CosUi.radiusMd),
+                  ),
+                  child: const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        CosIconBubble(icon: Icons.person_search_outlined),
+                        SizedBox(width: 12),
+                        Expanded(child: Text('目前還沒有人公開預訂，加入後你會成為第一個訊號。')),
+                      ],
+                    ),
+                  ),
+                ),
+              if (items.isNotEmpty)
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    for (final participant in items)
+                      _ParticipantAvatar(
+                        participant: participant,
+                        onTap: () =>
+                            _showParticipantSheet(context, ref, participant),
+                      ),
+                  ],
+                ),
+            ],
+          ),
         );
       },
       error: (error, stack) => Text('參加者載入失敗：${userFacingError(error)}'),
@@ -618,38 +657,62 @@ class _ParticipantAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final roleColor = participantRoleColor(participant.role);
     return GestureDetector(
       onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              color: participantRoleColor(participant.role),
-              shape: BoxShape.circle,
-            ),
-            child: CircleAvatar(
-              radius: 25,
-              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-              backgroundImage: pickedImageProvider(participant.avatarUrl),
-              child: participant.avatarUrl.isEmpty
-                  ? Text(participant.nickname.characters.firstOrNull ?? '?')
-                  : null,
+      child: SizedBox(
+        width: 86,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: roleColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(CosUi.radiusMd),
+            border: Border.all(color: roleColor.withValues(alpha: 0.28)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: roleColor,
+                    shape: BoxShape.circle,
+                  ),
+                  child: CircleAvatar(
+                    radius: 25,
+                    backgroundColor: Theme.of(
+                      context,
+                    ).colorScheme.primaryContainer,
+                    backgroundImage: pickedImageProvider(participant.avatarUrl),
+                    child: participant.avatarUrl.isEmpty
+                        ? Text(
+                            participant.nickname.characters.firstOrNull ?? '?',
+                          )
+                        : null,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  participant.nickname,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Text(
+                  participantRoleLabel(participant.role),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 6),
-          SizedBox(
-            width: 72,
-            child: Text(
-              participant.nickname,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
