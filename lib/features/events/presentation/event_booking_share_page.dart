@@ -13,6 +13,7 @@ import '../../../core/models/event.dart';
 import '../../../core/models/participant.dart';
 import '../../../core/utils/participant_role_style.dart';
 import '../../../core/utils/picked_image_provider.dart';
+import '../../../shared/widgets/cos_ui.dart';
 
 class EventBookingSharePage extends StatefulWidget {
   const EventBookingSharePage({
@@ -145,39 +146,51 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
               : const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           children: [
-            Listener(
-              onPointerDown: (_) => _handlePreviewPointerDown(),
-              onPointerUp: (_) => _handlePreviewPointerEnd(),
-              onPointerCancel: (_) => _handlePreviewPointerEnd(),
-              child: GestureDetector(
-                key: _previewKey,
-                behavior: HitTestBehavior.translucent,
-                onScaleStart: _handlePreviewScaleStart,
-                onScaleUpdate: _handlePreviewScaleUpdate,
-                child: AspectRatio(
-                  aspectRatio: 1800 / 1200,
-                  child: FittedBox(
-                    child: RepaintBoundary(
-                      key: _boundaryKey,
-                      child: SizedBox(
-                        width: 1800,
-                        height: 1200,
-                        child: _ShareCanvas(
-                          event: widget.event,
-                          bookings: widget.bookings,
-                          backgroundColor: _backgroundColor,
-                          dayCount: _dayCount,
-                          photoTransforms: _photoTransforms,
-                          labelControllers: _labelControllers,
-                          labelTransforms: _labelTransforms,
-                          labelFontSizes: _labelFontSizes,
-                          labelBackgroundColors: _labelBackgroundColorByDay,
-                          labelBorderRadii: _labelBorderRadiusByDay,
-                          message: _messageController.text,
-                          selectedLayer: _sharing ? null : _selectedLayer,
-                          onLayerSelected: (layer) {
-                            setState(() => _selectedLayer = layer);
-                          },
+            CosPageHeader(
+              title: '出角分享卡',
+              subtitle: '整理當天角色與留言，快速分享給同好',
+              leading: const CosIconBubble(icon: Icons.ios_share_outlined),
+            ),
+            const SizedBox(height: 8),
+            CosCard(
+              padding: const EdgeInsets.all(10),
+              child: Listener(
+                onPointerDown: (_) => _handlePreviewPointerDown(),
+                onPointerUp: (_) => _handlePreviewPointerEnd(),
+                onPointerCancel: (_) => _handlePreviewPointerEnd(),
+                child: GestureDetector(
+                  key: _previewKey,
+                  behavior: HitTestBehavior.translucent,
+                  onScaleStart: _handlePreviewScaleStart,
+                  onScaleUpdate: _handlePreviewScaleUpdate,
+                  child: AspectRatio(
+                    aspectRatio: 1800 / 1200,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(CosUi.radiusMd),
+                      child: FittedBox(
+                        child: RepaintBoundary(
+                          key: _boundaryKey,
+                          child: SizedBox(
+                            width: 1800,
+                            height: 1200,
+                            child: _ShareCanvas(
+                              event: widget.event,
+                              bookings: widget.bookings,
+                              backgroundColor: _backgroundColor,
+                              dayCount: _dayCount,
+                              photoTransforms: _photoTransforms,
+                              labelControllers: _labelControllers,
+                              labelTransforms: _labelTransforms,
+                              labelFontSizes: _labelFontSizes,
+                              labelBackgroundColors: _labelBackgroundColorByDay,
+                              labelBorderRadii: _labelBorderRadiusByDay,
+                              message: _messageController.text,
+                              selectedLayer: _sharing ? null : _selectedLayer,
+                              onLayerSelected: (layer) {
+                                setState(() => _selectedLayer = layer);
+                              },
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -186,164 +199,194 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
               ),
             ),
             const SizedBox(height: 16),
-            Text('背景色', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            _ColorPicker(
-              color: _backgroundColor,
-              onChanged: (color) => setState(() => _backgroundColor = color),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                for (final color in _backgroundColors)
-                  InkWell(
-                    borderRadius: BorderRadius.circular(999),
-                    onTap: () => setState(() => _backgroundColor = color),
-                    child: Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: color,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: color == _backgroundColor
-                              ? Theme.of(context).colorScheme.primary
-                              : Theme.of(context).colorScheme.outlineVariant,
-                          width: color == _backgroundColor ? 3 : 1,
-                        ),
-                      ),
-                    ),
+            CosCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('背景色', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  _ColorPicker(
+                    color: _backgroundColor,
+                    onChanged: (color) =>
+                        setState(() => _backgroundColor = color),
                   ),
-              ],
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      for (final color in _backgroundColors)
+                        InkWell(
+                          borderRadius: BorderRadius.circular(999),
+                          onTap: () => setState(() => _backgroundColor = color),
+                          child: Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: color == _backgroundColor
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(
+                                        context,
+                                      ).colorScheme.outlineVariant,
+                                width: color == _backgroundColor ? 3 : 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
-            Text('備註', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _messageController,
-              decoration: const InputDecoration(
-                labelText: '留言內容',
-                helperText: '會同步顯示在左側留言欄',
+            CosCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('備註', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _messageController,
+                    decoration: const InputDecoration(
+                      labelText: '留言內容',
+                      helperText: '會同步顯示在左側留言欄',
+                    ),
+                    minLines: 2,
+                    maxLines: 4,
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ],
               ),
-              minLines: 2,
-              maxLines: 4,
-              onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 16),
             Text('角色名', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             for (var index = 1; index <= _dayCount; index += 1) ...[
-              TextField(
-                controller: _labelControllers[index],
-                decoration: InputDecoration(
-                  labelText: 'D$index 角色名',
-                  helperText: '先點選元件，再於預覽圖任意位置拖曳、雙指縮放旋轉',
-                ),
-                onChanged: (_) => setState(() {}),
-              ),
-              Row(
-                children: [
-                  SizedBox(
-                    width: 68,
-                    child: Text('字級 ${(_labelFontSizes[index] ?? 80).round()}'),
-                  ),
-                  Expanded(
-                    child: Slider(
-                      min: 50,
-                      max: 300,
-                      value: _labelFontSizes[index] ?? 80,
-                      onChanged: (value) {
-                        if (kDebugMode) {
-                          debugPrint(
-                            '[BookingShare] set D$index labelFontSize=$value',
-                          );
-                        }
-                        setState(() => _labelFontSizes[index] = value);
-                      },
+              CosCard(
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _labelControllers[index],
+                      decoration: InputDecoration(
+                        labelText: 'D$index 角色名',
+                        helperText: '先點選元件，再於預覽圖任意位置拖曳、雙指縮放旋轉',
+                      ),
+                      onChanged: (_) => setState(() {}),
                     ),
-                  ),
-                  TextButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _photoTransforms[index] = const _EditableTransform();
-                        _labelTransforms[index] = const _EditableTransform(
-                          offset: Offset(22, 260),
-                        );
-                        _labelFontSizes[index] = 80;
-                        _labelBackgroundColorByDay[index] =
-                            _labelBackgroundColors.first;
-                        _labelBorderRadiusByDay[index] = 36;
-                        if (kDebugMode) {
-                          debugPrint(
-                            '[BookingShare] reset D$index labelFontSize=80',
-                          );
-                        }
-                      });
-                    },
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('重置'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const SizedBox(width: 68, child: Text('背景')),
-                  Expanded(
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                    Row(
                       children: [
-                        for (final color in _labelBackgroundColors)
-                          _ColorSwatchButton(
-                            color: color,
-                            selected:
-                                (_labelBackgroundColorByDay[index] ??
-                                    _labelBackgroundColors.first) ==
-                                color,
-                            onTap: () {
+                        SizedBox(
+                          width: 68,
+                          child: Text(
+                            '字級 ${(_labelFontSizes[index] ?? 80).round()}',
+                          ),
+                        ),
+                        Expanded(
+                          child: Slider(
+                            min: 50,
+                            max: 300,
+                            value: _labelFontSizes[index] ?? 80,
+                            onChanged: (value) {
                               if (kDebugMode) {
                                 debugPrint(
-                                  '[BookingShare] set D$index labelBackgroundColor=${_hexColor(color)}',
+                                  '[BookingShare] set D$index labelFontSize=$value',
+                                );
+                              }
+                              setState(() => _labelFontSizes[index] = value);
+                            },
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _photoTransforms[index] =
+                                  const _EditableTransform();
+                              _labelTransforms[index] =
+                                  const _EditableTransform(
+                                    offset: Offset(22, 260),
+                                  );
+                              _labelFontSizes[index] = 80;
+                              _labelBackgroundColorByDay[index] =
+                                  _labelBackgroundColors.first;
+                              _labelBorderRadiusByDay[index] = 36;
+                              if (kDebugMode) {
+                                debugPrint(
+                                  '[BookingShare] reset D$index labelFontSize=80',
+                                );
+                              }
+                            });
+                          },
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('重置'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const SizedBox(width: 68, child: Text('背景')),
+                        Expanded(
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final color in _labelBackgroundColors)
+                                _ColorSwatchButton(
+                                  color: color,
+                                  selected:
+                                      (_labelBackgroundColorByDay[index] ??
+                                          _labelBackgroundColors.first) ==
+                                      color,
+                                  onTap: () {
+                                    if (kDebugMode) {
+                                      debugPrint(
+                                        '[BookingShare] set D$index labelBackgroundColor=${_hexColor(color)}',
+                                      );
+                                    }
+                                    setState(
+                                      () => _labelBackgroundColorByDay[index] =
+                                          color,
+                                    );
+                                  },
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 68,
+                          child: Text(
+                            '圓角 ${(_labelBorderRadiusByDay[index] ?? 36).round()}',
+                          ),
+                        ),
+                        Expanded(
+                          child: Slider(
+                            min: 0,
+                            max: 100,
+                            value: _labelBorderRadiusByDay[index] ?? 36,
+                            onChanged: (value) {
+                              if (kDebugMode) {
+                                debugPrint(
+                                  '[BookingShare] set D$index labelBorderRadius=$value',
                                 );
                               }
                               setState(
-                                () => _labelBackgroundColorByDay[index] = color,
+                                () => _labelBorderRadiusByDay[index] = value,
                               );
                             },
                           ),
+                        ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  SizedBox(
-                    width: 68,
-                    child: Text(
-                      '圓角 ${(_labelBorderRadiusByDay[index] ?? 36).round()}',
-                    ),
-                  ),
-                  Expanded(
-                    child: Slider(
-                      min: 0,
-                      max: 100,
-                      value: _labelBorderRadiusByDay[index] ?? 36,
-                      onChanged: (value) {
-                        if (kDebugMode) {
-                          debugPrint(
-                            '[BookingShare] set D$index labelBorderRadius=$value',
-                          );
-                        }
-                        setState(() => _labelBorderRadiusByDay[index] = value);
-                      },
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               const SizedBox(height: 12),
             ],

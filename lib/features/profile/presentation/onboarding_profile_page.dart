@@ -7,6 +7,7 @@ import '../../../core/repositories/profile_repository.dart';
 import '../../../core/services/oobe_service.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../shared/widgets/app_page.dart';
+import '../../../shared/widgets/cos_ui.dart';
 
 class OnboardingProfilePage extends ConsumerStatefulWidget {
   const OnboardingProfilePage({super.key});
@@ -75,7 +76,29 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
       ),
       child: Column(
         children: [
-          LinearProgressIndicator(value: (_page + 1) / pages.length),
+          CosCard(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                const CosLogoMark(size: 38),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(999),
+                    child: LinearProgressIndicator(
+                      minHeight: 8,
+                      value: (_page + 1) / pages.length,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  '${_page + 1}/${pages.length}',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 20),
           Expanded(
             child: PageView(
@@ -190,33 +213,27 @@ class _GuideStep extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Center(
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircleAvatar(
-                radius: 34,
-                backgroundColor: scheme.primaryContainer,
-                child: Icon(icon, size: 36, color: scheme.onPrimaryContainer),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-            ],
-          ),
+      child: CosCard(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CosIconBubble(icon: icon, color: scheme.primary, size: 68),
+            const SizedBox(height: 20),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
         ),
       ),
     );
@@ -244,54 +261,62 @@ class _ProfileSetupStep extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView(
       children: [
-        Text(
-          '先建立你的活動名片',
-          style: Theme.of(
-            context,
-          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 10),
-        const Text('這些資料之後都能在個人資訊頁修改。'),
-        const SizedBox(height: 20),
-        TextField(
-          controller: nicknameController,
-          decoration: const InputDecoration(labelText: '暱稱 / CN'),
-        ),
-        const SizedBox(height: 18),
-        Text('你通常的身份', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final role in roleOptions)
-              FilterChip(
-                label: Text(role),
-                selected: roles.contains(role),
-                onSelected: (selected) {
-                  selected ? roles.add(role) : roles.remove(role);
-                  onChanged();
-                },
+        CosCard(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '先建立你的活動名片',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w900,
+                ),
               ),
-          ],
-        ),
-        const SizedBox(height: 18),
-        Text('常跑地區', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final region in regionOptions)
-              FilterChip(
-                label: Text(region),
-                selected: regions.contains(region),
-                onSelected: (selected) {
-                  selected ? regions.add(region) : regions.remove(region);
-                  onChanged();
-                },
+              const SizedBox(height: 10),
+              const Text('這些資料之後都能在個人資訊頁修改。'),
+              const SizedBox(height: 20),
+              TextField(
+                controller: nicknameController,
+                decoration: const InputDecoration(labelText: '暱稱 / CN'),
               ),
-          ],
+              const SizedBox(height: 18),
+              Text('你通常的身份', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final role in roleOptions)
+                    FilterChip(
+                      label: Text(role),
+                      selected: roles.contains(role),
+                      onSelected: (selected) {
+                        selected ? roles.add(role) : roles.remove(role);
+                        onChanged();
+                      },
+                    ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Text('常跑地區', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final region in regionOptions)
+                    FilterChip(
+                      label: Text(region),
+                      selected: regions.contains(region),
+                      onSelected: (selected) {
+                        selected ? regions.add(region) : regions.remove(region);
+                        onChanged();
+                      },
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ],
     );

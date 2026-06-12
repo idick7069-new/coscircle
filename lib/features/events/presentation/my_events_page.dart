@@ -8,6 +8,7 @@ import '../../../core/providers/event_providers.dart';
 import '../../../core/repositories/event_repository.dart';
 import '../../../core/utils/event_day_display.dart';
 import '../../../core/utils/participant_role_style.dart';
+import '../../../shared/widgets/cos_ui.dart';
 import 'event_booking_share_page.dart';
 import 'event_list_page.dart';
 
@@ -48,14 +49,13 @@ class _MyEventsPageState extends ConsumerState<MyEventsPage> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '已加入的活動',
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                      ),
+                  CosPageHeader(
+                    title: '我的活動',
+                    subtitle: '整理已加入場次、出角預訂與分享卡',
+                    leading: const CosIconBubble(
+                      icon: Icons.event_available_outlined,
+                    ),
+                    actions: [
                       FilterChip(
                         label: const Text('顯示已過期'),
                         selected: _showEnded,
@@ -64,14 +64,9 @@ class _MyEventsPageState extends ConsumerState<MyEventsPage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   if (visibleItems.isEmpty)
-                    const Card(
-                      child: Padding(
-                        padding: EdgeInsets.all(18),
-                        child: Text('目前沒有符合條件的預訂'),
-                      ),
-                    )
+                    const CosCard(child: Text('目前沒有符合條件的預訂'))
                   else
                     for (final item in visibleItems) ...[
                       _MyBookingCard(
@@ -210,42 +205,56 @@ class _MyBookingCard extends StatelessWidget {
     final textColor = item.isEnded
         ? Theme.of(context).colorScheme.onSurfaceVariant
         : Theme.of(context).colorScheme.onSurface;
-    return Card(
-      color: item.isEnded
-          ? Theme.of(context).colorScheme.surfaceContainerHighest
-          : null,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
+    return Opacity(
+      opacity: item.isEnded ? 0.74 : 1,
+      child: CosCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Expanded(
-                  child: Text(
-                    item.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: textColor,
-                      fontWeight: FontWeight.w900,
-                    ),
+                CosIconBubble(
+                  icon: Icons.confirmation_number_outlined,
+                  color: participantRoleColorForScheme(
+                    participant.role,
+                    Theme.of(context).colorScheme,
                   ),
                 ),
-                Chip(label: Text(participantRoleLabel(participant.role))),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              color: textColor,
+                              fontWeight: FontWeight.w900,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        DateFormat('yyyy/MM/dd E', 'zh_TW').format(item.date),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                CosBadge(label: participantRoleLabel(participant.role)),
               ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              DateFormat('yyyy/MM/dd E', 'zh_TW').format(item.date),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
             if (participant.characterName.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text('角色：${participant.characterName}'),
+              const SizedBox(height: 10),
+              CosBadge(
+                label: participant.characterName,
+                icon: Icons.face_retouching_natural_outlined,
+              ),
             ],
             if (participant.message.isNotEmpty) ...[
-              const SizedBox(height: 4),
+              const SizedBox(height: 10),
               Text(
                 participant.message,
                 maxLines: 2,

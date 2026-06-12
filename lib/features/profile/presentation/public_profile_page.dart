@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/models/work.dart';
 import '../../../core/models/profile.dart';
 import '../../../core/repositories/profile_repository.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/app_page.dart';
+import '../../../shared/widgets/cos_ui.dart';
 
 final publicProfileProvider = FutureProvider.autoDispose
     .family<UserProfile?, String>((ref, publicCode) {
@@ -40,128 +42,192 @@ class PublicProfilePage extends ConsumerWidget {
           if (value == null) return const Center(child: Text('找不到使用者'));
           return ListView(
             children: [
-              Center(
-                child: CircleAvatar(
-                  radius: 54,
-                  backgroundImage: pickedImageProvider(value.avatarUrl),
-                  child: value.avatarUrl.isEmpty
-                      ? const Icon(Icons.person, size: 48)
-                      : null,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                value.nickname,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 12),
-              if (value.id.isNotEmpty)
-                FilledButton.icon(
-                  onPressed: () async {
-                    if (value.isFollowed) {
-                      await ref
-                          .read(profileRepositoryProvider)
-                          .unfollowUser(value.id);
-                    } else {
-                      await ref
-                          .read(profileRepositoryProvider)
-                          .followUser(value.id);
-                    }
-                    ref.invalidate(publicProfileProvider(publicCode));
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(value.isFollowed ? '已取消關注' : '已加入關注'),
+              CosCard(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [
+                            Theme.of(context).colorScheme.primary,
+                            Theme.of(context).colorScheme.secondary,
+                          ],
+                        ),
                       ),
-                    );
-                  },
-                  icon: Icon(
-                    value.isFollowed
-                        ? Icons.person_remove_outlined
-                        : Icons.person_add_outlined,
-                  ),
-                  label: Text(value.isFollowed ? '取消關注' : '加入關注'),
+                      child: CircleAvatar(
+                        radius: 54,
+                        backgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerLowest,
+                        backgroundImage: pickedImageProvider(value.avatarUrl),
+                        child: value.avatarUrl.isEmpty
+                            ? const Icon(Icons.person, size: 48)
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      value.nickname,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        CosBadge(
+                          label: value.regions.isEmpty
+                              ? '尚未設定座標'
+                              : value.regions.join('、'),
+                          icon: Icons.explore_outlined,
+                        ),
+                        CosBadge(
+                          label: value.deepPitWorks.isEmpty
+                              ? '深坑待補'
+                              : '${value.deepPitWorks.length} 個深坑',
+                          icon: Icons.label_important_outline,
+                          color: Theme.of(context).colorScheme.secondary,
+                        ),
+                        CosBadge(
+                          label: _publicGenderLabel(value.gender),
+                          icon: Icons.person_outline,
+                          color: Theme.of(context).colorScheme.tertiary,
+                        ),
+                      ],
+                    ),
+                    if (value.id.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: () async {
+                            if (value.isFollowed) {
+                              await ref
+                                  .read(profileRepositoryProvider)
+                                  .unfollowUser(value.id);
+                            } else {
+                              await ref
+                                  .read(profileRepositoryProvider)
+                                  .followUser(value.id);
+                            }
+                            ref.invalidate(publicProfileProvider(publicCode));
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  value.isFollowed ? '已取消關注' : '已加入關注',
+                                ),
+                              ),
+                            );
+                          },
+                          icon: Icon(
+                            value.isFollowed
+                                ? Icons.person_remove_outlined
+                                : Icons.person_add_outlined,
+                          ),
+                          label: Text(value.isFollowed ? '取消關注' : '加入關注'),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
+              ),
               if (value.bio.isNotEmpty) ...[
-                const SizedBox(height: 20),
-                Text(value.bio),
+                const SizedBox(height: 14),
+                CosCard(child: Text(value.bio)),
               ],
-              const SizedBox(height: 16),
-              _PublicInfoTile(
-                icon: Icons.cake_outlined,
-                label: '年齡',
-                value: value.age.isEmpty ? '尚未設定' : value.age,
-              ),
-              _PublicInfoTile(
-                icon: Icons.wc_outlined,
-                label: '性別',
-                value: _publicGenderLabel(value.gender),
-              ),
-              _PublicInfoTile(
-                icon: Icons.explore_outlined,
-                label: '座標',
-                value: value.regions.isEmpty ? '尚未設定' : value.regions.join('、'),
-              ),
-              _PublicInfoTile(
-                icon: Icons.directions_run_outlined,
-                label: '跑場範圍',
-                value: value.travelRegions.isEmpty
-                    ? '尚未設定'
-                    : value.travelRegions.join('、'),
-              ),
-              if (value.facebookUrl.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.facebook),
-                  title: const Text('Facebook'),
-                  subtitle: Text(value.facebookUrl),
-                ),
-              ],
-              if (value.landmine.isNotEmpty)
-                _PublicInfoTile(
-                  icon: Icons.warning_amber_outlined,
-                  label: '雷點',
-                  value: value.landmine,
-                ),
-              const SizedBox(height: 16),
-              Text('深坑', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              if (value.deepPitWorks.isEmpty)
-                const Text('尚未新增深坑')
-              else
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+              const SizedBox(height: 14),
+              CosCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (final work in value.deepPitWorks)
-                      Chip(label: Text(work.name)),
+                    Text(
+                      '交流資訊',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    _PublicInfoTile(
+                      icon: Icons.cake_outlined,
+                      label: '年齡',
+                      value: value.age.isEmpty ? '尚未設定' : value.age,
+                    ),
+                    _PublicInfoTile(
+                      icon: Icons.wc_outlined,
+                      label: '性別',
+                      value: _publicGenderLabel(value.gender),
+                    ),
+                    _PublicInfoTile(
+                      icon: Icons.explore_outlined,
+                      label: '座標',
+                      value: value.regions.isEmpty
+                          ? '尚未設定'
+                          : value.regions.join('、'),
+                    ),
+                    _PublicInfoTile(
+                      icon: Icons.directions_run_outlined,
+                      label: '跑場範圍',
+                      value: value.travelRegions.isEmpty
+                          ? '尚未設定'
+                          : value.travelRegions.join('、'),
+                    ),
+                    if (value.facebookUrl.isNotEmpty)
+                      _PublicInfoTile(
+                        icon: Icons.facebook,
+                        label: 'Facebook',
+                        value: value.facebookUrl,
+                      ),
+                    if (value.landmine.isNotEmpty)
+                      _PublicInfoTile(
+                        icon: Icons.warning_amber_outlined,
+                        label: '雷點',
+                        value: value.landmine,
+                      ),
                   ],
                 ),
-              const SizedBox(height: 12),
-              Text('淺坑', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              if (value.shallowPitWorks.isEmpty)
-                const Text('尚未新增淺坑')
-              else
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+              ),
+              const SizedBox(height: 14),
+              CosCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (final work in value.shallowPitWorks)
-                      Chip(label: Text(work.name)),
+                    Text('坑單', style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 10),
+                    _PublicWorkTags(
+                      title: '深坑',
+                      works: value.deepPitWorks,
+                      emptyText: '尚未新增深坑',
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(height: 12),
+                    _PublicWorkTags(
+                      title: '淺坑',
+                      works: value.shallowPitWorks,
+                      emptyText: '尚未新增淺坑',
+                      color: Theme.of(context).colorScheme.secondary,
+                    ),
                   ],
                 ),
-              const SizedBox(height: 16),
-              Text('其他照片', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              if (value.otherPhotoUrls.isEmpty)
-                const Text('尚未新增其他照片')
-              else
-                _PublicOtherPhotoGrid(photoUrls: value.otherPhotoUrls),
+              ),
+              const SizedBox(height: 14),
+              CosCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('照片牆', style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    if (value.otherPhotoUrls.isEmpty)
+                      const Text('尚未新增其他照片')
+                    else
+                      _PublicOtherPhotoGrid(photoUrls: value.otherPhotoUrls),
+                  ],
+                ),
+              ),
             ],
           );
         },
@@ -198,6 +264,42 @@ class _PublicInfoTile extends StatelessWidget {
       leading: Icon(icon),
       title: Text(label),
       subtitle: Text(value),
+    );
+  }
+}
+
+class _PublicWorkTags extends StatelessWidget {
+  const _PublicWorkTags({
+    required this.title,
+    required this.works,
+    required this.emptyText,
+    required this.color,
+  });
+
+  final String title;
+  final List<WorkTag> works;
+  final String emptyText;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 8),
+        if (works.isEmpty)
+          Text(emptyText, style: Theme.of(context).textTheme.bodySmall)
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final work in works)
+                CosBadge(label: work.name, color: color),
+            ],
+          ),
+      ],
     );
   }
 }

@@ -281,6 +281,22 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                       ),
                     ),
                   ),
+                if (eventId != null)
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: 16,
+                    child: _MapActionDock(
+                      circleItems: circleItems,
+                      isSharing: _isSharing,
+                      onMeetup: circleItems.isEmpty
+                          ? null
+                          : () => _showMeetupSheet(eventId, circleItems),
+                      onShareLocation: _isSharing
+                          ? null
+                          : () => _shareLocation(eventId),
+                    ),
+                  ),
               ],
             );
           },
@@ -292,35 +308,6 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
           ),
           loading: () => const Center(child: CircularProgressIndicator()),
         ),
-      ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (eventId != null)
-            FloatingActionButton.extended(
-              heroTag: 'meetup',
-              onPressed: circleItems.isEmpty
-                  ? null
-                  : () => _showMeetupSheet(eventId, circleItems),
-              icon: const Icon(Icons.flag),
-              label: const Text('集合'),
-            ),
-          if (eventId != null) const SizedBox(height: 12),
-          FloatingActionButton.extended(
-            heroTag: 'share-location',
-            onPressed: eventId == null || _isSharing
-                ? null
-                : () => _shareLocation(eventId),
-            icon: _isSharing
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.share_location),
-            label: Text(_isSharing ? '定位中' : '分享位置'),
-          ),
-        ],
       ),
     );
   }
@@ -1600,5 +1587,84 @@ class _EventMapHeader extends StatelessWidget {
 
   bool _sameTarget(EventDayItem item, CurrentEventTarget target) {
     return item.event.id == target.eventId && item.dayIndex == target.dayIndex;
+  }
+}
+
+class _MapActionDock extends StatelessWidget {
+  const _MapActionDock({
+    required this.circleItems,
+    required this.isSharing,
+    required this.onMeetup,
+    required this.onShareLocation,
+  });
+
+  final List<CircleGroup> circleItems;
+  final bool isSharing;
+  final VoidCallback? onMeetup;
+  final VoidCallback? onShareLocation;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return CosCard(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CosIconBubble(
+                icon: Icons.radar_outlined,
+                color: scheme.secondary,
+                size: 36,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '現場雷達',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              CosBadge(
+                label: '${circleItems.length} 個小圈圈',
+                icon: Icons.groups_2_outlined,
+                color: scheme.tertiary,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: onMeetup,
+                  icon: const Icon(Icons.flag_outlined),
+                  label: const Text('集合點'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onShareLocation,
+                  icon: isSharing
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.share_location),
+                  label: Text(isSharing ? '定位中' : '分享位置'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '長按地圖可先放置集合點草稿，再通知小圈圈。',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
   }
 }

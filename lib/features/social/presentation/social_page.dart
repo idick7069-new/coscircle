@@ -63,23 +63,29 @@ class SocialPage extends ConsumerWidget {
                   child: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
-                      _ActionTile(
-                        icon: Icons.group_add,
-                        title: '新建小圈圈',
-                        subtitle: '命名後自動產生邀請碼與網址',
-                        onTap: () => _circleDialog(context, ref, create: true),
-                      ),
-                      _ActionTile(
-                        icon: Icons.qr_code,
-                        title: '加入小圈圈',
-                        subtitle: '透過邀請碼或網址加入',
-                        onTap: () => _circleDialog(context, ref, create: false),
-                      ),
-                      _ActionTile(
-                        icon: Icons.qr_code_scanner,
-                        title: '掃描小圈圈 QRCode',
-                        subtitle: '掃描邀請碼加入小圈圈',
-                        onTap: () => context.push('/scan-circle'),
+                      _SocialActionGrid(
+                        actions: [
+                          _SocialAction(
+                            icon: Icons.group_add,
+                            title: '新建',
+                            subtitle: '建立聚會小圈圈',
+                            onTap: () =>
+                                _circleDialog(context, ref, create: true),
+                          ),
+                          _SocialAction(
+                            icon: Icons.qr_code,
+                            title: '加入',
+                            subtitle: '輸入邀請碼',
+                            onTap: () =>
+                                _circleDialog(context, ref, create: false),
+                          ),
+                          _SocialAction(
+                            icon: Icons.qr_code_scanner,
+                            title: '掃描',
+                            subtitle: '掃 QR 找同好',
+                            onTap: () => context.push('/scan-circle'),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 12),
                       circles.when(
@@ -662,8 +668,8 @@ class _FollowedUserCard extends StatelessWidget {
   }
 }
 
-class _ActionTile extends StatelessWidget {
-  const _ActionTile({
+class _SocialAction {
+  const _SocialAction({
     required this.icon,
     required this.title,
     required this.subtitle,
@@ -674,21 +680,53 @@ class _ActionTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+}
+
+class _SocialActionGrid extends StatelessWidget {
+  const _SocialActionGrid({required this.actions});
+
+  final List<_SocialAction> actions;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: CosCard(
-        padding: EdgeInsets.zero,
-        onTap: onTap,
-        child: ListTile(
-          leading: CosIconBubble(icon: icon, size: 40),
-          title: Text(title),
-          subtitle: Text(subtitle),
-          trailing: const Icon(Icons.chevron_right),
-        ),
-      ),
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        for (final entry in actions.indexed) ...[
+          Expanded(
+            child: CosCard(
+              onTap: entry.$2.onTap,
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CosIconBubble(
+                    icon: entry.$2.icon,
+                    color: switch (entry.$1) {
+                      0 => scheme.primary,
+                      1 => scheme.secondary,
+                      _ => scheme.tertiary,
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    entry.$2.title,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    entry.$2.subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (entry.$1 != actions.length - 1) const SizedBox(width: 10),
+        ],
+      ],
     );
   }
 }

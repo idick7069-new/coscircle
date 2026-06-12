@@ -443,78 +443,124 @@ class _ProfileSummary extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 14),
-        _InfoTile(
-          icon: Icons.article_outlined,
-          label: '自我介紹',
-          value: profile.bio.isEmpty ? '尚未填寫自我介紹' : profile.bio,
-        ),
-        _InfoTile(
-          icon: Icons.cake_outlined,
-          label: '年齡',
-          value: profile.age.isEmpty ? '尚未設定' : profile.age,
-        ),
-        _InfoTile(
-          icon: Icons.wc_outlined,
-          label: '性別',
-          value: _genderLabels[profile.gender] ?? '不公開',
-        ),
-        _InfoTile(
-          icon: Icons.explore_outlined,
-          label: '座標',
-          value: profile.regions.isEmpty ? '尚未設定' : profile.regions.join('、'),
-        ),
-        _InfoTile(
-          icon: Icons.directions_run_outlined,
-          label: '跑場範圍',
-          value: profile.travelRegions.isEmpty
-              ? '尚未設定'
-              : profile.travelRegions.join('、'),
-        ),
-        _InfoTile(
-          icon: Icons.facebook,
-          label: 'Facebook',
-          value: profile.facebookUrl.isEmpty ? '尚未設定' : profile.facebookUrl,
-        ),
-        _InfoTile(
-          icon: Icons.warning_amber_outlined,
-          label: '雷點',
-          value: profile.landmine.isEmpty ? '尚未填寫' : profile.landmine,
+        CosCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('交流資訊', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 10),
+              _InfoTile(
+                icon: Icons.article_outlined,
+                label: '自我介紹',
+                value: profile.bio.isEmpty ? '尚未填寫自我介紹' : profile.bio,
+              ),
+              _InfoTile(
+                icon: Icons.cake_outlined,
+                label: '年齡',
+                value: profile.age.isEmpty ? '尚未設定' : profile.age,
+              ),
+              _InfoTile(
+                icon: Icons.explore_outlined,
+                label: '座標',
+                value: profile.regions.isEmpty
+                    ? '尚未設定'
+                    : profile.regions.join('、'),
+              ),
+              _InfoTile(
+                icon: Icons.directions_run_outlined,
+                label: '跑場範圍',
+                value: profile.travelRegions.isEmpty
+                    ? '尚未設定'
+                    : profile.travelRegions.join('、'),
+              ),
+              _InfoTile(
+                icon: Icons.facebook,
+                label: 'Facebook',
+                value: profile.facebookUrl.isEmpty
+                    ? '尚未設定'
+                    : profile.facebookUrl,
+              ),
+              _InfoTile(
+                icon: Icons.warning_amber_outlined,
+                label: '雷點',
+                value: profile.landmine.isEmpty ? '尚未填寫' : profile.landmine,
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 12),
-        Text('深坑', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 6),
-        if (profile.deepPitWorks.isEmpty)
-          const Text('尚未新增深坑')
-        else
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+        CosCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (final work in profile.deepPitWorks)
-                Chip(label: Text(work.name)),
+              Text('坑單', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 10),
+              _WorkTagSection(
+                title: '深坑',
+                emptyText: '尚未新增深坑',
+                works: profile.deepPitWorks,
+                color: scheme.primary,
+              ),
+              const SizedBox(height: 12),
+              _WorkTagSection(
+                title: '淺坑',
+                emptyText: '尚未新增淺坑',
+                works: profile.shallowPitWorks,
+                color: scheme.secondary,
+              ),
             ],
           ),
-        const SizedBox(height: 8),
-        Text('淺坑', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 6),
-        if (profile.shallowPitWorks.isEmpty)
-          const Text('尚未新增淺坑')
-        else
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final work in profile.shallowPitWorks)
-                Chip(label: Text(work.name)),
-            ],
-          ),
+        ),
         const SizedBox(height: 10),
-        Text('其他照片', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 6),
-        if (profile.otherPhotoUrls.isEmpty)
-          const Text('尚未新增其他照片')
+        CosCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('照片牆', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              if (profile.otherPhotoUrls.isEmpty)
+                Text('尚未新增其他照片', style: Theme.of(context).textTheme.bodySmall)
+              else
+                _OtherPhotoGrid(photoUrls: profile.otherPhotoUrls),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _WorkTagSection extends StatelessWidget {
+  const _WorkTagSection({
+    required this.title,
+    required this.emptyText,
+    required this.works,
+    required this.color,
+  });
+
+  final String title;
+  final String emptyText;
+  final List<WorkTag> works;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 8),
+        if (works.isEmpty)
+          Text(emptyText, style: Theme.of(context).textTheme.bodySmall)
         else
-          _OtherPhotoGrid(photoUrls: profile.otherPhotoUrls),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final work in works)
+                CosBadge(label: work.name, color: color),
+            ],
+          ),
       ],
     );
   }

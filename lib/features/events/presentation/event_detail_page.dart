@@ -12,6 +12,7 @@ import '../../../core/utils/error_message.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../core/utils/participant_role_style.dart';
 import '../../../shared/widgets/app_page.dart';
+import '../../../shared/widgets/cos_ui.dart';
 import 'event_booking_share_page.dart';
 
 final eventDetailProvider = FutureProvider.autoDispose
@@ -51,27 +52,8 @@ class EventDetailPage extends ConsumerWidget {
           }
           return ListView(
             children: [
-              if (value.imageUrl.isNotEmpty) ...[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image(
-                    image: pickedImageProvider(value.imageUrl)!,
-                    height: 180,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) =>
-                        const SizedBox.shrink(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-              Text(
-                value.name,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 12),
+              _EventDetailHero(event: value),
+              const SizedBox(height: 14),
               _InfoGrid(
                 rows: [
                   _InfoRow.text('活動日期', _dateText(value)),
@@ -117,9 +99,18 @@ class EventDetailPage extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 16),
-              Text('活動說明', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              Text(value.description.isEmpty ? '未提供活動說明' : value.description),
+              CosCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('活動說明', style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 8),
+                    Text(
+                      value.description.isEmpty ? '未提供活動說明' : value.description,
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 24),
               _ParticipantsSection(
                 event: value,
@@ -144,33 +135,187 @@ class _InfoGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          children: [
-            for (final row in rows)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 5),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 92,
-                      child: Text(
-                        row.label,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+    return CosCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        children: [
+          for (final row in rows)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 5),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 92,
+                    child: Text(
+                      row.label,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    Expanded(child: row.child),
+                  ),
+                  Expanded(child: row.child),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EventDetailHero extends StatelessWidget {
+  const _EventDetailHero({required this.event});
+
+  final CosEvent event;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final imageProvider = pickedImageProvider(event.imageUrl);
+    final status = event.status(DateTime.now());
+    return CosCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(CosUi.radiusLg),
+            ),
+            child: AspectRatio(
+              aspectRatio: 1.7,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (imageProvider == null)
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            scheme.primaryContainer,
+                            scheme.secondaryContainer,
+                            scheme.tertiaryContainer,
+                          ],
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.event_available_outlined,
+                        color: scheme.primary,
+                        size: 64,
+                      ),
+                    )
+                  else
+                    Image(
+                      image: imageProvider,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) =>
+                          const SizedBox.shrink(),
+                    ),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.64),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 14,
+                    right: 14,
+                    bottom: 14,
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        CosBadge(
+                          label: _statusText(status),
+                          highlighted: status == EventStatus.active,
+                          color: status == EventStatus.active
+                              ? scheme.secondary
+                              : scheme.tertiary,
+                        ),
+                        CosBadge(label: event.category, color: scheme.primary),
+                        if (event.isJoined)
+                          const CosBadge(
+                            label: '已加入',
+                            icon: Icons.check_circle,
+                            highlighted: true,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  event.name,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _HeroMeta(
+                        icon: Icons.calendar_month_outlined,
+                        text: _dateText(event),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _HeroMeta(
+                        icon: Icons.place_outlined,
+                        text: event.venue,
+                      ),
+                    ),
                   ],
                 ),
-              ),
-          ],
-        ),
+              ],
+            ),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+class _HeroMeta extends StatelessWidget {
+  const _HeroMeta({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        CosIconBubble(icon: icon, size: 34),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w800),
+          ),
+        ),
+      ],
     );
   }
 }

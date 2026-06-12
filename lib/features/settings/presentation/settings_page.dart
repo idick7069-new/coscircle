@@ -11,6 +11,7 @@ import '../../../core/repositories/profile_repository.dart';
 import '../../../core/repositories/submission_repository.dart';
 import '../../../core/services/oobe_service.dart';
 import '../../../core/utils/error_message.dart';
+import '../../../shared/widgets/cos_ui.dart';
 import '../../admin/presentation/admin_dashboard_page.dart';
 import 'theme_settings_page.dart';
 
@@ -22,119 +23,117 @@ class SettingsPage extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text(
-          '其他',
-          style: Theme.of(
-            context,
-          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+        const CosPageHeader(
+          title: '設定',
+          subtitle: '管理主題、連線、投稿與帳號狀態',
+          leading: CosIconBubble(icon: Icons.tune_outlined),
         ),
-        const SizedBox(height: 16),
-        Card(
-          child: Column(
-            children: [
-              FutureBuilder(
-                future: ref.watch(profileRepositoryProvider).currentProfile(),
-                builder: (context, snapshot) {
-                  final isAdmin = snapshot.data?.isAdmin == true;
-                  if (!isAdmin) return const SizedBox.shrink();
-                  return Column(
-                    children: [
-                      ListTile(
-                        leading: const Icon(
-                          Icons.admin_panel_settings_outlined,
-                        ),
-                        title: const Text('後台管理'),
-                        subtitle: const Text('查看資料庫狀態、管理活動資料'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const AdminDashboardPage(),
-                          ),
-                        ),
-                      ),
-                      const Divider(height: 1),
-                    ],
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.add_location_alt_outlined),
-                title: const Text('投稿活動'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _submitEventDialog(context, ref),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.palette_outlined),
-                title: const Text('介面主題'),
-                subtitle: const Text('切換深色霓虹或莫蘭迪亮色'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const ThemeSettingsPage()),
-                ),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.wifi_tethering_outlined),
-                title: const Text('連線狀態'),
-                subtitle: const Text('檢查手機是否能連到後端服務'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const ConnectionStatusPage(),
+        const SizedBox(height: 8),
+        FutureBuilder(
+          future: ref.watch(profileRepositoryProvider).currentProfile(),
+          builder: (context, snapshot) {
+            final isAdmin = snapshot.data?.isAdmin == true;
+            if (!isAdmin) return const SizedBox.shrink();
+            return _SettingsSection(
+              title: '管理者',
+              children: [
+                _SettingsAction(
+                  icon: Icons.admin_panel_settings_outlined,
+                  title: '後台管理',
+                  subtitle: '查看資料庫狀態、管理活動資料',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const AdminDashboardPage(),
+                    ),
                   ),
                 ),
+              ],
+            );
+          },
+        ),
+        _SettingsSection(
+          title: 'App 體驗',
+          children: [
+            _SettingsAction(
+              icon: Icons.palette_outlined,
+              title: '介面主題',
+              subtitle: '切換星夜暗色或社群亮色',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ThemeSettingsPage()),
               ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.school_outlined),
-                title: const Text('重新觀看新手教學'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () async {
-                  final profile = await ref
-                      .read(profileRepositoryProvider)
-                      .currentProfile();
-                  if (profile != null) {
-                    await ref.read(oobeServiceProvider).reset(profile.id);
-                  }
-                  if (context.mounted) context.go('/onboarding');
-                },
+            ),
+            _SettingsAction(
+              icon: Icons.wifi_tethering_outlined,
+              title: '連線狀態',
+              subtitle: '檢查手機是否能連到後端服務',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ConnectionStatusPage()),
               ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.info_outline),
-                title: const Text('顯示版本號'),
-                onTap: () async {
-                  final info = await PackageInfo.fromPlatform();
-                  if (context.mounted) {
-                    showAboutDialog(
-                      context: context,
-                      applicationName: 'CosCircle',
-                      applicationVersion: '${info.version}+${info.buildNumber}',
-                    );
-                  }
-                },
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.bug_report_outlined),
-                title: const Text('BUG回報'),
-                trailing: const Icon(Icons.open_in_new),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const BugReportPage()),
-                ),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.logout),
-                title: const Text('登出'),
-                onTap: () async {
-                  await ref.read(authRepositoryProvider).logout();
-                  if (context.mounted) context.go('/login');
-                },
-              ),
-            ],
-          ),
+            ),
+            _SettingsAction(
+              icon: Icons.school_outlined,
+              title: '重新觀看新手教學',
+              subtitle: '重新跑一次第一次使用流程',
+              onTap: () async {
+                final profile = await ref
+                    .read(profileRepositoryProvider)
+                    .currentProfile();
+                if (profile != null) {
+                  await ref.read(oobeServiceProvider).reset(profile.id);
+                }
+                if (context.mounted) context.go('/onboarding');
+              },
+            ),
+          ],
+        ),
+        _SettingsSection(
+          title: '活動與支援',
+          children: [
+            _SettingsAction(
+              icon: Icons.add_location_alt_outlined,
+              title: '投稿活動',
+              subtitle: '補充你知道的 cosplay / 同人活動',
+              onTap: () => _submitEventDialog(context, ref),
+            ),
+            _SettingsAction(
+              icon: Icons.bug_report_outlined,
+              title: 'BUG回報',
+              subtitle: '回報異常或提出改善建議',
+              trailing: const Icon(Icons.open_in_new),
+              onTap: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const BugReportPage())),
+            ),
+            _SettingsAction(
+              icon: Icons.info_outline,
+              title: '顯示版本號',
+              subtitle: '查看目前安裝的 CosCircle 版本',
+              onTap: () async {
+                final info = await PackageInfo.fromPlatform();
+                if (context.mounted) {
+                  showAboutDialog(
+                    context: context,
+                    applicationName: 'CosCircle',
+                    applicationVersion: '${info.version}+${info.buildNumber}',
+                  );
+                }
+              },
+            ),
+          ],
+        ),
+        _SettingsSection(
+          title: '帳號',
+          children: [
+            _SettingsAction(
+              icon: Icons.logout,
+              title: '登出',
+              subtitle: '離開目前帳號',
+              onTap: () async {
+                await ref.read(authRepositoryProvider).logout();
+                if (context.mounted) context.go('/login');
+              },
+            ),
+          ],
         ),
       ],
     );
@@ -145,6 +144,74 @@ class SettingsPage extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       builder: (context) => const _SubmitEventSheet(),
+    );
+  }
+}
+
+class _SettingsSection extends StatelessWidget {
+  const _SettingsSection({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    if (children.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 8),
+            child: Text(title, style: Theme.of(context).textTheme.titleSmall),
+          ),
+          CosCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                for (final entry in children.indexed) ...[
+                  entry.$2,
+                  if (entry.$1 != children.length - 1)
+                    Divider(
+                      height: 1,
+                      indent: 70,
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsAction extends StatelessWidget {
+  const _SettingsAction({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      leading: CosIconBubble(icon: icon, size: 42),
+      title: Text(title),
+      subtitle: Text(subtitle),
+      trailing: trailing ?? const Icon(Icons.chevron_right),
+      onTap: onTap,
     );
   }
 }

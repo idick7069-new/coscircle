@@ -15,6 +15,7 @@ import '../../../core/providers/event_providers.dart';
 import '../../../core/repositories/event_repository.dart';
 import '../../../core/repositories/profile_repository.dart';
 import '../../../core/utils/error_message.dart';
+import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/cos_ui.dart';
 import '../../works/presentation/work_selector.dart';
 import 'my_events_page.dart';
@@ -76,6 +77,17 @@ class _EventListPageState extends ConsumerState<EventListPage> {
                   ],
                 ),
               ),
+              if (filtered.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: _EventSpotlightCard(
+                    item: filtered.first,
+                    onOpenCurrentEvent: widget.onOpenCurrentEvent,
+                    onBookingPressed: (event, dayIndex) =>
+                        _showBookingSheet(context, event, dayIndex: dayIndex),
+                    onDetailPressed: (event) =>
+                        context.push('/events/${event.id}'),
+                  ),
+                ),
               SliverToBoxAdapter(child: _calendar(items)),
               SliverToBoxAdapter(child: _filterChips()),
               SliverList.builder(
@@ -227,28 +239,33 @@ class _EventListPageState extends ConsumerState<EventListPage> {
   Widget _filterChips() {
     final filters = ['全部', '我有加入', '關注者', '小圈圈'];
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          for (final filter in filters)
-            ChoiceChip(
-              label: Text(filter),
-              selected: _filter == filter,
-              onSelected: (_) => _updateFilters(filter: filter),
-            ),
-          FilterChip(
-            avatar: Icon(
-              _hideEnded ? Icons.check_box : Icons.check_box_outline_blank,
-              size: 18,
-            ),
-            label: const Text('隱藏已結束'),
-            selected: _hideEnded,
-            onSelected: (value) => _updateFilters(hideEnded: value),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+      child: CosCard(
+        padding: const EdgeInsets.all(12),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final filter in filters) ...[
+                ChoiceChip(
+                  label: Text(filter),
+                  selected: _filter == filter,
+                  onSelected: (_) => _updateFilters(filter: filter),
+                ),
+                const SizedBox(width: 8),
+              ],
+              FilterChip(
+                avatar: Icon(
+                  _hideEnded ? Icons.check_box : Icons.check_box_outline_blank,
+                  size: 18,
+                ),
+                label: const Text('隱藏已結束'),
+                selected: _hideEnded,
+                onSelected: (value) => _updateFilters(hideEnded: value),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -361,6 +378,217 @@ class _EventListPageState extends ConsumerState<EventListPage> {
   }
 }
 
+class _EventSpotlightCard extends StatelessWidget {
+  const _EventSpotlightCard({
+    required this.item,
+    required this.onOpenCurrentEvent,
+    required this.onBookingPressed,
+    required this.onDetailPressed,
+  });
+
+  final EventDayItem item;
+  final ValueChanged<EventDayItem> onOpenCurrentEvent;
+  final void Function(CosEvent event, int dayIndex) onBookingPressed;
+  final ValueChanged<CosEvent> onDetailPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final event = item.event;
+    final status = item.status(DateTime.now());
+    final scheme = Theme.of(context).colorScheme;
+    final imageProvider = pickedImageProvider(event.imageUrl);
+    final statusText = switch (status) {
+      EventStatus.ended => '已結束',
+      EventStatus.active => '正在進行',
+      EventStatus.upcoming => '即將開始',
+    };
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+      child: CosCard(
+        padding: EdgeInsets.zero,
+        onTap: status == EventStatus.active
+            ? () => onOpenCurrentEvent(item)
+            : null,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(CosUi.radiusLg),
+              ),
+              child: AspectRatio(
+                aspectRatio: 1.95,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (imageProvider == null)
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              scheme.primaryContainer,
+                              scheme.secondaryContainer,
+                              scheme.tertiaryContainer,
+                            ],
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.photo_camera_outlined,
+                          size: 58,
+                          color: scheme.primary,
+                        ),
+                      )
+                    else
+                      Image(image: imageProvider, fit: BoxFit.cover),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.64),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 14,
+                      right: 14,
+                      bottom: 14,
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          CosBadge(
+                            label: statusText,
+                            highlighted: status == EventStatus.active,
+                            color: status == EventStatus.active
+                                ? scheme.secondary
+                                : scheme.tertiary,
+                          ),
+                          CosBadge(
+                            label: event.category,
+                            color: scheme.primary,
+                          ),
+                          if (event.isJoined)
+                            CosBadge(
+                              label: '已加入',
+                              icon: Icons.check_circle,
+                              highlighted: true,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _SpotlightLine(
+                          icon: Icons.calendar_month_outlined,
+                          text: DateFormat(
+                            'MM/dd E',
+                            'zh_TW',
+                          ).format(item.date),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _SpotlightLine(
+                          icon: Icons.place_outlined,
+                          text: event.venue,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '找到同作品、同圈圈的人，現場認親更快。',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      OutlinedButton(
+                        onPressed: () => onDetailPressed(event),
+                        child: const Text('詳細'),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton.icon(
+                        onPressed: status == EventStatus.ended
+                            ? null
+                            : () => onBookingPressed(event, item.dayIndex),
+                        icon: Icon(
+                          event.isJoined
+                              ? Icons.edit_outlined
+                              : Icons.add_circle_outline,
+                        ),
+                        label: Text(event.isJoined ? '修改' : '加入'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SpotlightLine extends StatelessWidget {
+  const _SpotlightLine({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        CosIconBubble(icon: icon, size: 34, color: scheme.secondary),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w800),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class BookingSheet extends ConsumerStatefulWidget {
   const BookingSheet({
     super.key,
@@ -448,65 +676,88 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
             shrinkWrap: true,
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
             children: [
-              Text(
-                widget.initialParticipant != null ? '修改出角預訂' : '發布出角預訂',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '讓同好知道你會去、當天扮什麼、以及歡迎怎麼互動。',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 12),
-              Text('參加日', style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+              Row(
                 children: [
-                  for (
-                    var index = 1;
-                    index <= _eventDayCount(event);
-                    index += 1
-                  )
-                    ChoiceChip(
-                      label: Text('D$index'),
-                      avatar: const Icon(
-                        Icons.calendar_today_outlined,
-                        size: 16,
-                      ),
-                      selected: _dayIndex == index,
-                      onSelected: (_) => setState(() => _dayIndex = index),
+                  const CosIconBubble(icon: Icons.badge_outlined),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.initialParticipant != null
+                              ? '修改出角預訂'
+                              : '發布出角預訂',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '讓同好知道你會去、當天扮什麼、以及歡迎怎麼互動。',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
                     ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 12),
-              SegmentedButton<ParticipantRole>(
-                segments: const [
-                  ButtonSegment(
-                    value: ParticipantRole.photographer,
-                    label: Text('攝影'),
-                    icon: Icon(Icons.camera_alt),
-                  ),
-                  ButtonSegment(
-                    value: ParticipantRole.coser,
-                    label: Text('Coser'),
-                    icon: Icon(Icons.face),
-                  ),
-                  ButtonSegment(
-                    value: ParticipantRole.manager,
-                    label: Text('馬內'),
-                    icon: Icon(Icons.support_agent),
-                  ),
-                  ButtonSegment(
-                    value: ParticipantRole.self,
-                    label: Text('路人'),
-                    icon: Icon(Icons.person),
-                  ),
-                ],
-                selected: {_role},
-                onSelectionChanged: (value) =>
-                    setState(() => _role = value.first),
+              const SizedBox(height: 16),
+              CosCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('參加日', style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (
+                          var index = 1;
+                          index <= _eventDayCount(event);
+                          index += 1
+                        )
+                          ChoiceChip(
+                            label: Text('D$index'),
+                            avatar: const Icon(
+                              Icons.calendar_today_outlined,
+                              size: 16,
+                            ),
+                            selected: _dayIndex == index,
+                            onSelected: (_) =>
+                                setState(() => _dayIndex = index),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    SegmentedButton<ParticipantRole>(
+                      segments: const [
+                        ButtonSegment(
+                          value: ParticipantRole.photographer,
+                          label: Text('攝影'),
+                          icon: Icon(Icons.camera_alt),
+                        ),
+                        ButtonSegment(
+                          value: ParticipantRole.coser,
+                          label: Text('Coser'),
+                          icon: Icon(Icons.face),
+                        ),
+                        ButtonSegment(
+                          value: ParticipantRole.manager,
+                          label: Text('馬內'),
+                          icon: Icon(Icons.support_agent),
+                        ),
+                        ButtonSegment(
+                          value: ParticipantRole.self,
+                          label: Text('路人'),
+                          icon: Icon(Icons.person),
+                        ),
+                      ],
+                      selected: {_role},
+                      onSelectionChanged: (value) =>
+                          setState(() => _role = value.first),
+                    ),
+                  ],
+                ),
               ),
               if (_role == ParticipantRole.coser) ...[
                 const SizedBox(height: 12),
