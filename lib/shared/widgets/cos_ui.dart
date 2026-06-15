@@ -230,6 +230,118 @@ class CosCard extends StatelessWidget {
   }
 }
 
+class CosReveal extends StatefulWidget {
+  const CosReveal({
+    super.key,
+    required this.child,
+    this.delay = Duration.zero,
+    this.offset = const Offset(0, 14),
+  });
+
+  final Widget child;
+  final Duration delay;
+  final Offset offset;
+
+  @override
+  State<CosReveal> createState() => _CosRevealState();
+}
+
+class _CosRevealState extends State<CosReveal>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _opacity;
+  late final Animation<Offset> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    );
+    final curve = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutCubic,
+    );
+    _opacity = Tween<double>(begin: 0, end: 1).animate(curve);
+    _slide = Tween<Offset>(
+      begin: widget.offset,
+      end: Offset.zero,
+    ).animate(curve);
+    Future<void>.delayed(widget.delay, () {
+      if (mounted) _controller.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _opacity,
+      child: SlideTransition(position: _slide, child: widget.child),
+    );
+  }
+}
+
+class CosGradientPanel extends StatelessWidget {
+  const CosGradientPanel({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(18),
+    this.icon,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(CosUi.radiusXl),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            scheme.primaryContainer.withValues(alpha: 0.92),
+            scheme.secondaryContainer.withValues(alpha: 0.78),
+            scheme.tertiaryContainer.withValues(alpha: 0.72),
+          ],
+        ),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.46),
+        ),
+        boxShadow: [CosUi.softShadow(scheme.shadow)],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(CosUi.radiusXl),
+        child: Stack(
+          children: [
+            if (icon != null)
+              Positioned(
+                right: -22,
+                top: -22,
+                child: Icon(
+                  icon,
+                  size: 128,
+                  color: scheme.onPrimaryContainer.withValues(alpha: 0.07),
+                ),
+              ),
+            Padding(padding: padding, child: child),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class CosSectionHeader extends StatelessWidget {
   const CosSectionHeader({
     super.key,
@@ -282,6 +394,64 @@ class CosSectionHeader extends StatelessWidget {
         ),
         if (trailing != null) ...[const SizedBox(width: 10), trailing!],
       ],
+    );
+  }
+}
+
+class CosInfoTile extends StatelessWidget {
+  const CosInfoTile({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final accent = color ?? scheme.primary;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.34),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CosIconBubble(icon: icon, color: accent, size: 34),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
