@@ -44,6 +44,10 @@ class _MyEventsPageState extends ConsumerState<MyEventsPage> {
             final visibleItems = allItems
                 .where((item) => _showEnded || !item.isEnded)
                 .toList();
+            final activeItems = allItems.where((item) => !item.isEnded).length;
+            final shareReadyItems = allItems
+                .where((item) => item.participant.outfitImageUrl.isNotEmpty)
+                .length;
             return RefreshIndicator(
               onRefresh: _refresh,
               child: ListView(
@@ -65,15 +69,68 @@ class _MyEventsPageState extends ConsumerState<MyEventsPage> {
                     ],
                   ),
                   const SizedBox(height: 8),
+                  CosReveal(
+                    child: CosGradientPanel(
+                      icon: Icons.confirmation_number_outlined,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const CosSectionHeader(
+                            title: '我的參戰票夾',
+                            subtitle: '整理即將出席的場次、角色名片與分享圖素材',
+                            icon: Icons.wallet_outlined,
+                          ),
+                          const SizedBox(height: 14),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: CosMetricTile(
+                                  icon: Icons.event_available_outlined,
+                                  label: '未來場次',
+                                  value: '$activeItems',
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: CosMetricTile(
+                                  icon: Icons.badge_outlined,
+                                  label: '預訂名片',
+                                  value: '${allItems.length}',
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.secondary,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: CosMetricTile(
+                                  icon: Icons.image_outlined,
+                                  label: '可產圖',
+                                  value: '$shareReadyItems',
+                                  color: Theme.of(context).colorScheme.tertiary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   if (visibleItems.isEmpty)
-                    const CosCard(child: Text('目前沒有符合條件的預訂'))
+                    const _MyEventsEmptyState()
                   else
-                    for (final item in visibleItems) ...[
-                      _MyBookingCard(
-                        item: item,
-                        onEdit: () => _editBooking(item),
-                        onCancel: () => _cancelBooking(item),
-                        onShare: () => _shareBooking(item, allItems),
+                    for (final entry in visibleItems.indexed) ...[
+                      CosReveal(
+                        delay: Duration(milliseconds: 55 * entry.$1),
+                        offset: const Offset(0, 10),
+                        child: _MyBookingCard(
+                          item: entry.$2,
+                          onEdit: () => _editBooking(entry.$2),
+                          onCancel: () => _cancelBooking(entry.$2),
+                          onShare: () => _shareBooking(entry.$2, allItems),
+                        ),
                       ),
                       const SizedBox(height: 10),
                     ],
@@ -116,6 +173,7 @@ class _MyEventsPageState extends ConsumerState<MyEventsPage> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       builder: (context) => BookingSheet(
         event: item.event,
         initialDayIndex: item.participant.dayIndex,
@@ -128,20 +186,7 @@ class _MyEventsPageState extends ConsumerState<MyEventsPage> {
   Future<void> _cancelBooking(_MyBookingItem item) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('取消預訂'),
-        content: Text('確定要取消 ${item.title} 的預訂嗎？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('保留'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('取消預訂'),
-          ),
-        ],
-      ),
+      builder: (context) => _CancelBookingDialog(item: item),
     );
     if (confirmed != true) return;
     await ref
@@ -202,84 +247,245 @@ class _MyBookingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final participant = item.participant;
-    final textColor = item.isEnded
-        ? Theme.of(context).colorScheme.onSurfaceVariant
-        : Theme.of(context).colorScheme.onSurface;
+    final scheme = Theme.of(context).colorScheme;
+    final roleColor = participantRoleColorForScheme(participant.role, scheme);
+    final textColor = item.isEnded ? scheme.onSurfaceVariant : scheme.onSurface;
     return Opacity(
       opacity: item.isEnded ? 0.74 : 1,
       child: CosCard(
+        padding: EdgeInsets.zero,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                CosIconBubble(
-                  icon: Icons.confirmation_number_outlined,
-                  color: participantRoleColorForScheme(
-                    participant.role,
-                    Theme.of(context).colorScheme,
-                  ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    roleColor.withValues(alpha: 0.18),
+                    scheme.surfaceContainerLowest,
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              color: textColor,
-                              fontWeight: FontWeight.w900,
-                            ),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(CosUi.radiusLg),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CosIconBubble(
+                      icon: Icons.confirmation_number_outlined,
+                      color: roleColor,
+                      size: 46,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              CosBadge(
+                                label: participantRoleLabel(participant.role),
+                                icon: Icons.badge_outlined,
+                                highlighted: true,
+                                color: roleColor,
+                              ),
+                              CosBadge(
+                                label: item.isEnded ? '已結束' : '準備中',
+                                icon: item.isEnded
+                                    ? Icons.history
+                                    : Icons.event_available_outlined,
+                                color: item.isEnded
+                                    ? scheme.outline
+                                    : scheme.secondary,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            item.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(
+                                  color: textColor,
+                                  fontWeight: FontWeight.w900,
+                                  height: 1.05,
+                                ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            DateFormat(
+                              'yyyy/MM/dd E',
+                              'zh_TW',
+                            ).format(item.date),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        DateFormat('yyyy/MM/dd E', 'zh_TW').format(item.date),
-                        style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: CosMetricTile(
+                          icon: Icons.auto_awesome,
+                          label: '角色',
+                          value: participant.characterName.isEmpty
+                              ? '未填寫'
+                              : participant.characterName,
+                          color: roleColor,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: CosMetricTile(
+                          icon: Icons.photo_library_outlined,
+                          label: '分享素材',
+                          value: participant.outfitImageUrl.isEmpty
+                              ? '待補'
+                              : '已準備',
+                          color: scheme.tertiary,
+                        ),
                       ),
                     ],
                   ),
-                ),
-                CosBadge(label: participantRoleLabel(participant.role)),
-              ],
+                  if (participant.message.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    CosInfoTile(
+                      icon: Icons.chat_bubble_outline,
+                      label: '備註',
+                      value: participant.message,
+                      color: scheme.secondary,
+                    ),
+                  ],
+                  if (participant.interactionTags.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final tag in participant.interactionTags)
+                          CosBadge(
+                            label: tag,
+                            icon: Icons.waving_hand_outlined,
+                            color: scheme.secondary,
+                          ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: onEdit,
+                          icon: const Icon(Icons.edit_outlined),
+                          label: const Text('修改'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.filledTonal(
+                        tooltip: '取消預訂',
+                        onPressed: onCancel,
+                        icon: const Icon(Icons.delete_outline),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: onShare,
+                          icon: const Icon(Icons.image_outlined),
+                          label: const Text('產圖'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            if (participant.characterName.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              CosBadge(
-                label: participant.characterName,
-                icon: Icons.face_retouching_natural_outlined,
-              ),
-            ],
-            if (participant.message.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Text(
-                participant.message,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MyEventsEmptyState extends StatelessWidget {
+  const _MyEventsEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return CosCard(
+      child: Row(
+        children: [
+          CosIconBubble(
+            icon: Icons.event_busy_outlined,
+            color: scheme.secondary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '目前沒有符合條件的預訂。加入活動後，這裡會變成你的參戰票夾。',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CancelBookingDialog extends StatelessWidget {
+  const _CancelBookingDialog({required this.item});
+
+  final _MyBookingItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      contentPadding: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      content: CosGradientPanel(
+        icon: Icons.delete_outline,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CosSectionHeader(
+              title: '取消預訂',
+              subtitle: '確定要取消 ${item.title} 的預訂嗎？取消後同好將看不到這張參戰名片。',
+              icon: Icons.delete_outline,
+            ),
+            const SizedBox(height: 16),
+            Row(
               children: [
-                OutlinedButton.icon(
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('修改'),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('保留'),
+                  ),
                 ),
-                OutlinedButton.icon(
-                  onPressed: onCancel,
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('取消'),
-                ),
-                FilledButton.icon(
-                  onPressed: onShare,
-                  icon: const Icon(Icons.image_outlined),
-                  label: const Text('產圖'),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => Navigator.pop(context, true),
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('取消預訂'),
+                  ),
                 ),
               ],
             ),
