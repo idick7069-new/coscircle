@@ -25,47 +25,68 @@ class MeetupNoticeCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return CosCard(
       padding: const EdgeInsets.all(12),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          CosIconBubble(icon: Icons.flag_circle, color: scheme.tertiary),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '${meetup.circleName} $timeText 集合',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                Text(
-                  meetup.description.isEmpty ? '集合點已設定' : meetup.description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          Wrap(
-            spacing: 4,
+          Row(
             children: [
-              TextButton.icon(
-                onPressed: onNavigate,
-                icon: const Icon(Icons.navigation),
-                label: const Text('導航'),
+              CosIconBubble(icon: Icons.flag_circle, color: scheme.tertiary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      meetup.circleName,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      meetup.description.isEmpty
+                          ? '集合點已設定'
+                          : meetup.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
-              if (onEdit != null)
-                IconButton(
+              CosBadge(
+                label: timeText,
+                icon: Icons.schedule,
+                highlighted: true,
+                color: scheme.tertiary,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.tonalIcon(
+                  onPressed: onNavigate,
+                  icon: const Icon(Icons.navigation),
+                  label: const Text('導航'),
+                ),
+              ),
+              if (onEdit != null) ...[
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
                   tooltip: '編輯集合',
                   onPressed: onEdit,
                   icon: const Icon(Icons.edit_location_alt_outlined),
                 ),
-              if (onCancel != null)
-                IconButton(
+              ],
+              if (onCancel != null) ...[
+                const SizedBox(width: 4),
+                IconButton.filledTonal(
                   tooltip: '取消集合',
                   onPressed: onCancel,
                   icon: const Icon(Icons.delete_outline),
                 ),
+              ],
             ],
           ),
         ],
@@ -88,20 +109,41 @@ class RecognitionNoticeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     if (request.isRequester && request.status != RecognitionStatus.pending) {
       return CosCard(
-        padding: EdgeInsets.zero,
-        child: ListTile(
-          leading: const CosIconBubble(icon: Icons.mark_chat_read),
-          title: Text(
-            '${request.targetNickname} 回覆：${request.responseMessage}',
-          ),
-          subtitle: const Text('認親回覆通知'),
+        child: Row(
+          children: [
+            CosIconBubble(icon: Icons.mark_chat_read, color: scheme.secondary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${request.targetNickname} 回覆',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Text(
+                    request.responseMessage,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            CosBadge(
+              label: '認親回覆',
+              icon: Icons.waving_hand_outlined,
+              color: scheme.secondary,
+            ),
+          ],
         ),
       );
     }
 
-    final scheme = Theme.of(context).colorScheme;
     return CosCard(
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -115,8 +157,16 @@ class RecognitionNoticeCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   '${request.requesterNickname} 要過來認親',
-                  style: Theme.of(context).textTheme.titleSmall,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
                 ),
+              ),
+              CosBadge(
+                label: '認親訊號',
+                icon: Icons.waving_hand_outlined,
+                highlighted: true,
+                color: scheme.primary,
               ),
             ],
           ),

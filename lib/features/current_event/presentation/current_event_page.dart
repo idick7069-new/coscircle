@@ -824,71 +824,106 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
   void _showMeetupDetailSheet(String eventId, MeetupPoint meetup) {
     showModalBottomSheet<void>(
       context: context,
+      showDragHandle: true,
       builder: (context) {
+        final scheme = Theme.of(context).colorScheme;
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '集合：${meetup.circleName}',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                Text('時間：${DateFormat('HH:mm').format(meetup.meetAt)}'),
-                const SizedBox(height: 8),
-                Text(
-                  meetup.description.isEmpty ? '集合點已設定' : meetup.description,
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () =>
-                            _navigateTo(meetup.latitude, meetup.longitude),
-                        icon: const Icon(Icons.navigation),
-                        label: const Text('導航'),
-                      ),
+            child: CosGradientPanel(
+              icon: Icons.flag_circle_outlined,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CosSectionHeader(
+                    title: '${meetup.circleName} 集合',
+                    subtitle: meetup.description.isEmpty
+                        ? '集合點已設定'
+                        : meetup.description,
+                    icon: Icons.flag_circle_outlined,
+                    trailing: CosBadge(
+                      label: DateFormat('HH:mm').format(meetup.meetAt),
+                      icon: Icons.schedule,
+                      highlighted: true,
+                      color: scheme.tertiary,
                     ),
-                    if (meetup.isMine) ...[
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: CosMetricTile(
+                          icon: Icons.place_outlined,
+                          label: '集合座標',
+                          value:
+                              '${meetup.latitude.toStringAsFixed(4)}, ${meetup.longitude.toStringAsFixed(4)}',
+                          color: scheme.primary,
+                        ),
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: FilledButton.icon(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                            final circles =
-                                ref
-                                    .read(currentEventCirclesProvider)
-                                    .whenOrNull(data: (items) => items) ??
-                                const <CircleGroup>[];
-                            if (circles.isEmpty) return;
-                            _showMeetupSheet(eventId, circles, meetup: meetup);
-                          },
-                          icon: const Icon(Icons.edit_location_alt_outlined),
-                          label: const Text('編輯'),
+                        child: CosMetricTile(
+                          icon: Icons.groups_2_outlined,
+                          label: '通知對象',
+                          value: meetup.circleName,
+                          color: scheme.secondary,
                         ),
                       ),
                     ],
-                  ],
-                ),
-                if (meetup.isMine) ...[
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: TextButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        _confirmDeleteMeetup(eventId, meetup);
-                      },
-                      icon: const Icon(Icons.delete_outline),
-                      label: const Text('取消集合'),
-                    ),
                   ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () =>
+                              _navigateTo(meetup.latitude, meetup.longitude),
+                          icon: const Icon(Icons.navigation),
+                          label: const Text('導航'),
+                        ),
+                      ),
+                      if (meetup.isMine) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              final circles =
+                                  ref
+                                      .read(currentEventCirclesProvider)
+                                      .whenOrNull(data: (items) => items) ??
+                                  const <CircleGroup>[];
+                              if (circles.isEmpty) return;
+                              _showMeetupSheet(
+                                eventId,
+                                circles,
+                                meetup: meetup,
+                              );
+                            },
+                            icon: const Icon(Icons.edit_location_alt_outlined),
+                            label: const Text('編輯'),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (meetup.isMine) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          _confirmDeleteMeetup(eventId, meetup);
+                        },
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('取消集合'),
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         );
@@ -899,19 +934,13 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
   Future<void> _confirmDeleteMeetup(String eventId, MeetupPoint meetup) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('取消集合'),
-        content: Text('確定要取消「${meetup.circleName}」的集合通知？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('保留'),
-          ),
-          FilledButton.tonal(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('取消集合'),
-          ),
-        ],
+      builder: (context) => _RadarConfirmDialog(
+        icon: Icons.delete_outline,
+        title: '取消集合',
+        message: '確定要取消「${meetup.circleName}」的集合通知？小圈圈成員會看不到這個集合點。',
+        cancelLabel: '保留',
+        confirmLabel: '取消集合',
+        confirmIcon: Icons.delete_outline,
       ),
     );
     if (confirmed != true) return;
@@ -957,9 +986,11 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
+            final scheme = Theme.of(context).colorScheme;
             Future<void> useCurrentLocation() async {
               try {
                 final position = await _currentPosition();
@@ -1044,126 +1075,218 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                     16 + MediaQuery.of(context).viewInsets.bottom,
                   ),
                   children: [
-                    Text(
-                      meetup == null ? '設定集合點' : '編輯集合點',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      initialValue: selectedCircleId,
-                      decoration: const InputDecoration(labelText: '呼叫小圈圈'),
-                      items: [
-                        for (final circle in circles)
-                          DropdownMenuItem(
-                            value: circle.id,
-                            child: Text(circle.name),
-                          ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          setSheetState(() => selectedCircleId = value);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: descriptionController,
-                      decoration: const InputDecoration(
-                        labelText: '集合點描述',
-                        hintText: '例如：大門口左邊樹下',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: SizedBox(
-                        height: 220,
-                        child: GoogleMap(
-                          initialCameraPosition: CameraPosition(
-                            target: selectedPosition,
-                            zoom: 17,
-                          ),
-                          onMapCreated: (controller) {
-                            pickerMapController = controller;
-                          },
-                          myLocationButtonEnabled: false,
-                          zoomControlsEnabled: false,
-                          mapToolbarEnabled: false,
-                          gestureRecognizers: {
-                            Factory<OneSequenceGestureRecognizer>(
-                              () => EagerGestureRecognizer(),
-                            ),
-                          },
-                          onTap: (position) {
-                            setSheetState(() {
-                              selectedPosition = position;
-                            });
-                          },
-                          markers: {
-                            Marker(
-                              markerId: const MarkerId('meetup-picker'),
-                              position: selectedPosition,
-                              draggable: true,
-                              icon: BitmapDescriptor.defaultMarkerWithHue(
-                                BitmapDescriptor.hueYellow,
+                    CosReveal(
+                      child: CosGradientPanel(
+                        icon: Icons.flag_circle_outlined,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            CosSectionHeader(
+                              title: meetup == null ? '設定集合點' : '編輯集合點',
+                              subtitle: '把小圈圈要集合的位置、時間和提示一次講清楚',
+                              icon: Icons.flag_circle_outlined,
+                              trailing: CosBadge(
+                                label: DateFormat('HH:mm').format(meetAt),
+                                icon: Icons.schedule,
+                                highlighted: true,
+                                color: scheme.tertiary,
                               ),
-                              onDragEnd: (position) {
-                                setSheetState(() {
-                                  selectedPosition = position;
-                                });
-                              },
                             ),
-                          },
+                            const SizedBox(height: 14),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: CosMetricTile(
+                                    icon: Icons.groups_2_outlined,
+                                    label: '呼叫小圈圈',
+                                    value:
+                                        circles
+                                            .where(
+                                              (circle) =>
+                                                  circle.id == selectedCircleId,
+                                            )
+                                            .map((circle) => circle.name)
+                                            .firstOrNull ??
+                                        '未選擇',
+                                    color: scheme.primary,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: CosMetricTile(
+                                    icon: Icons.place_outlined,
+                                    label: '集合座標',
+                                    value:
+                                        '${selectedPosition.latitude.toStringAsFixed(4)}, ${selectedPosition.longitude.toStringAsFixed(4)}',
+                                    color: scheme.secondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '拖動圖釘或點地圖即可變更集合座標。',
-                      style: Theme.of(context).textTheme.bodySmall,
+                    const SizedBox(height: 16),
+                    CosReveal(
+                      delay: const Duration(milliseconds: 60),
+                      child: CosCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const CosSectionHeader(
+                              title: '通知內容',
+                              subtitle: '選擇要呼叫的小圈圈，補上一句現場提示',
+                              icon: Icons.campaign_outlined,
+                            ),
+                            const SizedBox(height: 12),
+                            DropdownButtonFormField<String>(
+                              initialValue: selectedCircleId,
+                              decoration: const InputDecoration(
+                                labelText: '呼叫小圈圈',
+                              ),
+                              items: [
+                                for (final circle in circles)
+                                  DropdownMenuItem(
+                                    value: circle.id,
+                                    child: Text(circle.name),
+                                  ),
+                              ],
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setSheetState(() => selectedCircleId = value);
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: descriptionController,
+                              decoration: const InputDecoration(
+                                labelText: '集合點描述',
+                                hintText: '例如：大門口左邊樹下',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.schedule),
-                      title: const Text('集合時間'),
-                      subtitle: Text(DateFormat('HH:mm').format(meetAt)),
-                      trailing: const Icon(Icons.edit_calendar),
-                      onTap: () async {
-                        final picked = await showTimePicker(
-                          context: context,
-                          initialTime: TimeOfDay.fromDateTime(meetAt),
-                        );
-                        if (picked == null) return;
-                        final base = meetAt;
-                        setSheetState(() {
-                          meetAt = DateTime(
-                            base.year,
-                            base.month,
-                            base.day,
-                            picked.hour,
-                            picked.minute,
-                          );
-                        });
-                      },
+                    CosReveal(
+                      delay: const Duration(milliseconds: 110),
+                      child: CosCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const CosSectionHeader(
+                              title: '集合位置',
+                              subtitle: '拖動圖釘或點地圖即可變更集合座標',
+                              icon: Icons.map_outlined,
+                            ),
+                            const SizedBox(height: 12),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(
+                                CosUi.radiusLg,
+                              ),
+                              child: SizedBox(
+                                height: 220,
+                                child: GoogleMap(
+                                  initialCameraPosition: CameraPosition(
+                                    target: selectedPosition,
+                                    zoom: 17,
+                                  ),
+                                  onMapCreated: (controller) {
+                                    pickerMapController = controller;
+                                  },
+                                  myLocationButtonEnabled: false,
+                                  zoomControlsEnabled: false,
+                                  mapToolbarEnabled: false,
+                                  gestureRecognizers: {
+                                    Factory<OneSequenceGestureRecognizer>(
+                                      () => EagerGestureRecognizer(),
+                                    ),
+                                  },
+                                  onTap: (position) {
+                                    setSheetState(() {
+                                      selectedPosition = position;
+                                    });
+                                  },
+                                  markers: {
+                                    Marker(
+                                      markerId: const MarkerId('meetup-picker'),
+                                      position: selectedPosition,
+                                      draggable: true,
+                                      icon:
+                                          BitmapDescriptor.defaultMarkerWithHue(
+                                            BitmapDescriptor.hueYellow,
+                                          ),
+                                      onDragEnd: (position) {
+                                        setSheetState(() {
+                                          selectedPosition = position;
+                                        });
+                                      },
+                                    ),
+                                  },
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            InkWell(
+                              borderRadius: BorderRadius.circular(
+                                CosUi.radiusMd,
+                              ),
+                              onTap: () async {
+                                final picked = await showTimePicker(
+                                  context: context,
+                                  initialTime: TimeOfDay.fromDateTime(meetAt),
+                                );
+                                if (picked == null) return;
+                                final base = meetAt;
+                                setSheetState(() {
+                                  meetAt = DateTime(
+                                    base.year,
+                                    base.month,
+                                    base.day,
+                                    picked.hour,
+                                    picked.minute,
+                                  );
+                                });
+                              },
+                              child: CosInfoTile(
+                                icon: Icons.schedule,
+                                label: '集合時間',
+                                value: DateFormat('HH:mm').format(meetAt),
+                                color: scheme.tertiary,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            CosInfoTile(
+                              icon: Icons.place,
+                              label: '集合座標',
+                              value:
+                                  '${selectedPosition.latitude.toStringAsFixed(5)}, ${selectedPosition.longitude.toStringAsFixed(5)}',
+                              color: scheme.secondary,
+                            ),
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                onPressed: useCurrentLocation,
+                                icon: const Icon(Icons.my_location),
+                                label: const Text('改用目前位置'),
+                              ),
+                            ),
+                            if (_draftMeetupPosition != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  '已使用地圖上長按放置的圖釘；可以拖動黃色圖釘調整，也可以改用目前位置。',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.place),
-                      title: const Text('集合座標'),
-                      subtitle: Text(
-                        '${selectedPosition.latitude.toStringAsFixed(5)}, ${selectedPosition.longitude.toStringAsFixed(5)}',
-                      ),
-                      trailing: TextButton(
-                        onPressed: useCurrentLocation,
-                        child: const Text('用目前位置'),
-                      ),
-                    ),
-                    if (_draftMeetupPosition != null)
-                      Text(
-                        '已使用地圖上長按放置的圖釘；可以拖動黃色圖釘調整，也可以改用目前位置。',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
                     const SizedBox(height: 16),
                     SizedBox(
                       width: double.infinity,
@@ -1241,24 +1364,17 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
     if (_hasConfirmedLocationSharing) return Future.value(true);
     return showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('分享現場位置'),
-        content: const Text(
-          '你的座標只會提供給同活動中與你有關係的人查看，例如你自己、已關注對象或同小圈圈成員。位置只會在你主動按下分享時更新。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('先不要'),
-          ),
-          FilledButton(
-            onPressed: () {
-              _hasConfirmedLocationSharing = true;
-              Navigator.pop(context, true);
-            },
-            child: const Text('分享位置'),
-          ),
-        ],
+      builder: (context) => _RadarConfirmDialog(
+        icon: Icons.share_location,
+        title: '分享現場位置',
+        message: '你的座標只會提供給同活動中與你有關係的人查看，例如你自己、已關注對象或同小圈圈成員。位置只會在你主動按下分享時更新。',
+        cancelLabel: '先不要',
+        confirmLabel: '分享位置',
+        confirmIcon: Icons.share_location,
+        onConfirm: () {
+          _hasConfirmedLocationSharing = true;
+          Navigator.pop(context, true);
+        },
       ),
     );
   }
@@ -1295,7 +1411,10 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       builder: (context) {
+        final scheme = Theme.of(context).colorScheme;
+        final roleColor = participantRoleColorForScheme(location.role, scheme);
         return SafeArea(
           child: ConstrainedBox(
             constraints: BoxConstraints(
@@ -1305,93 +1424,190 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
               shrinkWrap: true,
               padding: const EdgeInsets.all(16),
               children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        color: participantRoleColorForScheme(
-                          location.role,
-                          Theme.of(context).colorScheme,
+                CosReveal(
+                  child: CosGradientPanel(
+                    icon: Icons.person_pin_circle_outlined,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: roleColor,
+                                borderRadius: BorderRadius.circular(24),
+                                boxShadow: [CosUi.softShadow(roleColor)],
+                              ),
+                              child: CircleAvatar(
+                                radius: 34,
+                                backgroundImage: pickedImageProvider(
+                                  location.avatarUrl,
+                                ),
+                                child: location.avatarUrl.isEmpty
+                                    ? Text(
+                                        location
+                                                .nickname
+                                                .characters
+                                                .firstOrNull ??
+                                            '?',
+                                      )
+                                    : null,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      CosBadge(
+                                        label: _roleText(location),
+                                        icon: Icons.badge_outlined,
+                                        highlighted: true,
+                                        color: roleColor,
+                                      ),
+                                      if (location.isCircleMember)
+                                        CosBadge(
+                                          label: '小圈圈成員',
+                                          icon: Icons.groups_2_outlined,
+                                          color: scheme.tertiary,
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    location.nickname,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .headlineSmall
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w900,
+                                          height: 1.02,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${_statusText(location.presenceStatus)} · ${_elapsedText(location, now: now)}',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                        shape: BoxShape.circle,
-                      ),
-                      child: CircleAvatar(
-                        radius: 28,
-                        backgroundImage: pickedImageProvider(
-                          location.avatarUrl,
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: CosMetricTile(
+                                icon: Icons.schedule,
+                                label: '出沒時間',
+                                value: location.availableTime.isEmpty
+                                    ? '未填寫'
+                                    : location.availableTime,
+                                color: scheme.primary,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: CosMetricTile(
+                                icon: Icons.waving_hand_outlined,
+                                label: '互動方式',
+                                value: location.interactionTags.isEmpty
+                                    ? '未設定'
+                                    : '${location.interactionTags.length} 種',
+                                color: scheme.secondary,
+                              ),
+                            ),
+                          ],
                         ),
-                        child: location.avatarUrl.isEmpty
-                            ? Text(
-                                location.nickname.characters.firstOrNull ?? '?',
-                              )
-                            : null,
-                      ),
+                      ],
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
+                  ),
+                ),
+                if (location.interactionTags.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  CosReveal(
+                    delay: const Duration(milliseconds: 70),
+                    child: CosCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            location.nickname,
-                            style: Theme.of(context).textTheme.titleLarge,
+                          const CosSectionHeader(
+                            title: '歡迎互動方式',
+                            subtitle: '先看對方開放的互動，再決定怎麼打招呼',
+                            icon: Icons.forum_outlined,
                           ),
-                          Text(
-                            '${location.isCircleMember ? '小圈圈成員 · ' : ''}${_roleText(location)} · ${_statusText(location.presenceStatus)} · ${_elapsedText(location, now: now)}',
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final tag in location.interactionTags)
+                                CosBadge(
+                                  label: tag,
+                                  icon: Icons.auto_awesome,
+                                  color: scheme.secondary,
+                                ),
+                            ],
                           ),
                         ],
                       ),
                     ),
-                    if (location.isCircleMember)
-                      Container(
-                        margin: const EdgeInsets.only(left: 8),
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.tertiaryContainer,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.groups,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onTertiaryContainer,
-                        ),
-                      ),
-                  ],
-                ),
-                if (location.availableTime.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text('出沒時間：${location.availableTime}'),
-                ],
-                if (location.interactionTags.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final tag in location.interactionTags)
-                        Chip(label: Text(tag)),
-                    ],
                   ),
                 ],
-                if (location.characterName.isNotEmpty) ...[
+                if (location.characterName.isNotEmpty ||
+                    location.outfitImageUrl.isNotEmpty) ...[
                   const SizedBox(height: 12),
-                  Text('角色：${location.characterName}'),
-                ],
-                if (location.outfitImageUrl.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image(
-                      image: pickedImageProvider(location.outfitImageUrl)!,
-                      height: 220,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          Text('當天出的角：${location.outfitImageUrl}'),
+                  CosReveal(
+                    delay: const Duration(milliseconds: 110),
+                    child: CosCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const CosSectionHeader(
+                            title: '今日角色',
+                            subtitle: '現場辨識用的小提示',
+                            icon: Icons.theater_comedy_outlined,
+                          ),
+                          if (location.characterName.isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            CosInfoTile(
+                              icon: Icons.auto_awesome,
+                              label: '角色',
+                              value: location.characterName,
+                              color: roleColor,
+                            ),
+                          ],
+                          if (location.outfitImageUrl.isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(
+                                CosUi.radiusLg,
+                              ),
+                              child: Image(
+                                image: pickedImageProvider(
+                                  location.outfitImageUrl,
+                                )!,
+                                height: 220,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    Text('當天出的角：${location.outfitImageUrl}'),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -1463,6 +1679,65 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
       'left' => '已離場',
       _ => '可來找我',
     };
+  }
+}
+
+class _RadarConfirmDialog extends StatelessWidget {
+  const _RadarConfirmDialog({
+    required this.icon,
+    required this.title,
+    required this.message,
+    required this.cancelLabel,
+    required this.confirmLabel,
+    required this.confirmIcon,
+    this.onConfirm,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final String cancelLabel;
+  final String confirmLabel;
+  final IconData confirmIcon;
+  final VoidCallback? onConfirm;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      contentPadding: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      content: CosGradientPanel(
+        icon: icon,
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CosSectionHeader(title: title, subtitle: message, icon: icon),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: Text(cancelLabel),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: onConfirm ?? () => Navigator.pop(context, true),
+                    icon: Icon(confirmIcon),
+                    label: Text(confirmLabel),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
