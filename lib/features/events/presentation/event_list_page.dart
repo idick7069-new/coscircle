@@ -15,6 +15,7 @@ import '../../../core/providers/event_providers.dart';
 import '../../../core/repositories/event_repository.dart';
 import '../../../core/repositories/profile_repository.dart';
 import '../../../core/utils/error_message.dart';
+import '../../../core/utils/participant_role_style.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/cos_ui.dart';
 import '../../works/presentation/work_selector.dart';
@@ -414,6 +415,7 @@ class _EventListPageState extends ConsumerState<EventListPage> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       builder: (context) =>
           BookingSheet(event: event, initialDayIndex: dayIndex),
     );
@@ -789,8 +791,10 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
   @override
   Widget build(BuildContext context) {
     final event = widget.event;
-
+    final scheme = Theme.of(context).colorScheme;
     final mediaQuery = MediaQuery.of(context);
+    final roleName = participantRoleLabel(_role.name);
+    final roleColor = participantRoleColorForScheme(_role.name, scheme);
 
     return SafeArea(
       child: AnimatedPadding(
@@ -801,38 +805,78 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
           constraints: BoxConstraints(maxHeight: mediaQuery.size.height * 0.86),
           child: ListView(
             shrinkWrap: true,
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             children: [
-              Row(
-                children: [
-                  const CosIconBubble(icon: Icons.badge_outlined),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.initialParticipant != null
-                              ? '修改出角預訂'
-                              : '發布出角預訂',
-                          style: Theme.of(context).textTheme.titleLarge,
+              CosReveal(
+                child: CosGradientPanel(
+                  icon: Icons.badge_outlined,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CosSectionHeader(
+                        title: widget.initialParticipant != null
+                            ? '修改參戰名片'
+                            : '建立參戰名片',
+                        subtitle: '讓同好知道你哪天會到、扮什麼、怎麼找你互動',
+                        icon: Icons.theater_comedy_outlined,
+                        trailing: CosBadge(
+                          label: roleName,
+                          icon: Icons.badge_outlined,
+                          highlighted: true,
+                          color: roleColor,
                         ),
-                        const SizedBox(height: 3),
-                        Text(
-                          '讓同好知道你會去、當天扮什麼、以及歡迎怎麼互動。',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: CosMetricTile(
+                              icon: Icons.calendar_month_outlined,
+                              label: '參加日',
+                              value: 'D$_dayIndex',
+                              color: scheme.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: CosMetricTile(
+                              icon: Icons.forum_outlined,
+                              label: '互動方式',
+                              value: _interactionTags.isEmpty
+                                  ? '待選擇'
+                                  : '${_interactionTags.length} 種',
+                              color: scheme.secondary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: CosMetricTile(
+                              icon: Icons.sensors_outlined,
+                              label: '現場狀態',
+                              value: _presenceStatusLabel(_presenceStatus),
+                              color: scheme.tertiary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
               const SizedBox(height: 16),
-              CosCard(
+              _BookingSection(
+                title: '日期與身份',
+                subtitle: '先決定這張名片代表哪一天、你在現場的角色',
+                icon: Icons.event_available_outlined,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('參加日', style: Theme.of(context).textTheme.titleSmall),
+                    Text(
+                      '參加日',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
@@ -888,83 +932,113 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
               ),
               if (_role == ParticipantRole.coser) ...[
                 const SizedBox(height: 12),
-                WorkSingleSelector(
-                  label: '作品',
-                  selected: _selectedWork,
-                  onChanged: (work) => setState(() => _selectedWork = work),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _characterController,
-                  decoration: const InputDecoration(labelText: '角色名'),
+                _BookingSection(
+                  title: '作品與角色',
+                  subtitle: '這會成為同好認親時最先看到的資訊',
+                  icon: Icons.auto_awesome,
+                  child: Column(
+                    children: [
+                      WorkSingleSelector(
+                        label: '作品',
+                        selected: _selectedWork,
+                        onChanged: (work) =>
+                            setState(() => _selectedWork = work),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _characterController,
+                        decoration: const InputDecoration(labelText: '角色名'),
+                      ),
+                    ],
+                  ),
                 ),
               ],
               const SizedBox(height: 12),
-              TextField(
-                controller: _availableTimeController,
-                decoration: const InputDecoration(
-                  labelText: '預計出沒時間',
-                  hintText: '例如 13:00 - 16:00、午後、整天',
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text('歡迎互動方式', style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final option in _interactionOptions)
-                    FilterChip(
-                      label: Text(option),
-                      selected: _interactionTags.contains(option),
-                      onSelected: (selected) {
-                        setState(() {
-                          if (selected) {
-                            _interactionTags.add(option);
-                          } else {
-                            _interactionTags.remove(option);
-                          }
-                        });
+              _BookingSection(
+                title: '現場互動',
+                subtitle: '把界線和歡迎方式講清楚，認親會更順',
+                icon: Icons.forum_outlined,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: _availableTimeController,
+                      decoration: const InputDecoration(
+                        labelText: '預計出沒時間',
+                        hintText: '例如 13:00 - 16:00、午後、整天',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      '歡迎互動方式',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final option in _interactionOptions)
+                          FilterChip(
+                            label: Text(option),
+                            selected: _interactionTags.contains(option),
+                            onSelected: (selected) {
+                              setState(() {
+                                if (selected) {
+                                  _interactionTags.add(option);
+                                } else {
+                                  _interactionTags.remove(option);
+                                }
+                              });
+                            },
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: _presenceStatus,
+                      decoration: const InputDecoration(labelText: '現場狀態'),
+                      items: [
+                        for (final option in _statusOptions)
+                          DropdownMenuItem(
+                            value: option.$1,
+                            child: Text(option.$2),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _presenceStatus = value);
+                        }
                       },
                     ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _presenceStatus,
-                decoration: const InputDecoration(labelText: '現場狀態'),
-                items: [
-                  for (final option in _statusOptions)
-                    DropdownMenuItem(value: option.$1, child: Text(option.$2)),
-                ],
-                onChanged: (value) {
-                  if (value != null) setState(() => _presenceStatus = value);
-                },
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: _pickOutfitImage,
-                icon: const Icon(Icons.image_outlined),
-                label: Text(_outfitImagePath == null ? '當天長這樣' : '已選擇照片'),
-              ),
-              if (_outfitImagePath != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _outfitImagePath!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall,
+                  ],
                 ),
-              ],
+              ),
               const SizedBox(height: 12),
-              TextField(
-                controller: _messageController,
-                decoration: const InputDecoration(
-                  labelText: '備註',
-                  hintText: '例如 看到我可以打招呼、社恐請先私訊',
+              _BookingSection(
+                title: '照片與備註',
+                subtitle: '放一點辨識線索，現場比較容易找到彼此',
+                icon: Icons.photo_library_outlined,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _OutfitImagePicker(
+                      imagePath: _outfitImagePath,
+                      onPick: _pickOutfitImage,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _messageController,
+                      decoration: const InputDecoration(
+                        labelText: '備註',
+                        hintText: '例如 看到我可以打招呼、社恐請先私訊',
+                      ),
+                      maxLines: 3,
+                    ),
+                  ],
                 ),
-                maxLines: 3,
               ),
               const SizedBox(height: 16),
               Row(
@@ -1103,5 +1177,127 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
       ref.refresh(eventsProvider.future),
       ref.refresh(eventParticipantsProvider(eventId).future),
     ]);
+  }
+
+  String _presenceStatusLabel(String value) {
+    return _statusOptions
+            .where((option) => option.$1 == value)
+            .map((option) => option.$2)
+            .firstOrNull ??
+        value;
+  }
+}
+
+class _BookingSection extends StatelessWidget {
+  const _BookingSection({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.child,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return CosReveal(
+      offset: const Offset(0, 10),
+      child: CosCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CosSectionHeader(title: title, subtitle: subtitle, icon: icon),
+            const SizedBox(height: 12),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OutfitImagePicker extends StatelessWidget {
+  const _OutfitImagePicker({required this.imagePath, required this.onPick});
+
+  final String? imagePath;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      borderRadius: BorderRadius.circular(CosUi.radiusLg),
+      onTap: onPick,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(CosUi.radiusLg),
+          border: Border.all(
+            color: scheme.outlineVariant.withValues(alpha: 0.7),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 64,
+                height: 72,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(CosUi.radiusMd),
+                  child: imagePath == null
+                      ? DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: scheme.secondary.withValues(alpha: 0.12),
+                          ),
+                          child: Icon(
+                            Icons.add_photo_alternate_outlined,
+                            color: scheme.secondary,
+                          ),
+                        )
+                      : Image(
+                          image: pickedImageProvider(imagePath!)!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: scheme.surfaceContainerHigh,
+                                ),
+                                child: const Icon(Icons.broken_image_outlined),
+                              ),
+                        ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      imagePath == null ? '當天長這樣' : '已選擇照片',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      imagePath == null ? '上傳一張方便同好認出你的照片' : imagePath!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
