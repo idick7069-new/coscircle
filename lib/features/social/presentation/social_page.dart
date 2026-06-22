@@ -101,28 +101,35 @@ class SocialPage extends ConsumerWidget {
                           }
                           return Column(
                             children: [
-                              for (final circle in items)
-                                _CircleCard(
-                                  circle: circle,
-                                  onLeave: () =>
-                                      _confirmLeave(context, ref, circle),
-                                  onEdit: circle.isOwner
-                                      ? () => _editCircle(context, ref, circle)
-                                      : null,
-                                  onOpenMember: (member) {
-                                    if (member.publicCode.isEmpty) return;
-                                    context.push(
-                                      '/profiles/${member.publicCode}',
-                                    );
-                                  },
-                                  onRemoveMember: circle.isOwner
-                                      ? (member) => _confirmRemoveMember(
-                                          context,
-                                          ref,
-                                          circle,
-                                          member,
-                                        )
-                                      : null,
+                              for (final entry in items.indexed)
+                                CosReveal(
+                                  delay: Duration(milliseconds: 45 * entry.$1),
+                                  child: _CircleCard(
+                                    circle: entry.$2,
+                                    onLeave: () =>
+                                        _confirmLeave(context, ref, entry.$2),
+                                    onEdit: entry.$2.isOwner
+                                        ? () => _editCircle(
+                                            context,
+                                            ref,
+                                            entry.$2,
+                                          )
+                                        : null,
+                                    onOpenMember: (member) {
+                                      if (member.publicCode.isEmpty) return;
+                                      context.push(
+                                        '/profiles/${member.publicCode}',
+                                      );
+                                    },
+                                    onRemoveMember: entry.$2.isOwner
+                                        ? (member) => _confirmRemoveMember(
+                                            context,
+                                            ref,
+                                            entry.$2,
+                                            member,
+                                          )
+                                        : null,
+                                  ),
                                 ),
                             ],
                           );
@@ -162,15 +169,20 @@ class SocialPage extends ConsumerWidget {
                       return ListView(
                         padding: const EdgeInsets.all(16),
                         children: [
-                          for (final user in items)
-                            _FollowedUserCard(
-                              user: user,
-                              onOpenProfile: () {
-                                if (user.publicCode.isEmpty) return;
-                                context.push('/profiles/${user.publicCode}');
-                              },
-                              onUnfollow: () =>
-                                  _confirmUnfollow(context, ref, user),
+                          for (final entry in items.indexed)
+                            CosReveal(
+                              delay: Duration(milliseconds: 45 * entry.$1),
+                              child: _FollowedUserCard(
+                                user: entry.$2,
+                                onOpenProfile: () {
+                                  if (entry.$2.publicCode.isEmpty) return;
+                                  context.push(
+                                    '/profiles/${entry.$2.publicCode}',
+                                  );
+                                },
+                                onUnfollow: () =>
+                                    _confirmUnfollow(context, ref, entry.$2),
+                              ),
                             ),
                         ],
                       );
@@ -205,19 +217,13 @@ class SocialPage extends ConsumerWidget {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('取消關注'),
-        content: Text('確定要取消關注「${user.nickname}」？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          FilledButton.tonal(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('取消關注'),
-          ),
-        ],
+      builder: (context) => _SocialConfirmDialog(
+        icon: Icons.favorite_border,
+        title: '取消關注',
+        message: '確定要取消關注「${user.nickname}」？之後活動現場就不會優先顯示這位同好。',
+        cancelLabel: '保留',
+        confirmLabel: '取消關注',
+        confirmIcon: Icons.person_remove_outlined,
       ),
     );
     if (confirmed != true) return;
@@ -259,19 +265,13 @@ class SocialPage extends ConsumerWidget {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('移除成員'),
-        content: Text('確定要將「${member.nickname}」移出「${circle.name}」？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          FilledButton.tonal(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('移除'),
-          ),
-        ],
+      builder: (context) => _SocialConfirmDialog(
+        icon: Icons.person_remove_outlined,
+        title: '移除成員',
+        message: '確定要將「${member.nickname}」移出「${circle.name}」？',
+        cancelLabel: '保留',
+        confirmLabel: '移除',
+        confirmIcon: Icons.person_remove_outlined,
       ),
     );
     if (confirmed != true) return;
@@ -292,19 +292,13 @@ class SocialPage extends ConsumerWidget {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('離開小圈圈'),
-        content: Text('確定要離開「${circle.name}」？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          FilledButton.tonal(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('離開'),
-          ),
-        ],
+      builder: (context) => _SocialConfirmDialog(
+        icon: Icons.logout_outlined,
+        title: '離開小圈圈',
+        message: '確定要離開「${circle.name}」？離開後就不會收到這個小圈圈的集合訊號。',
+        cancelLabel: '保留',
+        confirmLabel: '離開',
+        confirmIcon: Icons.logout_outlined,
       ),
     );
     if (confirmed != true) return;
@@ -314,6 +308,62 @@ class SocialPage extends ConsumerWidget {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('已離開小圈圈')));
+  }
+}
+
+class _SocialConfirmDialog extends StatelessWidget {
+  const _SocialConfirmDialog({
+    required this.icon,
+    required this.title,
+    required this.message,
+    required this.cancelLabel,
+    required this.confirmLabel,
+    required this.confirmIcon,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final String cancelLabel;
+  final String confirmLabel;
+  final IconData confirmIcon;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      contentPadding: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      content: CosGradientPanel(
+        icon: icon,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CosSectionHeader(title: title, subtitle: message, icon: icon),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: Text(cancelLabel),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => Navigator.pop(context, true),
+                    icon: Icon(confirmIcon),
+                    label: Text(confirmLabel),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -354,67 +404,94 @@ class _CircleDialogState extends ConsumerState<_CircleDialog> {
     final editing = widget.circle != null;
 
     return AlertDialog(
-      title: Text(
-        editing
-            ? '編輯小圈圈'
-            : create
-            ? '新建小圈圈'
-            : '加入小圈圈',
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _controller,
-            autofocus: true,
-            decoration: InputDecoration(labelText: create ? '小圈圈名稱' : '邀請碼或網址'),
-          ),
-          if (create) ...[
-            const SizedBox(height: 12),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+      contentPadding: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      content: CosGradientPanel(
+        icon: create ? Icons.groups_2_outlined : Icons.qr_code_2,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CosSectionHeader(
+              title: editing
+                  ? '編輯小圈圈'
+                  : create
+                  ? '新建小圈圈'
+                  : '加入小圈圈',
+              subtitle: create ? '建立一個可以約場、集合和認親的同好群組' : '輸入朋友提供的邀請碼或網址',
+              icon: create ? Icons.groups_2_outlined : Icons.qr_code_2,
+            ),
+            const SizedBox(height: 16),
             TextField(
-              controller: _descriptionController,
-              decoration: const InputDecoration(labelText: '小圈圈說明'),
-              maxLines: 3,
+              controller: _controller,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: create ? '小圈圈名稱' : '邀請碼或網址',
+              ),
+            ),
+            if (create) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _descriptionController,
+                decoration: const InputDecoration(labelText: '小圈圈說明'),
+                maxLines: 3,
+              ),
+            ],
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('取消'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () async {
+                      final value = _controller.text.trim();
+                      if (value.isEmpty) return;
+                      final repository = ref.read(socialRepositoryProvider);
+                      if (editing) {
+                        await repository.updateCircle(
+                          circleId: widget.circle!.id,
+                          name: value,
+                          description: _descriptionController.text.trim(),
+                        );
+                      } else if (create) {
+                        await repository.createCircle(
+                          value,
+                          description: _descriptionController.text.trim(),
+                        );
+                      } else {
+                        await repository.joinCircle(value);
+                      }
+                      ref.invalidate(circlesProvider);
+                      if (context.mounted) Navigator.pop(context);
+                    },
+                    icon: Icon(
+                      editing
+                          ? Icons.save_outlined
+                          : create
+                          ? Icons.group_add
+                          : Icons.login,
+                    ),
+                    label: Text(
+                      editing
+                          ? '儲存'
+                          : create
+                          ? '建立'
+                          : '加入',
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
-        ],
+        ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: () async {
-            final value = _controller.text.trim();
-            if (value.isEmpty) return;
-            final repository = ref.read(socialRepositoryProvider);
-            if (editing) {
-              await repository.updateCircle(
-                circleId: widget.circle!.id,
-                name: value,
-                description: _descriptionController.text.trim(),
-              );
-            } else if (create) {
-              await repository.createCircle(
-                value,
-                description: _descriptionController.text.trim(),
-              );
-            } else {
-              await repository.joinCircle(value);
-            }
-            ref.invalidate(circlesProvider);
-            if (context.mounted) Navigator.pop(context);
-          },
-          child: Text(
-            editing
-                ? '儲存'
-                : create
-                ? '建立'
-                : '加入',
-          ),
-        ),
-      ],
     );
   }
 }
@@ -603,28 +680,60 @@ class _CircleCard extends StatelessWidget {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(circle.name),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            QrImageView(
-              data: circle.inviteUrl.isEmpty
-                  ? circle.inviteCode
-                  : circle.inviteUrl,
-              version: QrVersions.auto,
-              size: 220,
-              backgroundColor: Colors.white,
-            ),
-            const SizedBox(height: 12),
-            SelectableText(circle.inviteCode),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('關閉'),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+        contentPadding: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
+        content: CosGradientPanel(
+          icon: Icons.qr_code_2,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CosSectionHeader(
+                title: circle.name,
+                subtitle: '讓同好掃描後加入這個小圈圈',
+                icon: Icons.qr_code_2,
+              ),
+              const SizedBox(height: 16),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(CosUi.radiusLg),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: QrImageView(
+                    data: circle.inviteUrl.isEmpty
+                        ? circle.inviteCode
+                        : circle.inviteUrl,
+                    version: QrVersions.auto,
+                    size: 220,
+                    backgroundColor: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              CosBadge(
+                label: circle.inviteCode,
+                icon: Icons.vpn_key_outlined,
+                highlighted: true,
+              ),
+              const SizedBox(height: 12),
+              SelectableText(
+                circle.inviteUrl.isEmpty ? circle.inviteCode : circle.inviteUrl,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.check),
+                  label: const Text('完成'),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -737,30 +846,98 @@ class _FollowedUserCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final nickname = user.nickname.isEmpty ? '未命名使用者' : user.nickname;
+    final initial = nickname.characters.firstOrNull ?? '?';
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: CosCard(
-        padding: EdgeInsets.zero,
-        child: ListTile(
-          leading: CircleAvatar(
-            backgroundImage: pickedImageProvider(user.avatarUrl),
-            child: user.avatarUrl.isEmpty
-                ? Text(user.nickname.characters.firstOrNull ?? '?')
-                : null,
-          ),
-          title: Text(user.nickname.isEmpty ? '未命名使用者' : user.nickname),
-          subtitle: user.bio.isEmpty
-              ? const Text('尚未填寫自我介紹')
-              : Text(user.bio, maxLines: 2, overflow: TextOverflow.ellipsis),
-          onTap: onOpenProfile,
-          trailing: PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'unfollow') onUnfollow();
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'unfollow', child: Text('取消關注')),
-            ],
-          ),
+        onTap: onOpenProfile,
+        child: Row(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                CircleAvatar(
+                  radius: 26,
+                  backgroundColor: scheme.primaryContainer,
+                  backgroundImage: pickedImageProvider(user.avatarUrl),
+                  child: user.avatarUrl.isEmpty
+                      ? Text(
+                          initial,
+                          style: TextStyle(
+                            color: scheme.onPrimaryContainer,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        )
+                      : null,
+                ),
+                Positioned(
+                  right: -2,
+                  bottom: -2,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerLowest,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(2),
+                      child: Icon(
+                        Icons.favorite,
+                        size: 14,
+                        color: scheme.primary,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          nickname,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      CosBadge(
+                        label: '已關注',
+                        icon: Icons.favorite_border,
+                        color: scheme.primary,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    user.bio.isEmpty ? '尚未填寫自我介紹，現場掃碼後可以快速認親。' : user.bio,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            PopupMenuButton<String>(
+              tooltip: '更多同好操作',
+              onSelected: (value) {
+                if (value == 'unfollow') onUnfollow();
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'unfollow', child: Text('取消關注')),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -793,33 +970,36 @@ class _SocialActionGrid extends StatelessWidget {
       children: [
         for (final entry in actions.indexed) ...[
           Expanded(
-            child: CosCard(
-              onTap: entry.$2.onTap,
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CosIconBubble(
-                    icon: entry.$2.icon,
-                    color: switch (entry.$1) {
-                      0 => scheme.primary,
-                      1 => scheme.secondary,
-                      _ => scheme.tertiary,
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    entry.$2.title,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    entry.$2.subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
+            child: CosReveal(
+              delay: Duration(milliseconds: 35 * entry.$1),
+              child: CosCard(
+                onTap: entry.$2.onTap,
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CosIconBubble(
+                      icon: entry.$2.icon,
+                      color: switch (entry.$1) {
+                        0 => scheme.primary,
+                        1 => scheme.secondary,
+                        _ => scheme.tertiary,
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      entry.$2.title,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      entry.$2.subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
