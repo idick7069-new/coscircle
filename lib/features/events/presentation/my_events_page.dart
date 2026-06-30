@@ -38,7 +38,7 @@ class _MyEventsPageState extends ConsumerState<MyEventsPage> {
           future: _itemsFuture,
           builder: (context, snapshot) {
             if (!snapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
+              return const _MyEventsLoadingState();
             }
             final allItems = snapshot.data!..sort(_compareBookingItems);
             final visibleItems = allItems
@@ -207,6 +207,159 @@ class _MyEventsPageState extends ConsumerState<MyEventsPage> {
       MaterialPageRoute<void>(
         builder: (_) =>
             EventBookingSharePage(event: item.event, bookings: bookings),
+      ),
+    );
+  }
+}
+
+class _MyEventsLoadingState extends StatelessWidget {
+  const _MyEventsLoadingState();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const CosPageHeader(
+          title: '我的活動',
+          subtitle: '正在整理你的參戰票夾',
+          leading: CosIconBubble(icon: Icons.event_available_outlined),
+        ),
+        const SizedBox(height: 8),
+        CosGradientPanel(
+          icon: Icons.confirmation_number_outlined,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const CosSectionHeader(
+                title: '同步參戰名片',
+                subtitle: '整理即將出席的場次、角色名片與分享圖素材',
+                icon: Icons.wallet_outlined,
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  for (var index = 0; index < 3; index += 1) ...[
+                    Expanded(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color:
+                              (index == 0
+                                      ? scheme.primary
+                                      : index == 1
+                                      ? scheme.secondary
+                                      : scheme.tertiary)
+                                  .withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(CosUi.radiusMd),
+                          border: Border.all(
+                            color: scheme.outlineVariant.withValues(
+                              alpha: 0.34,
+                            ),
+                          ),
+                        ),
+                        child: const SizedBox(height: 64),
+                      ),
+                    ),
+                    if (index < 2) const SizedBox(width: 8),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        for (var index = 0; index < 2; index += 1) ...[
+          _MyBookingSkeletonCard(compact: index == 1),
+          const SizedBox(height: 10),
+        ],
+      ],
+    );
+  }
+}
+
+class _MyBookingSkeletonCard extends StatelessWidget {
+  const _MyBookingSkeletonCard({this.compact = false});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return CosCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  scheme.primary.withValues(alpha: 0.12),
+                  scheme.surfaceContainerLowest,
+                ],
+              ),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(CosUi.radiusLg),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 23,
+                    backgroundColor: scheme.primary.withValues(alpha: 0.18),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _MyEventsSkeletonLine(widthFactor: 0.72, height: 16),
+                        const SizedBox(height: 9),
+                        _MyEventsSkeletonLine(
+                          widthFactor: compact ? 0.44 : 0.62,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Expanded(child: _MyEventsSkeletonLine(widthFactor: 0.88)),
+                const SizedBox(width: 10),
+                Expanded(child: _MyEventsSkeletonLine(widthFactor: 0.72)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MyEventsSkeletonLine extends StatelessWidget {
+  const _MyEventsSkeletonLine({required this.widthFactor, this.height = 10});
+
+  final double widthFactor;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return FractionallySizedBox(
+      widthFactor: widthFactor,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: scheme.onSurface.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(99),
+        ),
+        child: SizedBox(height: height),
       ),
     );
   }

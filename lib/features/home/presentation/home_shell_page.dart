@@ -20,6 +20,33 @@ class HomeShellPage extends ConsumerStatefulWidget {
 class _HomeShellPageState extends ConsumerState<HomeShellPage> {
   int _index = 1;
   bool _showingExitConfirm = false;
+  static const _destinations = [
+    _HomeNavDestination(
+      icon: Icons.badge_outlined,
+      selectedIcon: Icons.badge,
+      label: '名片',
+    ),
+    _HomeNavDestination(
+      icon: Icons.event_note_outlined,
+      selectedIcon: Icons.event_note,
+      label: '活動',
+    ),
+    _HomeNavDestination(
+      icon: Icons.location_on_outlined,
+      selectedIcon: Icons.location_on,
+      label: '現場',
+    ),
+    _HomeNavDestination(
+      icon: Icons.diversity_3_outlined,
+      selectedIcon: Icons.diversity_3,
+      label: '同好',
+    ),
+    _HomeNavDestination(
+      icon: Icons.tune_outlined,
+      selectedIcon: Icons.tune,
+      label: '設定',
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -66,38 +93,22 @@ class _HomeShellPageState extends ConsumerState<HomeShellPage> {
                 border: Border.all(color: scheme.outlineVariant),
                 boxShadow: [CosUi.softShadow(scheme.shadow)],
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(CosUi.radiusXl),
-                child: NavigationBar(
-                  selectedIndex: _index,
-                  onDestinationSelected: (value) =>
-                      setState(() => _index = value),
-                  destinations: const [
-                    NavigationDestination(
-                      icon: Icon(Icons.badge_outlined),
-                      selectedIcon: Icon(Icons.badge),
-                      label: '名片',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.event_note_outlined),
-                      selectedIcon: Icon(Icons.event_note),
-                      label: '活動',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.location_on_outlined),
-                      selectedIcon: Icon(Icons.location_on),
-                      label: '現場',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.diversity_3_outlined),
-                      selectedIcon: Icon(Icons.diversity_3),
-                      label: '同好',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.tune_outlined),
-                      selectedIcon: Icon(Icons.tune),
-                      label: '設定',
-                    ),
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: Row(
+                  children: [
+                    for (final entry in _destinations.indexed)
+                      Expanded(
+                        child: _HomeNavButton(
+                          destination: entry.$2,
+                          selected: _index == entry.$1,
+                          onTap: () {
+                            if (_index == entry.$1) return;
+                            HapticFeedback.selectionClick();
+                            setState(() => _index = entry.$1);
+                          },
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -136,5 +147,94 @@ class _HomeShellPageState extends ConsumerState<HomeShellPage> {
     if (shouldExit == true) {
       await SystemNavigator.pop();
     }
+  }
+}
+
+class _HomeNavDestination {
+  const _HomeNavDestination({
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+  });
+
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+}
+
+class _HomeNavButton extends StatelessWidget {
+  const _HomeNavButton({
+    required this.destination,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _HomeNavDestination destination;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final accent = selected ? scheme.primary : scheme.onSurfaceVariant;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: destination.label,
+      child: Tooltip(
+        message: destination.label,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(CosUi.radiusLg),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: reduceMotion
+                ? Duration.zero
+                : const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            decoration: BoxDecoration(
+              color: selected
+                  ? scheme.primaryContainer.withValues(alpha: 0.88)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(CosUi.radiusLg),
+              border: Border.all(
+                color: selected
+                    ? scheme.primary.withValues(alpha: 0.22)
+                    : Colors.transparent,
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedScale(
+                  duration: reduceMotion
+                      ? Duration.zero
+                      : const Duration(milliseconds: 180),
+                  curve: Curves.easeOutBack,
+                  scale: selected ? 1.08 : 1,
+                  child: Icon(
+                    selected ? destination.selectedIcon : destination.icon,
+                    color: accent,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  destination.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: selected ? scheme.onPrimaryContainer : accent,
+                    fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

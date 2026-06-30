@@ -51,41 +51,11 @@ class _CircleQrScannerPageState extends ConsumerState<CircleQrScannerPage> {
               }
             },
           ),
-          Positioned(
-            left: 42,
-            right: 42,
-            top: 150,
-            bottom: 210,
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(CosUi.radiusXl),
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.primary,
-                    width: 3,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 24,
-            right: 24,
-            bottom: 32,
-            child: CosCard(
-              child: Row(
-                children: [
-                  const CosIconBubble(icon: Icons.groups_2_outlined),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      '請掃描小圈圈邀請 QRCode',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          CosScannerOverlay(
+            icon: Icons.groups_2_outlined,
+            title: '掃描小圈圈邀請',
+            message: '對準朋友的小圈圈 QRCode，加入後就能一起約場與看集合訊號。',
+            accentColor: Theme.of(context).colorScheme.primary,
           ),
         ],
       ),

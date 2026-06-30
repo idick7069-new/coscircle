@@ -109,10 +109,7 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
           ),
           if (_errorText != null) ...[
             const SizedBox(height: 8),
-            Text(
-              _errorText!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
+            _OnboardingErrorBanner(message: _errorText!),
           ],
           const SizedBox(height: 16),
           Row(
@@ -287,11 +284,14 @@ class _ProfileSetupStep extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   for (final role in roleOptions)
-                    FilterChip(
+                    _OnboardingChoiceChip(
                       label: Text(role),
                       selected: roles.contains(role),
-                      onSelected: (selected) {
-                        selected ? roles.add(role) : roles.remove(role);
+                      icon: Icons.badge_outlined,
+                      onTap: () {
+                        roles.contains(role)
+                            ? roles.remove(role)
+                            : roles.add(role);
                         onChanged();
                       },
                     ),
@@ -305,11 +305,14 @@ class _ProfileSetupStep extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   for (final region in regionOptions)
-                    FilterChip(
+                    _OnboardingChoiceChip(
                       label: Text(region),
                       selected: regions.contains(region),
-                      onSelected: (selected) {
-                        selected ? regions.add(region) : regions.remove(region);
+                      icon: Icons.place_outlined,
+                      onTap: () {
+                        regions.contains(region)
+                            ? regions.remove(region)
+                            : regions.add(region);
                         onChanged();
                       },
                     ),
@@ -319,6 +322,102 @@ class _ProfileSetupStep extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _OnboardingChoiceChip extends StatelessWidget {
+  const _OnboardingChoiceChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Widget label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return InkWell(
+      borderRadius: BorderRadius.circular(99),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: reduceMotion
+            ? Duration.zero
+            : const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected
+              ? scheme.primaryContainer
+              : scheme.surfaceContainerHighest.withValues(alpha: 0.42),
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(
+            color: selected
+                ? scheme.primary.withValues(alpha: 0.42)
+                : scheme.outlineVariant.withValues(alpha: 0.58),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              selected ? Icons.check_circle : icon,
+              size: 16,
+              color: selected ? scheme.primary : scheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 6),
+            DefaultTextStyle.merge(
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: selected ? scheme.onPrimaryContainer : scheme.onSurface,
+                fontWeight: FontWeight.w900,
+              ),
+              child: label,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OnboardingErrorBanner extends StatelessWidget {
+  const _OnboardingErrorBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.errorContainer.withValues(alpha: 0.28),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
+        border: Border.all(color: scheme.error.withValues(alpha: 0.22)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline, color: scheme.error, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: scheme.error,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

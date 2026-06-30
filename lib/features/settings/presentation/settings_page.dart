@@ -157,6 +157,7 @@ class _SettingsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (children.isEmpty) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Column(
@@ -164,7 +165,25 @@ class _SettingsSection extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(left: 4, bottom: 8),
-            child: Text(title, style: Theme.of(context).textTheme.titleSmall),
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: scheme.primary,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+                ),
+              ],
+            ),
           ),
           CosCard(
             padding: EdgeInsets.zero,
@@ -205,13 +224,61 @@ class _SettingsAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      leading: CosIconBubble(icon: icon, size: 42),
-      title: Text(title),
-      subtitle: Text(subtitle),
-      trailing: trailing ?? const Icon(Icons.chevron_right),
-      onTap: onTap,
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              CosIconBubble(icon: icon, size: 42),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.48),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child:
+                      trailing ??
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

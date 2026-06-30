@@ -33,41 +33,11 @@ class _ProfileQrScannerPageState extends State<ProfileQrScannerPage> {
               context.replace('/profiles/$publicCode');
             },
           ),
-          Positioned(
-            left: 42,
-            right: 42,
-            top: 150,
-            bottom: 210,
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(CosUi.radiusXl),
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.secondary,
-                    width: 3,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 24,
-            right: 24,
-            bottom: 32,
-            child: CosCard(
-              child: Row(
-                children: [
-                  const CosIconBubble(icon: Icons.qr_code_scanner),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      '請掃描 CosCircle 個人資訊 QRCode',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          CosScannerOverlay(
+            icon: Icons.qr_code_scanner,
+            title: '掃描個人名片',
+            message: '對準 CosCircle 個人 QRCode，確認對方坑單、照片牆與交流資訊。',
+            accentColor: Theme.of(context).colorScheme.secondary,
           ),
         ],
       ),

@@ -223,9 +223,48 @@ class CosCard extends StatelessWidget {
     );
 
     if (onTap == null) return content;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(borderRadius: radius, onTap: onTap, child: content),
+    return _CosCardTapSurface(radius: radius, onTap: onTap!, child: content);
+  }
+}
+
+class _CosCardTapSurface extends StatefulWidget {
+  const _CosCardTapSurface({
+    required this.radius,
+    required this.onTap,
+    required this.child,
+  });
+
+  final BorderRadius radius;
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  State<_CosCardTapSurface> createState() => _CosCardTapSurfaceState();
+}
+
+class _CosCardTapSurfaceState extends State<_CosCardTapSurface> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return AnimatedScale(
+      duration: reduceMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 110),
+      curve: Curves.easeOutCubic,
+      scale: _pressed ? 0.985 : 1,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: widget.radius,
+          onTap: widget.onTap,
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapCancel: () => setState(() => _pressed = false),
+          onTapUp: (_) => setState(() => _pressed = false),
+          child: widget.child,
+        ),
+      ),
     );
   }
 }
@@ -284,6 +323,173 @@ class _CosRevealState extends State<CosReveal>
     return FadeTransition(
       opacity: _opacity,
       child: SlideTransition(position: _slide, child: widget.child),
+    );
+  }
+}
+
+class CosScannerOverlay extends StatefulWidget {
+  const CosScannerOverlay({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.accentColor,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final Color? accentColor;
+
+  @override
+  State<CosScannerOverlay> createState() => _CosScannerOverlayState();
+}
+
+class _CosScannerOverlayState extends State<CosScannerOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat(reverse: true);
+    _pulse = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final accent = widget.accentColor ?? scheme.secondary;
+    return IgnorePointer(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment.center,
+                  radius: 0.86,
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: 0.22),
+                    Colors.black.withValues(alpha: 0.56),
+                  ],
+                  stops: const [0, 0.56, 1],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 42,
+            right: 42,
+            top: 142,
+            bottom: 218,
+            child: AnimatedBuilder(
+              animation: _pulse,
+              builder: (context, child) {
+                final glow = reduceMotion ? 0.65 : 0.44 + _pulse.value * 0.28;
+                return DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(CosUi.radiusXl),
+                    border: Border.all(
+                      color: accent.withValues(alpha: glow),
+                      width: 2.4,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: accent.withValues(alpha: glow * 0.28),
+                        blurRadius: 26,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  child: child,
+                );
+              },
+              child: Stack(
+                children: [
+                  for (final corner in _ScannerCornerAlignment.values)
+                    _ScannerCorner(alignment: corner.alignment),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            left: 24,
+            right: 24,
+            bottom: 32,
+            child: CosCard(
+              child: Row(
+                children: [
+                  CosIconBubble(icon: widget.icon, color: accent),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.title,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          widget.message,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+enum _ScannerCornerAlignment {
+  topLeft(Alignment.topLeft),
+  topRight(Alignment.topRight),
+  bottomLeft(Alignment.bottomLeft),
+  bottomRight(Alignment.bottomRight);
+
+  const _ScannerCornerAlignment(this.alignment);
+
+  final Alignment alignment;
+}
+
+class _ScannerCorner extends StatelessWidget {
+  const _ScannerCorner({required this.alignment});
+
+  final Alignment alignment;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Align(
+      alignment: alignment,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Icon(
+          Icons.crop_free_rounded,
+          color: scheme.tertiary.withValues(alpha: 0.9),
+          size: 24,
+        ),
+      ),
     );
   }
 }

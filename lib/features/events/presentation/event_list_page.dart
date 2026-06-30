@@ -136,9 +136,14 @@ class _EventListPageState extends ConsumerState<EventListPage> {
             ],
           );
         },
-        error: (error, stack) =>
-            Center(child: Text('活動載入失敗：${userFacingError(error)}')),
-        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stack) => _EventListStateView(
+          icon: Icons.wifi_off_outlined,
+          title: '活動載入失敗',
+          message: userFacingError(error),
+          actionLabel: '重新整理',
+          onAction: () => ref.invalidate(eventsProvider),
+        ),
+        loading: () => const _EventListLoadingView(),
       ),
     );
   }
@@ -424,6 +429,142 @@ class _EventListPageState extends ConsumerState<EventListPage> {
   Future<void> _refreshEvents() async {
     ref.invalidate(eventParticipantsProvider);
     await Future.wait([ref.refresh(eventsProvider.future)]);
+  }
+}
+
+class _EventListLoadingView extends StatelessWidget {
+  const _EventListLoadingView();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+      children: const [
+        _EventListStateView(
+          icon: Icons.radar_outlined,
+          title: '正在掃描活動訊號',
+          message: '整理近期場次、同好參與和小圈圈動態。',
+        ),
+        SizedBox(height: 14),
+        _EventListSkeletonCard(),
+        SizedBox(height: 10),
+        _EventListSkeletonCard(compact: true),
+      ],
+    );
+  }
+}
+
+class _EventListStateView extends StatelessWidget {
+  const _EventListStateView({
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return CosReveal(
+      child: CosGradientPanel(
+        icon: icon,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CosIconBubble(icon: icon, color: scheme.primary, size: 52),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(message, style: Theme.of(context).textTheme.bodyMedium),
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: onAction,
+                icon: const Icon(Icons.refresh),
+                label: Text(actionLabel!),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EventListSkeletonCard extends StatelessWidget {
+  const _EventListSkeletonCard({this.compact = false});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return CosCard(
+      child: Row(
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: scheme.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(CosUi.radiusMd),
+            ),
+            child: SizedBox(width: 68, height: compact ? 58 : 78),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SkeletonLine(widthFactor: 0.74, height: 16),
+                const SizedBox(height: 9),
+                _SkeletonLine(widthFactor: compact ? 0.45 : 0.92),
+                const SizedBox(height: 9),
+                _SkeletonLine(widthFactor: compact ? 0.36 : 0.62),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SkeletonLine extends StatelessWidget {
+  const _SkeletonLine({required this.widthFactor, this.height = 10});
+
+  final double widthFactor;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return FractionallySizedBox(
+      widthFactor: widthFactor,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: scheme.onSurface.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(99),
+        ),
+        child: SizedBox(height: height),
+      ),
+    );
   }
 }
 
@@ -900,32 +1041,9 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    SegmentedButton<ParticipantRole>(
-                      segments: const [
-                        ButtonSegment(
-                          value: ParticipantRole.photographer,
-                          label: Text('攝影'),
-                          icon: Icon(Icons.camera_alt),
-                        ),
-                        ButtonSegment(
-                          value: ParticipantRole.coser,
-                          label: Text('Coser'),
-                          icon: Icon(Icons.face),
-                        ),
-                        ButtonSegment(
-                          value: ParticipantRole.manager,
-                          label: Text('馬內'),
-                          icon: Icon(Icons.support_agent),
-                        ),
-                        ButtonSegment(
-                          value: ParticipantRole.self,
-                          label: Text('路人'),
-                          icon: Icon(Icons.person),
-                        ),
-                      ],
-                      selected: {_role},
-                      onSelectionChanged: (value) =>
-                          setState(() => _role = value.first),
+                    _RoleChoiceGrid(
+                      selectedRole: _role,
+                      onChanged: (role) => setState(() => _role = role),
                     ),
                   ],
                 ),
@@ -981,15 +1099,15 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
                       runSpacing: 8,
                       children: [
                         for (final option in _interactionOptions)
-                          FilterChip(
-                            label: Text(option),
+                          _InteractionChoiceChip(
+                            label: option,
                             selected: _interactionTags.contains(option),
-                            onSelected: (selected) {
+                            onTap: () {
                               setState(() {
-                                if (selected) {
-                                  _interactionTags.add(option);
-                                } else {
+                                if (_interactionTags.contains(option)) {
                                   _interactionTags.remove(option);
+                                } else {
+                                  _interactionTags.add(option);
                                 }
                               });
                             },
@@ -1041,37 +1159,13 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
                 ),
               ),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  if (widget.initialParticipant != null)
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: _submitting
-                            ? null
-                            : () => _removeAttendance(context, event),
-                        child: const Text('取消出席'),
-                      ),
-                    ),
-                  if (widget.initialParticipant != null)
-                    const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: _submitting
-                          ? null
-                          : () => _saveAttendance(context, event),
-                      child: _submitting
-                          ? const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Text(
-                              widget.initialParticipant != null
-                                  ? '儲存出席'
-                                  : '我會去',
-                            ),
-                    ),
-                  ),
-                ],
+              _BookingSubmitBar(
+                editing: widget.initialParticipant != null,
+                submitting: _submitting,
+                onRemove: widget.initialParticipant == null
+                    ? null
+                    : () => _removeAttendance(context, event),
+                onSave: () => _saveAttendance(context, event),
               ),
             ],
           ),
@@ -1212,6 +1306,269 @@ class _BookingSection extends StatelessWidget {
             CosSectionHeader(title: title, subtitle: subtitle, icon: icon),
             const SizedBox(height: 12),
             child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RoleChoiceGrid extends StatelessWidget {
+  const _RoleChoiceGrid({required this.selectedRole, required this.onChanged});
+
+  final ParticipantRole selectedRole;
+  final ValueChanged<ParticipantRole> onChanged;
+
+  static const _roles = [
+    (ParticipantRole.photographer, Icons.camera_alt_outlined, '攝影', '捕捉現場'),
+    (
+      ParticipantRole.coser,
+      Icons.face_retouching_natural_outlined,
+      'Coser',
+      '角色亮相',
+    ),
+    (ParticipantRole.manager, Icons.support_agent_outlined, '馬內', '協助同行'),
+    (ParticipantRole.self, Icons.person_pin_circle_outlined, '路人', '自由逛場'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = constraints.maxWidth < 360;
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final role in _roles)
+              SizedBox(
+                width: narrow
+                    ? constraints.maxWidth
+                    : (constraints.maxWidth - 8) / 2,
+                child: _RoleChoiceCard(
+                  role: role.$1,
+                  icon: role.$2,
+                  title: role.$3,
+                  subtitle: role.$4,
+                  selected: selectedRole == role.$1,
+                  onTap: () => onChanged(role.$1),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _RoleChoiceCard extends StatelessWidget {
+  const _RoleChoiceCard({
+    required this.role,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final ParticipantRole role;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final accent = participantRoleColorForScheme(role.name, scheme);
+    return InkWell(
+      borderRadius: BorderRadius.circular(CosUi.radiusMd),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: reduceMotion
+            ? Duration.zero
+            : const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: selected
+              ? accent.withValues(alpha: 0.14)
+              : scheme.surfaceContainerHighest.withValues(alpha: 0.34),
+          borderRadius: BorderRadius.circular(CosUi.radiusMd),
+          border: Border.all(
+            color: selected
+                ? accent.withValues(alpha: 0.5)
+                : scheme.outlineVariant.withValues(alpha: 0.5),
+            width: selected ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            CosIconBubble(icon: icon, color: accent, size: 36),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            AnimatedScale(
+              duration: reduceMotion
+                  ? Duration.zero
+                  : const Duration(milliseconds: 150),
+              scale: selected ? 1 : 0.86,
+              child: Icon(
+                selected ? Icons.check_circle : Icons.circle_outlined,
+                color: selected ? accent : scheme.outline,
+                size: 18,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InteractionChoiceChip extends StatelessWidget {
+  const _InteractionChoiceChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return InkWell(
+      borderRadius: BorderRadius.circular(99),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: reduceMotion
+            ? Duration.zero
+            : const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected
+              ? scheme.secondaryContainer
+              : scheme.surfaceContainerHighest.withValues(alpha: 0.42),
+          borderRadius: BorderRadius.circular(99),
+          border: Border.all(
+            color: selected
+                ? scheme.secondary.withValues(alpha: 0.45)
+                : scheme.outlineVariant.withValues(alpha: 0.6),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              selected ? Icons.check_circle : Icons.add_circle_outline,
+              color: selected ? scheme.secondary : scheme.onSurfaceVariant,
+              size: 16,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: selected
+                    ? scheme.onSecondaryContainer
+                    : scheme.onSurface,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BookingSubmitBar extends StatelessWidget {
+  const _BookingSubmitBar({
+    required this.editing,
+    required this.submitting,
+    required this.onSave,
+    this.onRemove,
+  });
+
+  final bool editing;
+  final bool submitting;
+  final VoidCallback onSave;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(CosUi.radiusLg),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.7)),
+        boxShadow: [CosUi.softShadow(scheme.shadow)],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          children: [
+            if (onRemove != null) ...[
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: submitting ? null : onRemove,
+                  icon: const Icon(Icons.event_busy_outlined),
+                  label: const Text('取消出席'),
+                ),
+              ),
+              const SizedBox(width: 10),
+            ],
+            Expanded(
+              flex: 2,
+              child: FilledButton.icon(
+                onPressed: submitting ? null : onSave,
+                icon: submitting
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        editing
+                            ? Icons.save_outlined
+                            : Icons.how_to_reg_outlined,
+                      ),
+                label: Text(
+                  submitting
+                      ? '同步中'
+                      : editing
+                      ? '儲存出席'
+                      : '我會去',
+                ),
+              ),
+            ),
           ],
         ),
       ),

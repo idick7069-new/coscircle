@@ -120,10 +120,87 @@ class EventDetailPage extends ConsumerWidget {
             ],
           );
         },
-        error: (error, stack) =>
-            Center(child: Text('活動載入失敗：${userFacingError(error)}')),
-        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stack) => _EventDetailStateCard(
+          icon: Icons.wifi_off_outlined,
+          title: '活動載入失敗',
+          message: userFacingError(error),
+          actionLabel: '重新整理',
+          onAction: () => ref.invalidate(eventDetailProvider(eventId)),
+        ),
+        loading: () => const _EventDetailLoadingCard(),
       ),
+    );
+  }
+}
+
+class _EventDetailLoadingCard extends StatelessWidget {
+  const _EventDetailLoadingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return const CosReveal(
+      child: _EventDetailStateCard(
+        icon: Icons.event_available_outlined,
+        title: '正在整理活動訊號',
+        message: '載入場次資訊、同好預定與現場交流線索。',
+      ),
+    );
+  }
+}
+
+class _EventDetailStateCard extends StatelessWidget {
+  const _EventDetailStateCard({
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+      children: [
+        CosGradientPanel(
+          icon: icon,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  CosIconBubble(icon: icon, color: scheme.primary, size: 52),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(message, style: Theme.of(context).textTheme.bodyMedium),
+              if (actionLabel != null && onAction != null) ...[
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: onAction,
+                  icon: const Icon(Icons.refresh),
+                  label: Text(actionLabel!),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -498,8 +575,11 @@ class _ParticipantsSection extends ConsumerWidget {
           ),
         );
       },
-      error: (error, stack) => Text('參加者載入失敗：${userFacingError(error)}'),
-      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, stack) => _ParticipantPanelMessage(
+        icon: Icons.wifi_off_outlined,
+        message: '參加者載入失敗：${userFacingError(error)}',
+      ),
+      loading: () => const _ParticipantsLoadingPanel(),
     );
   }
 
@@ -669,9 +749,9 @@ class _ParticipantsSection extends ConsumerWidget {
                         ref.invalidate(eventsProvider);
                         if (!context.mounted) return;
                         Navigator.of(context).pop();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('已封鎖使用者')),
-                        );
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(const SnackBar(content: Text('已封鎖使用者')));
                       },
                       icon: const Icon(Icons.block_outlined),
                       label: const Text('封鎖此使用者'),
@@ -697,6 +777,110 @@ class _ParticipantsSection extends ConsumerWidget {
     ];
     if (details.isEmpty) return label;
     return '$label / ${details.join(' / ')}';
+  }
+}
+
+class _ParticipantsLoadingPanel extends StatelessWidget {
+  const _ParticipantsLoadingPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return CosCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const CosSectionHeader(
+            title: '現場同好',
+            subtitle: '正在整理同好預定與交流訊號',
+            icon: Icons.diversity_3_outlined,
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              for (var index = 0; index < 3; index += 1) ...[
+                _ParticipantSkeletonChip(color: scheme.primary),
+                if (index < 2) const SizedBox(width: 10),
+              ],
+            ],
+          ),
+          const SizedBox(height: 12),
+          _ParticipantPanelMessage(
+            icon: Icons.radar_outlined,
+            message: '載入中，等等就能看到可開話題的人。',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ParticipantSkeletonChip extends StatelessWidget {
+  const _ParticipantSkeletonChip({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Expanded(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(CosUi.radiusMd),
+          border: Border.all(color: color.withValues(alpha: 0.12)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 14,
+                backgroundColor: color.withValues(alpha: 0.2),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: scheme.onSurface.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: const SizedBox(height: 10),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ParticipantPanelMessage extends StatelessWidget {
+  const _ParticipantPanelMessage({required this.icon, required this.message});
+
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.42),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            CosIconBubble(icon: icon, size: 34),
+            const SizedBox(width: 10),
+            Expanded(child: Text(message)),
+          ],
+        ),
+      ),
+    );
   }
 }
 

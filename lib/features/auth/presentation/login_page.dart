@@ -50,15 +50,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           CosCard(
             child: Column(
               children: [
-                SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment(value: false, label: Text('登入')),
-                    ButtonSegment(value: true, label: Text('註冊')),
-                  ],
-                  selected: {_isRegister},
-                  onSelectionChanged: (value) {
+                _LoginModeSwitch(
+                  isRegister: _isRegister,
+                  onChanged: (value) {
                     setState(() {
-                      _isRegister = value.first;
+                      _isRegister = value;
                       _errorText = null;
                     });
                   },
@@ -92,12 +88,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 ),
                 if (_errorText != null) ...[
                   const SizedBox(height: 10),
-                  Text(
-                    _errorText!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
+                  _LoginErrorBanner(message: _errorText!),
                 ],
                 const SizedBox(height: 18),
                 SizedBox(
@@ -372,6 +363,152 @@ class _LoginStageHero extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _LoginModeSwitch extends StatelessWidget {
+  const _LoginModeSwitch({required this.isRegister, required this.onChanged});
+
+  final bool isRegister;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.42),
+        borderRadius: BorderRadius.circular(CosUi.radiusLg),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.7)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(5),
+        child: Row(
+          children: [
+            Expanded(
+              child: _LoginModeButton(
+                icon: Icons.login,
+                label: '登入',
+                selected: !isRegister,
+                onTap: () => onChanged(false),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: _LoginModeButton(
+                icon: Icons.person_add_alt_1_outlined,
+                label: '註冊',
+                selected: isRegister,
+                onTap: () => onChanged(true),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LoginModeButton extends StatelessWidget {
+  const _LoginModeButton({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return InkWell(
+      borderRadius: BorderRadius.circular(CosUi.radiusMd),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: reduceMotion
+            ? Duration.zero
+            : const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? scheme.primaryContainer : Colors.transparent,
+          borderRadius: BorderRadius.circular(CosUi.radiusMd),
+          border: Border.all(
+            color: selected
+                ? scheme.primary.withValues(alpha: 0.32)
+                : Colors.transparent,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: selected
+                  ? scheme.onPrimaryContainer
+                  : scheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: selected
+                      ? scheme.onPrimaryContainer
+                      : scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LoginErrorBanner extends StatelessWidget {
+  const _LoginErrorBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.errorContainer.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
+        border: Border.all(color: scheme.error.withValues(alpha: 0.24)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.error_outline, color: scheme.error, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: scheme.error,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

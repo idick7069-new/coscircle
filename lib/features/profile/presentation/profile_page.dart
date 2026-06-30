@@ -1171,7 +1171,9 @@ class _BookingFollowerGroupTile extends ConsumerWidget {
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest.withValues(alpha: 0.38),
         borderRadius: BorderRadius.circular(CosUi.radiusMd),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.55),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -1190,8 +1192,9 @@ class _BookingFollowerGroupTile extends ConsumerWidget {
                         group.eventName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w900),
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -1222,16 +1225,10 @@ class _BookingFollowerGroupTile extends ConsumerWidget {
                   for (final follower in group.followers)
                     _BookingFollowerRow(
                       follower: follower,
-                      onRemove: () => _confirmRemoveFollower(
-                        context,
-                        ref,
-                        follower,
-                      ),
-                      onBlock: () => _confirmBlockFollower(
-                        context,
-                        ref,
-                        follower,
-                      ),
+                      onRemove: () =>
+                          _confirmRemoveFollower(context, ref, follower),
+                      onBlock: () =>
+                          _confirmBlockFollower(context, ref, follower),
                     ),
                 ],
               ),
@@ -1317,9 +1314,9 @@ class _BookingFollowerRow extends StatelessWidget {
               nickname,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
             ),
           ),
           IconButton(
@@ -1375,9 +1372,9 @@ class _BlockedUserRow extends StatelessWidget {
                   nickname,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
                 ),
               ),
               TextButton.icon(
@@ -1421,10 +1418,7 @@ class _BookingPrivacyLoadingState extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        Text(
-          '正在整理追蹤訊號',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
+        Text('正在整理追蹤訊號', style: Theme.of(context).textTheme.bodySmall),
       ],
     );
   }
@@ -2160,7 +2154,7 @@ class _EditProfilePassPanel extends StatelessWidget {
   }
 }
 
-class _ProfileFormSection extends StatelessWidget {
+class _ProfileFormSection extends StatefulWidget {
   const _ProfileFormSection({
     required this.title,
     required this.icon,
@@ -2174,23 +2168,108 @@ class _ProfileFormSection extends StatelessWidget {
   final bool initiallyExpanded;
 
   @override
+  State<_ProfileFormSection> createState() => _ProfileFormSectionState();
+}
+
+class _ProfileFormSectionState extends State<_ProfileFormSection> {
+  late bool _expanded;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = widget.initiallyExpanded;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: CosCard(
         padding: EdgeInsets.zero,
-        child: ExpansionTile(
-          initiallyExpanded: initiallyExpanded,
-          tilePadding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
-          leading: CosIconBubble(icon: icon, size: 38),
-          title: Text(
-            title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(CosUi.radiusLg),
+          child: Column(
+            children: [
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => setState(() => _expanded = !_expanded),
+                  child: AnimatedContainer(
+                    duration: reduceMotion
+                        ? Duration.zero
+                        : const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    padding: const EdgeInsets.fromLTRB(16, 12, 14, 12),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          scheme.primaryContainer.withValues(
+                            alpha: _expanded ? 0.42 : 0.22,
+                          ),
+                          scheme.surfaceContainerLowest,
+                        ],
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        CosIconBubble(icon: widget.icon, size: 38),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w900),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _expanded ? '正在編輯這段資訊' : '點一下展開設定',
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(
+                                      color: scheme.onSurfaceVariant,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        AnimatedRotation(
+                          turns: _expanded ? 0.5 : 0,
+                          duration: reduceMotion
+                              ? Duration.zero
+                              : const Duration(milliseconds: 220),
+                          curve: Curves.easeOutCubic,
+                          child: Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              AnimatedSize(
+                duration: reduceMotion
+                    ? Duration.zero
+                    : const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
+                alignment: Alignment.topCenter,
+                child: _expanded
+                    ? Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                        child: Column(children: widget.children),
+                      )
+                    : const SizedBox(width: double.infinity),
+              ),
+            ],
           ),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          children: children,
         ),
       ),
     );

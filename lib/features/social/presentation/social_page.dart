@@ -49,11 +49,38 @@ class SocialPage extends ConsumerWidget {
               ),
             ],
           ),
-          const TabBar(
-            tabs: [
-              Tab(text: '小圈圈', icon: Icon(Icons.groups_outlined)),
-              Tab(text: '已關注', icon: Icon(Icons.favorite_border)),
-            ],
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(CosUi.radiusLg),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+                boxShadow: [
+                  CosUi.softShadow(Theme.of(context).colorScheme.shadow),
+                ],
+              ),
+              child: TabBar(
+                dividerColor: Colors.transparent,
+                indicatorSize: TabBarIndicatorSize.tab,
+                indicator: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(CosUi.radiusMd),
+                ),
+                labelColor: Theme.of(context).colorScheme.onPrimaryContainer,
+                unselectedLabelColor: Theme.of(
+                  context,
+                ).colorScheme.onSurfaceVariant,
+                labelStyle: Theme.of(context).textTheme.labelLarge,
+                padding: const EdgeInsets.all(6),
+                tabs: const [
+                  Tab(text: '小圈圈', icon: Icon(Icons.groups_outlined)),
+                  Tab(text: '已關注', icon: Icon(Icons.favorite_border)),
+                ],
+              ),
+            ),
           ),
           Expanded(
             child: TabBarView(
@@ -139,9 +166,9 @@ class SocialPage extends ConsumerWidget {
                           message: userFacingError(error),
                           onRetry: () => ref.invalidate(circlesProvider),
                         ),
-                        loading: () => const Padding(
-                          padding: EdgeInsets.all(24),
-                          child: Center(child: CircularProgressIndicator()),
+                        loading: () => const _SocialLoadingStack(
+                          title: '正在整理小圈圈',
+                          subtitle: '同步邀請碼、成員和聚會訊號',
                         ),
                       ),
                     ],
@@ -196,8 +223,15 @@ class SocialPage extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    loading: () =>
-                        const Center(child: CircularProgressIndicator()),
+                    loading: () => ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: const [
+                        _SocialLoadingStack(
+                          title: '正在整理關注名單',
+                          subtitle: '把活動現場最重要的同好排好',
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -590,7 +624,95 @@ class _SocialErrorCard extends StatelessWidget {
   }
 }
 
-class _CircleCard extends StatelessWidget {
+class _SocialLoadingStack extends StatelessWidget {
+  const _SocialLoadingStack({required this.title, required this.subtitle});
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return CosCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CosSectionHeader(
+            title: title,
+            subtitle: subtitle,
+            icon: Icons.radar_outlined,
+          ),
+          const SizedBox(height: 14),
+          for (var index = 0; index < 3; index += 1) ...[
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest.withValues(alpha: 0.38),
+                borderRadius: BorderRadius.circular(CosUi.radiusMd),
+                border: Border.all(
+                  color: scheme.outlineVariant.withValues(alpha: 0.45),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor:
+                          (index.isEven ? scheme.primary : scheme.secondary)
+                              .withValues(alpha: 0.18),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _SocialSkeletonLine(
+                            widthFactor: index == 0 ? 0.64 : 0.48,
+                            height: 13,
+                          ),
+                          const SizedBox(height: 8),
+                          _SocialSkeletonLine(
+                            widthFactor: index == 1 ? 0.78 : 0.58,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (index < 2) const SizedBox(height: 10),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SocialSkeletonLine extends StatelessWidget {
+  const _SocialSkeletonLine({required this.widthFactor, this.height = 9});
+
+  final double widthFactor;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return FractionallySizedBox(
+      widthFactor: widthFactor,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: scheme.onSurface.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(99),
+        ),
+        child: SizedBox(height: height),
+      ),
+    );
+  }
+}
+
+class _CircleCard extends StatefulWidget {
   const _CircleCard({
     required this.circle,
     required this.onLeave,
@@ -606,101 +728,187 @@ class _CircleCard extends StatelessWidget {
   final ValueChanged<CircleMember>? onRemoveMember;
 
   @override
+  State<_CircleCard> createState() => _CircleCardState();
+}
+
+class _CircleCardState extends State<_CircleCard> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final circle = widget.circle;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: CosCard(
         padding: EdgeInsets.zero,
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-          leading: CosIconBubble(
-            icon: Icons.groups_2_outlined,
-            color: circle.isOwner ? scheme.primary : scheme.secondary,
-            size: 48,
-          ),
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(CosUi.radiusLg),
+          child: Column(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      circle.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => setState(() => _expanded = !_expanded),
+                  child: AnimatedContainer(
+                    duration: reduceMotion
+                        ? Duration.zero
+                        : const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          (circle.isOwner
+                                  ? scheme.primaryContainer
+                                  : scheme.secondaryContainer)
+                              .withValues(alpha: _expanded ? 0.44 : 0.24),
+                          scheme.surfaceContainerLowest,
+                        ],
                       ),
                     ),
-                  ),
-                  if (circle.isOwner)
-                    CosBadge(
-                      label: '我建立的',
-                      icon: Icons.star_border_rounded,
-                      color: scheme.primary,
+                    child: Row(
+                      children: [
+                        CosIconBubble(
+                          icon: Icons.groups_2_outlined,
+                          color: circle.isOwner
+                              ? scheme.primary
+                              : scheme.secondary,
+                          size: 48,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      circle.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                    ),
+                                  ),
+                                  if (circle.isOwner)
+                                    CosBadge(
+                                      label: '我建立的',
+                                      icon: Icons.star_border_rounded,
+                                      color: scheme.primary,
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                circle.description.isEmpty
+                                    ? '小圈圈集合點，適合約場、認親和交換作品'
+                                    : circle.description,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  _MemberAvatarStrip(members: circle.members),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      '${circle.memberCount} 位成員',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.labelSmall,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        PopupMenuButton<String>(
+                          onSelected: (value) {
+                            if (value == 'edit') widget.onEdit?.call();
+                            if (value == 'leave') widget.onLeave();
+                          },
+                          itemBuilder: (context) => [
+                            if (widget.onEdit != null)
+                              const PopupMenuItem(
+                                value: 'edit',
+                                child: Text('編輯'),
+                              ),
+                            const PopupMenuItem(
+                              value: 'leave',
+                              child: Text('離開'),
+                            ),
+                          ],
+                        ),
+                        AnimatedRotation(
+                          turns: _expanded ? 0.5 : 0,
+                          duration: reduceMotion
+                              ? Duration.zero
+                              : const Duration(milliseconds: 220),
+                          curve: Curves.easeOutCubic,
+                          child: Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                     ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              if (circle.description.isNotEmpty)
-                Text(
-                  circle.description,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  _MemberAvatarStrip(members: circle.members),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      '${circle.memberCount} 位成員一起約場、認親和交換作品',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                ],
+              ),
+              AnimatedSize(
+                duration: reduceMotion
+                    ? Duration.zero
+                    : const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
+                alignment: Alignment.topCenter,
+                child: _expanded
+                    ? Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        child: Column(
+                          children: [
+                            _CircleInviteBand(
+                              circle: circle,
+                              onShowQr: () => _showCircleQr(context),
+                            ),
+                            const SizedBox(height: 12),
+                            for (final entry in circle.members.indexed)
+                              CosReveal(
+                                delay: Duration(milliseconds: 35 * entry.$1),
+                                child: _CircleMemberRow(
+                                  member: entry.$2,
+                                  canRemove:
+                                      circle.isOwner && !entry.$2.isOwner,
+                                  onOpen: () => widget.onOpenMember(entry.$2),
+                                  onRemove: () =>
+                                      widget.onRemoveMember?.call(entry.$2),
+                                ),
+                              ),
+                          ],
+                        ),
+                      )
+                    : const SizedBox(width: double.infinity),
               ),
             ],
           ),
-          trailing: PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'edit') onEdit?.call();
-              if (value == 'leave') onLeave();
-            },
-            itemBuilder: (context) => [
-              if (onEdit != null)
-                const PopupMenuItem(value: 'edit', child: Text('編輯')),
-              const PopupMenuItem(value: 'leave', child: Text('離開')),
-            ],
-          ),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          children: [
-            _CircleInviteBand(
-              circle: circle,
-              onShowQr: () => _showCircleQr(context),
-            ),
-            const SizedBox(height: 12),
-            for (final entry in circle.members.indexed)
-              CosReveal(
-                delay: Duration(milliseconds: 35 * entry.$1),
-                child: _CircleMemberRow(
-                  member: entry.$2,
-                  canRemove: circle.isOwner && !entry.$2.isOwner,
-                  onOpen: () => onOpenMember(entry.$2),
-                  onRemove: () => onRemoveMember?.call(entry.$2),
-                ),
-              ),
-          ],
         ),
       ),
     );
   }
 
   void _showCircleQr(BuildContext context) {
+    final circle = widget.circle;
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(

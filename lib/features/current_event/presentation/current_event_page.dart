@@ -1128,23 +1128,11 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                               icon: Icons.campaign_outlined,
                             ),
                             const SizedBox(height: 12),
-                            DropdownButtonFormField<String>(
-                              initialValue: selectedCircleId,
-                              decoration: const InputDecoration(
-                                labelText: '呼叫小圈圈',
-                              ),
-                              items: [
-                                for (final circle in circles)
-                                  DropdownMenuItem(
-                                    value: circle.id,
-                                    child: Text(circle.name),
-                                  ),
-                              ],
-                              onChanged: (value) {
-                                if (value != null) {
-                                  setSheetState(() => selectedCircleId = value);
-                                }
-                              },
+                            _MeetupCircleSelector(
+                              circles: circles,
+                              selectedCircleId: selectedCircleId,
+                              onChanged: (value) =>
+                                  setSheetState(() => selectedCircleId = value),
                             ),
                             const SizedBox(height: 12),
                             TextField(
@@ -1276,26 +1264,10 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: isSaving ? null : saveMeetup,
-                        icon: isSaving
-                            ? const SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.notifications_active),
-                        label: Text(
-                          isSaving
-                              ? '儲存中'
-                              : meetup == null
-                              ? '通知小圈圈集合'
-                              : '更新集合通知',
-                        ),
-                      ),
+                    _MeetupSubmitBar(
+                      isSaving: isSaving,
+                      editing: meetup != null,
+                      onSubmit: saveMeetup,
                     ),
                   ],
                 ),
@@ -1723,6 +1695,168 @@ class _RadarConfirmDialog extends StatelessWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MeetupCircleSelector extends StatelessWidget {
+  const _MeetupCircleSelector({
+    required this.circles,
+    required this.selectedCircleId,
+    required this.onChanged,
+  });
+
+  final List<CircleGroup> circles;
+  final String selectedCircleId;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = constraints.maxWidth < 380;
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final circle in circles)
+              SizedBox(
+                width: narrow
+                    ? constraints.maxWidth
+                    : (constraints.maxWidth - 8) / 2,
+                child: _MeetupCircleOption(
+                  circle: circle,
+                  selected: circle.id == selectedCircleId,
+                  onTap: () => onChanged(circle.id),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _MeetupCircleOption extends StatelessWidget {
+  const _MeetupCircleOption({
+    required this.circle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final CircleGroup circle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final accent = circle.isOwner ? scheme.primary : scheme.secondary;
+    return InkWell(
+      borderRadius: BorderRadius.circular(CosUi.radiusMd),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: reduceMotion
+            ? Duration.zero
+            : const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: selected
+              ? accent.withValues(alpha: 0.14)
+              : scheme.surfaceContainerHighest.withValues(alpha: 0.36),
+          borderRadius: BorderRadius.circular(CosUi.radiusMd),
+          border: Border.all(
+            color: selected
+                ? accent.withValues(alpha: 0.48)
+                : scheme.outlineVariant.withValues(alpha: 0.55),
+            width: selected ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            CosIconBubble(
+              icon: Icons.groups_2_outlined,
+              color: accent,
+              size: 36,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    circle.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Text(
+                    '${circle.memberCount} 位成員',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              selected ? Icons.check_circle : Icons.circle_outlined,
+              color: selected ? accent : scheme.outline,
+              size: 18,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MeetupSubmitBar extends StatelessWidget {
+  const _MeetupSubmitBar({
+    required this.isSaving,
+    required this.editing,
+    required this.onSubmit,
+  });
+
+  final bool isSaving;
+  final bool editing;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(CosUi.radiusLg),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.7)),
+        boxShadow: [CosUi.softShadow(scheme.shadow)],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: FilledButton.icon(
+          onPressed: isSaving ? null : onSubmit,
+          icon: isSaving
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.notifications_active_outlined),
+          label: Text(
+            isSaving
+                ? '同步集合訊號'
+                : editing
+                ? '更新集合通知'
+                : '通知小圈圈集合',
+          ),
         ),
       ),
     );
