@@ -20,6 +20,7 @@ class UserProfile {
     this.landmine = '',
     this.gender = 'private',
     this.otherPhotoUrls = const [],
+    this.bookingVisibility = 'public',
   });
 
   final String id;
@@ -40,6 +41,7 @@ class UserProfile {
   final String landmine;
   final String gender;
   final List<String> otherPhotoUrls;
+  final String bookingVisibility;
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     final pitWorks = (json['pitWorks'] as List<dynamic>? ?? const [])
@@ -84,6 +86,9 @@ class UserProfile {
           .where((item) => item.isNotEmpty)
           .take(3)
           .toList(),
+      bookingVisibility: json['bookingVisibility']?.toString() == 'circle'
+          ? 'circle'
+          : 'public',
     );
   }
 
@@ -103,6 +108,7 @@ class UserProfile {
       'landmine': landmine,
       'gender': gender,
       'otherPhotoUrls': otherPhotoUrls.take(3).toList(),
+      'bookingVisibility': bookingVisibility,
     };
   }
 
@@ -124,6 +130,7 @@ class UserProfile {
     String? landmine,
     String? gender,
     List<String>? otherPhotoUrls,
+    String? bookingVisibility,
   }) {
     final nextDeepPitWorks = deepPitWorks ?? this.deepPitWorks;
     final nextShallowPitWorks = shallowPitWorks ?? this.shallowPitWorks;
@@ -146,6 +153,7 @@ class UserProfile {
       landmine: landmine ?? this.landmine,
       gender: gender ?? this.gender,
       otherPhotoUrls: otherPhotoUrls ?? this.otherPhotoUrls,
+      bookingVisibility: bookingVisibility ?? this.bookingVisibility,
     );
   }
 }

@@ -1,0 +1,15 @@
+.dart_tool
+.git
+.idea
+.vscode
+android
+backend/.env
+backend/node_modules
+build
+ios
+linux
+macos
+windows
+*.iml
+devtools_options.yaml
+

@@ -18,6 +18,7 @@ CREATE TABLE users (
   landmine TEXT NULL,
   gender VARCHAR(40) NOT NULL DEFAULT 'private',
   other_photo_urls_json TEXT NULL,
+  booking_visibility ENUM('public','circle') NOT NULL DEFAULT 'public',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uniq_provider_user (provider, provider_user_id),
@@ -93,6 +94,15 @@ CREATE TABLE follows (
   PRIMARY KEY (follower_user_id, followed_user_id),
   FOREIGN KEY (follower_user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (followed_user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE user_blocks (
+  blocker_user_id BIGINT UNSIGNED NOT NULL,
+  blocked_user_id BIGINT UNSIGNED NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (blocker_user_id, blocked_user_id),
+  FOREIGN KEY (blocker_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (blocked_user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE circles (

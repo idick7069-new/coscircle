@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_client.dart';
+import '../models/booking_visibility.dart';
 import '../models/profile.dart';
 
 final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
@@ -19,6 +20,11 @@ abstract class ProfileRepository {
   Future<UserProfile?> fetchProfile(String publicCode);
   Future<void> followUser(String userId);
   Future<void> unfollowUser(String userId);
+  Future<List<BookingFollowerGroup>> fetchBookingFollowers();
+  Future<List<BlockedUser>> fetchBlockedUsers();
+  Future<void> removeFollower(String userId);
+  Future<void> blockUser(String userId);
+  Future<void> unblockUser(String userId);
   Future<UserProfile> saveProfile(UserProfile profile);
   Future<String> uploadImage({
     required Uint8List bytes,
@@ -68,6 +74,51 @@ class ApiProfileRepository implements ProfileRepository {
   @override
   Future<void> unfollowUser(String userId) async {
     await _apiClient.delete('/users/$userId/follow');
+  }
+
+  @override
+  Future<List<BookingFollowerGroup>> fetchBookingFollowers() async {
+    try {
+      final response = await _apiClient.get('/me/booking-followers');
+      final rows = response.data as List<dynamic>;
+      return rows
+          .map(
+            (row) => BookingFollowerGroup.fromJson(row as Map<String, dynamic>),
+          )
+          .toList();
+    } catch (_) {
+      if (kDebugMode) return _fallback.fetchBookingFollowers();
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> removeFollower(String userId) async {
+    await _apiClient.delete('/me/followers/$userId');
+  }
+
+  @override
+  Future<List<BlockedUser>> fetchBlockedUsers() async {
+    try {
+      final response = await _apiClient.get('/blocked-users');
+      final rows = response.data as List<dynamic>;
+      return rows
+          .map((row) => BlockedUser.fromJson(row as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      if (kDebugMode) return _fallback.fetchBlockedUsers();
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> blockUser(String userId) async {
+    await _apiClient.post('/users/$userId/block');
+  }
+
+  @override
+  Future<void> unblockUser(String userId) async {
+    await _apiClient.delete('/users/$userId/block');
   }
 
   @override
@@ -155,6 +206,25 @@ class InMemoryProfileRepository implements ProfileRepository {
 
   @override
   Future<void> unfollowUser(String userId) async {}
+
+  @override
+  Future<List<BookingFollowerGroup>> fetchBookingFollowers() async {
+    return const [];
+  }
+
+  @override
+  Future<void> removeFollower(String userId) async {}
+
+  @override
+  Future<List<BlockedUser>> fetchBlockedUsers() async {
+    return const [];
+  }
+
+  @override
+  Future<void> blockUser(String userId) async {}
+
+  @override
+  Future<void> unblockUser(String userId) async {}
 
   @override
   Future<UserProfile> saveProfile(UserProfile profile) async {

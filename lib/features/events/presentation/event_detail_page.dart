@@ -627,6 +627,57 @@ class _ParticipantsSection extends ConsumerWidget {
                     ),
                   ],
                 ),
+                if (!participant.isMe) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (context) {
+                            final scheme = Theme.of(context).colorScheme;
+                            return AlertDialog(
+                              title: Text('封鎖 ${participant.nickname}？'),
+                              content: const Text(
+                                '封鎖後對方將看不到你的個人資訊、場次預定與現場訊號，也不能再關注你。',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.of(context).pop(false),
+                                  child: const Text('返回'),
+                                ),
+                                FilledButton(
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: scheme.error,
+                                    foregroundColor: scheme.onError,
+                                  ),
+                                  onPressed: () =>
+                                      Navigator.of(context).pop(true),
+                                  child: const Text('封鎖'),
+                                ),
+                              ],
+                            );
+                          },
+                        );
+                        if (confirmed != true) return;
+                        await ref
+                            .read(eventRepositoryProvider)
+                            .blockUser(participant.userId);
+                        ref.invalidate(eventParticipantsProvider(eventId));
+                        ref.invalidate(eventsProvider);
+                        if (!context.mounted) return;
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('已封鎖使用者')),
+                        );
+                      },
+                      icon: const Icon(Icons.block_outlined),
+                      label: const Text('封鎖此使用者'),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

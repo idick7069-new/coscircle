@@ -313,6 +313,7 @@ app.put('/api/me', async (req, res, next) => {
       landmine,
       gender = 'private',
       otherPhotoUrls = [],
+      bookingVisibility = 'public',
       pitWorkIds = [],
       deepPitWorkIds = pitWorkIds,
       shallowPitWorkIds = [],
@@ -335,6 +336,7 @@ app.put('/api/me', async (req, res, next) => {
       ? gender
       : 'private';
     const normalizedPhotoUrls = normalizeStringArray(otherPhotoUrls).slice(0, 3);
+    const normalizedBookingVisibility = normalizeBookingVisibility(bookingVisibility);
     await connection.beginTransaction();
     await connection.execute(
       `UPDATE users
@@ -348,7 +350,8 @@ app.put('/api/me', async (req, res, next) => {
               travel_same_region = ?,
               landmine = ?,
               gender = ?,
-              other_photo_urls_json = ?
+              other_photo_urls_json = ?,
+              booking_visibility = ?
         WHERE id = ?`,
       [
         nickname,
@@ -365,6 +368,7 @@ app.put('/api/me', async (req, res, next) => {
         landmine ?? null,
         normalizedGender,
         JSON.stringify(normalizedPhotoUrls),
+        normalizedBookingVisibility,
         req.userId,
       ],
     );
@@ -488,26 +492,71 @@ app.get('/api/events', async (req, res, next) => {
          LEFT JOIN (
            SELECT DISTINCT event_bookings.event_id, event_bookings.user_id
              FROM event_bookings
+             INNER JOIN users AS booking_users
+               ON booking_users.id = event_bookings.user_id
              INNER JOIN follows
                ON follows.followed_user_id = event_bookings.user_id
               AND follows.follower_user_id = ?
+              LEFT JOIN user_blocks AS my_blocks
+                ON my_blocks.blocker_user_id = ?
+               AND my_blocks.blocked_user_id = event_bookings.user_id
+              LEFT JOIN user_blocks AS their_blocks
+                ON their_blocks.blocker_user_id = event_bookings.user_id
+               AND their_blocks.blocked_user_id = ?
+            WHERE event_bookings.user_id <> ?
+              AND my_blocks.blocked_user_id IS NULL
+              AND their_blocks.blocker_user_id IS NULL
+              AND (
+                booking_users.booking_visibility = 'public'
+                OR EXISTS (
+                  SELECT 1
+                    FROM circle_members AS my_visibility_circles
+                    INNER JOIN circle_members AS booking_visibility_circles
+                      ON booking_visibility_circles.circle_id = my_visibility_circles.circle_id
+                     AND booking_visibility_circles.user_id = event_bookings.user_id
+                   WHERE my_visibility_circles.user_id = ?
+                   LIMIT 1
+                )
+              )
          ) AS followed_bookings
            ON followed_bookings.event_id = events.id
          LEFT JOIN (
            SELECT DISTINCT event_bookings.event_id, event_bookings.user_id
              FROM event_bookings
+             INNER JOIN users AS booking_users
+               ON booking_users.id = event_bookings.user_id
              INNER JOIN circle_members AS other_members
                ON other_members.user_id = event_bookings.user_id
              INNER JOIN circle_members AS my_members
                ON my_members.circle_id = other_members.circle_id
               AND my_members.user_id = ?
+             LEFT JOIN user_blocks AS my_blocks
+               ON my_blocks.blocker_user_id = ?
+              AND my_blocks.blocked_user_id = event_bookings.user_id
+             LEFT JOIN user_blocks AS their_blocks
+               ON their_blocks.blocker_user_id = event_bookings.user_id
+              AND their_blocks.blocked_user_id = ?
             WHERE event_bookings.user_id <> ?
+              AND booking_users.booking_visibility IN ('public', 'circle')
+              AND my_blocks.blocked_user_id IS NULL
+              AND their_blocks.blocker_user_id IS NULL
          ) AS circle_bookings
            ON circle_bookings.event_id = events.id
         WHERE events.status = 'approved'
         GROUP BY events.id, my_bookings.event_id, followed_bookings.user_id, circle_bookings.user_id
         ORDER BY events.start_date ASC`,
-      [req.userId, req.userId, req.userId, req.userId],
+      [
+        req.userId,
+        req.userId,
+        req.userId,
+        req.userId,
+        req.userId,
+        req.userId,
+        req.userId,
+        req.userId,
+        req.userId,
+        req.userId,
+      ],
     );
     res.json(rows);
   } catch (error) {
@@ -881,13 +930,26 @@ app.get('/api/circles', async (req, res, next) => {
                 users.avatar_url AS avatarUrl,
                 CASE WHEN circles.owner_user_id = users.id THEN TRUE ELSE FALSE END AS isOwner
            FROM circle_members
-           INNER JOIN users
+         INNER JOIN users
              ON users.id = circle_members.user_id
            INNER JOIN circles
              ON circles.id = circle_members.circle_id
+          LEFT JOIN user_blocks AS viewer_blocks
+            ON viewer_blocks.blocker_user_id = ?
+           AND viewer_blocks.blocked_user_id = users.id
+          LEFT JOIN user_blocks AS member_blocks
+            ON member_blocks.blocker_user_id = users.id
+           AND member_blocks.blocked_user_id = ?
           WHERE circle_members.circle_id IN (${placeholders})
+            AND (
+              users.id = ?
+              OR (
+                viewer_blocks.blocked_user_id IS NULL
+                AND member_blocks.blocker_user_id IS NULL
+              )
+            )
           ORDER BY isOwner DESC, circle_members.created_at ASC`,
-        circleIds,
+        [req.userId, req.userId, ...circleIds, req.userId],
       );
       for (const member of members) {
         const key = String(member.circleId);
@@ -1053,11 +1115,109 @@ app.get('/api/following', async (req, res, next) => {
          FROM follows
          INNER JOIN users
            ON users.id = follows.followed_user_id
+         LEFT JOIN user_blocks AS my_blocks
+           ON my_blocks.blocker_user_id = ?
+          AND my_blocks.blocked_user_id = users.id
+         LEFT JOIN user_blocks AS their_blocks
+           ON their_blocks.blocker_user_id = users.id
+          AND their_blocks.blocked_user_id = ?
         WHERE follows.follower_user_id = ?
+          AND my_blocks.blocked_user_id IS NULL
+          AND their_blocks.blocker_user_id IS NULL
         ORDER BY follows.created_at DESC`,
-      [req.userId],
+      [req.userId, req.userId, req.userId],
     );
     res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/me/booking-followers', async (req, res, next) => {
+  try {
+    const [bookings] = await pool.execute(
+      `SELECT event_bookings.id AS bookingId,
+              events.id AS eventId,
+              events.name AS eventName,
+              DATE_FORMAT(events.start_date, '%Y-%m-%d') AS startDate,
+              DATE_FORMAT(events.end_date, '%Y-%m-%d') AS endDate,
+              event_bookings.day_index AS dayIndex,
+              event_bookings.role
+         FROM event_bookings
+         INNER JOIN events
+           ON events.id = event_bookings.event_id
+          AND events.status = 'approved'
+        WHERE event_bookings.user_id = ?
+        ORDER BY events.start_date ASC,
+                 event_bookings.day_index ASC`,
+      [req.userId],
+    );
+
+    if (bookings.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    const bookingIds = bookings.map((booking) => booking.bookingId);
+    const placeholders = bookingIds.map(() => '?').join(',');
+    const [followers] = await pool.execute(
+      `SELECT event_bookings.id AS bookingId,
+              users.id AS userId,
+              users.public_code AS publicCode,
+              users.nickname,
+              users.avatar_url AS avatarUrl,
+              DATE_FORMAT(follows.created_at, '%Y-%m-%dT%H:%i:%s') AS followedAt
+         FROM event_bookings
+         INNER JOIN users AS owner
+           ON owner.id = event_bookings.user_id
+         INNER JOIN follows
+           ON follows.followed_user_id = event_bookings.user_id
+         INNER JOIN users
+           ON users.id = follows.follower_user_id
+         LEFT JOIN user_blocks AS owner_blocks
+           ON owner_blocks.blocker_user_id = owner.id
+          AND owner_blocks.blocked_user_id = users.id
+         LEFT JOIN user_blocks AS follower_blocks
+           ON follower_blocks.blocker_user_id = users.id
+          AND follower_blocks.blocked_user_id = owner.id
+        WHERE event_bookings.id IN (${placeholders})
+          AND owner_blocks.blocked_user_id IS NULL
+          AND follower_blocks.blocker_user_id IS NULL
+          AND (
+            owner.booking_visibility = 'public'
+            OR EXISTS (
+              SELECT 1
+                FROM circle_members AS owner_circles
+                INNER JOIN circle_members AS follower_circles
+                  ON follower_circles.circle_id = owner_circles.circle_id
+                 AND follower_circles.user_id = users.id
+               WHERE owner_circles.user_id = owner.id
+               LIMIT 1
+            )
+          )
+        ORDER BY follows.created_at DESC`,
+      bookingIds,
+    );
+
+    const followersByBooking = new Map();
+    for (const follower of followers) {
+      const key = String(follower.bookingId);
+      if (!followersByBooking.has(key)) followersByBooking.set(key, []);
+      followersByBooking.get(key).push({
+        userId: follower.userId,
+        publicCode: follower.publicCode,
+        nickname: follower.nickname,
+        avatarUrl: follower.avatarUrl,
+        followedAt: follower.followedAt,
+      });
+    }
+
+    res.json(
+      bookings.map((booking) => ({
+        ...booking,
+        followers: followersByBooking.get(String(booking.bookingId)) ?? [],
+      })),
+    );
   } catch (error) {
     next(error);
   }
@@ -1231,11 +1391,44 @@ app.get('/api/events/:eventId/participants', async (req, res, next) => {
          LEFT JOIN follows
            ON follows.follower_user_id = ?
           AND follows.followed_user_id = users.id
+         LEFT JOIN user_blocks AS my_blocks
+           ON my_blocks.blocker_user_id = ?
+          AND my_blocks.blocked_user_id = users.id
+         LEFT JOIN user_blocks AS their_blocks
+           ON their_blocks.blocker_user_id = users.id
+          AND their_blocks.blocked_user_id = ?
          LEFT JOIN works
            ON works.id = event_bookings.work_id
         WHERE event_bookings.event_id = ?
+          AND (
+            users.id = ?
+            OR (
+              my_blocks.blocked_user_id IS NULL
+              AND their_blocks.blocker_user_id IS NULL
+              AND (
+                users.booking_visibility = 'public'
+                OR EXISTS (
+                  SELECT 1
+                    FROM circle_members AS my_visibility_circles
+                    INNER JOIN circle_members AS booking_visibility_circles
+                      ON booking_visibility_circles.circle_id = my_visibility_circles.circle_id
+                     AND booking_visibility_circles.user_id = users.id
+                   WHERE my_visibility_circles.user_id = ?
+                   LIMIT 1
+                )
+              )
+            )
+          )
         ORDER BY event_bookings.day_index ASC, event_bookings.updated_at DESC`,
-      [req.userId, req.userId, req.params.eventId],
+      [
+        req.userId,
+        req.userId,
+        req.userId,
+        req.userId,
+        req.params.eventId,
+        req.userId,
+        req.userId,
+      ],
     );
     res.json(rows);
   } catch (error) {
@@ -1247,6 +1440,10 @@ app.post('/api/users/:userId/follow', async (req, res, next) => {
   try {
     if (Number(req.params.userId) === req.userId) {
       res.status(400).json({ error: 'cannot_follow_self' });
+      return;
+    }
+    if (await hasBlockingRelation(req.userId, req.params.userId)) {
+      res.status(403).json({ error: 'user_unavailable' });
       return;
     }
     await pool.execute(
@@ -1291,6 +1488,84 @@ app.delete('/api/users/:userId/follow', async (req, res, next) => {
   }
 });
 
+app.delete('/api/me/followers/:userId', async (req, res, next) => {
+  try {
+    await pool.execute(
+      `DELETE FROM follows
+        WHERE follower_user_id = ?
+          AND followed_user_id = ?`,
+      [req.params.userId, req.userId],
+    );
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/users/:userId/block', async (req, res, next) => {
+  const connection = await pool.getConnection();
+  try {
+    if (Number(req.params.userId) === req.userId) {
+      res.status(400).json({ error: 'cannot_block_self' });
+      return;
+    }
+    await connection.beginTransaction();
+    await connection.execute(
+      `INSERT IGNORE INTO user_blocks (blocker_user_id, blocked_user_id)
+       VALUES (?, ?)`,
+      [req.userId, req.params.userId],
+    );
+    await connection.execute(
+      `DELETE FROM follows
+        WHERE (follower_user_id = ? AND followed_user_id = ?)
+           OR (follower_user_id = ? AND followed_user_id = ?)`,
+      [req.userId, req.params.userId, req.params.userId, req.userId],
+    );
+    await connection.commit();
+    res.status(204).end();
+  } catch (error) {
+    await connection.rollback();
+    next(error);
+  } finally {
+    connection.release();
+  }
+});
+
+app.delete('/api/users/:userId/block', async (req, res, next) => {
+  try {
+    await pool.execute(
+      `DELETE FROM user_blocks
+        WHERE blocker_user_id = ?
+          AND blocked_user_id = ?`,
+      [req.userId, req.params.userId],
+    );
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/blocked-users', async (req, res, next) => {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT users.id AS userId,
+              users.public_code AS publicCode,
+              users.nickname,
+              users.avatar_url AS avatarUrl,
+              DATE_FORMAT(user_blocks.created_at, '%Y-%m-%dT%H:%i:%s') AS blockedAt
+         FROM user_blocks
+         INNER JOIN users
+           ON users.id = user_blocks.blocked_user_id
+        WHERE user_blocks.blocker_user_id = ?
+        ORDER BY user_blocks.created_at DESC`,
+      [req.userId],
+    );
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get('/api/events/:eventId/locations', async (req, res, next) => {
   try {
     const [rows] = await pool.execute(
@@ -1324,6 +1599,12 @@ app.get('/api/events/:eventId/locations', async (req, res, next) => {
          LEFT JOIN follows
            ON follows.follower_user_id = ?
           AND follows.followed_user_id = shared_locations.user_id
+         LEFT JOIN user_blocks AS my_blocks
+           ON my_blocks.blocker_user_id = ?
+          AND my_blocks.blocked_user_id = shared_locations.user_id
+         LEFT JOIN user_blocks AS their_blocks
+           ON their_blocks.blocker_user_id = shared_locations.user_id
+          AND their_blocks.blocked_user_id = ?
          LEFT JOIN circle_members
            ON circle_members.user_id = shared_locations.user_id
           AND circle_members.circle_id IN (
@@ -1334,11 +1615,28 @@ app.get('/api/events/:eventId/locations', async (req, res, next) => {
         WHERE shared_locations.event_id = ?
           AND (
             shared_locations.user_id = ?
-            OR follows.followed_user_id IS NOT NULL
-            OR circle_members.user_id IS NOT NULL
+            OR (
+              my_blocks.blocked_user_id IS NULL
+              AND their_blocks.blocker_user_id IS NULL
+              AND (
+                circle_members.user_id IS NOT NULL
+                OR (
+                  users.booking_visibility = 'public'
+                  AND follows.followed_user_id IS NOT NULL
+                )
+              )
+            )
           )
         ORDER BY shared_locations.shared_at DESC`,
-      [req.userId, req.userId, req.userId, req.params.eventId, req.userId],
+      [
+        req.userId,
+        req.userId,
+        req.userId,
+        req.userId,
+        req.userId,
+        req.params.eventId,
+        req.userId,
+      ],
     );
     res.json(rows);
   } catch (error) {
@@ -1536,11 +1834,19 @@ app.get('/api/events/:eventId/recognitions', async (req, res, next) => {
            ON requester.id = event_recognition_requests.requester_user_id
          INNER JOIN users AS target
            ON target.id = event_recognition_requests.target_user_id
+         LEFT JOIN user_blocks AS requester_blocks
+           ON requester_blocks.blocker_user_id = event_recognition_requests.requester_user_id
+          AND requester_blocks.blocked_user_id = event_recognition_requests.target_user_id
+         LEFT JOIN user_blocks AS target_blocks
+           ON target_blocks.blocker_user_id = event_recognition_requests.target_user_id
+          AND target_blocks.blocked_user_id = event_recognition_requests.requester_user_id
         WHERE event_recognition_requests.event_id = ?
           AND (
             event_recognition_requests.requester_user_id = ?
             OR event_recognition_requests.target_user_id = ?
           )
+          AND requester_blocks.blocked_user_id IS NULL
+          AND target_blocks.blocker_user_id IS NULL
         ORDER BY event_recognition_requests.created_at DESC`,
       [req.userId, req.userId, req.params.eventId, req.userId, req.userId],
     );
@@ -1555,6 +1861,10 @@ app.post('/api/events/:eventId/recognitions', async (req, res, next) => {
     const { targetUserId } = req.body;
     if (Number(targetUserId) === req.userId) {
       res.status(400).json({ error: 'cannot_recognize_self' });
+      return;
+    }
+    if (await hasBlockingRelation(req.userId, targetUserId)) {
+      res.status(403).json({ error: 'user_unavailable' });
       return;
     }
     const [result] = await pool.execute(
@@ -1674,6 +1984,11 @@ async function ensureDevUser() {
 }
 
 async function ensureCollaborationTables() {
+  await ensureColumn({
+    tableName: 'users',
+    columnName: 'booking_visibility',
+    definition: "ENUM('public','circle') NOT NULL DEFAULT 'public'",
+  });
   await pool.execute(
     `CREATE TABLE IF NOT EXISTS admin_audit_logs (
       id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
@@ -1725,6 +2040,30 @@ async function ensureCollaborationTables() {
       KEY idx_event_recognition_requester (requester_user_id)
     )`,
   );
+  await pool.execute(
+    `CREATE TABLE IF NOT EXISTS user_blocks (
+      blocker_user_id BIGINT UNSIGNED NOT NULL,
+      blocked_user_id BIGINT UNSIGNED NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (blocker_user_id, blocked_user_id),
+      FOREIGN KEY (blocker_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (blocked_user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+  );
+}
+
+async function ensureColumn({ tableName, columnName, definition }) {
+  const [rows] = await pool.execute(
+    `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND COLUMN_NAME = ?
+      LIMIT 1`,
+    [tableName, columnName],
+  );
+  if (rows.length > 0) return;
+  await pool.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`${columnName}\` ${definition}`);
 }
 
 async function recordAdminAction(
@@ -1870,6 +2209,10 @@ function normalizeAdminEventPayload(body) {
   };
 }
 
+function normalizeBookingVisibility(value) {
+  return value === 'circle' ? 'circle' : 'public';
+}
+
 function normalizeDateTimeForSql(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -1892,6 +2235,18 @@ async function resolveUserId(req) {
     [token],
   );
   return rows[0]?.id ?? null;
+}
+
+async function hasBlockingRelation(leftUserId, rightUserId) {
+  const [rows] = await pool.execute(
+    `SELECT blocker_user_id
+       FROM user_blocks
+      WHERE (blocker_user_id = ? AND blocked_user_id = ?)
+         OR (blocker_user_id = ? AND blocked_user_id = ?)
+      LIMIT 1`,
+    [leftUserId, rightUserId, rightUserId, leftUserId],
+  );
+  return rows.length > 0;
 }
 
 async function requireAdmin(req, res, next) {
@@ -1922,7 +2277,8 @@ async function fetchUserProfile(userId) {
             travel_same_region AS travelSameRegion,
             landmine,
             gender,
-            other_photo_urls_json AS otherPhotoUrlsJson
+            other_photo_urls_json AS otherPhotoUrlsJson,
+            booking_visibility AS bookingVisibility
        FROM users
       WHERE id = ?`,
     [userId],
@@ -1963,6 +2319,13 @@ async function fetchUserProfileByPublicCode(publicCode, viewerUserId = null) {
   );
   if (!rows[0]) return null;
   const { id, ...profile } = rows[0];
+  if (
+    viewerUserId != null &&
+    Number(viewerUserId) !== Number(id) &&
+    (await hasBlockingRelation(id, viewerUserId))
+  ) {
+    return null;
+  }
   const pitWorks = await fetchUserPitWorks(id);
   profile.landmine = '';
   if (profile.gender === '不公開') {

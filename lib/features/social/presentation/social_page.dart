@@ -134,11 +134,10 @@ class SocialPage extends ConsumerWidget {
                             ],
                           );
                         },
-                        error: (error, stack) => Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Text('小圈圈載入失敗：${userFacingError(error)}'),
-                          ),
+                        error: (error, stack) => _SocialErrorCard(
+                          title: '小圈圈載入失敗',
+                          message: userFacingError(error),
+                          onRetry: () => ref.invalidate(circlesProvider),
                         ),
                         loading: () => const Padding(
                           padding: EdgeInsets.all(24),
@@ -190,11 +189,10 @@ class SocialPage extends ConsumerWidget {
                     error: (error, stack) => ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Text('關注清單載入失敗：${userFacingError(error)}'),
-                          ),
+                        _SocialErrorCard(
+                          title: '關注清單載入失敗',
+                          message: userFacingError(error),
+                          onRetry: () => ref.invalidate(followingProvider),
                         ),
                       ],
                     ),
@@ -540,6 +538,58 @@ class _EmptyActionCard extends StatelessWidget {
   }
 }
 
+class _SocialErrorCard extends StatelessWidget {
+  const _SocialErrorCard({
+    required this.title,
+    required this.message,
+    required this.onRetry,
+  });
+
+  final String title;
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return CosCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CosIconBubble(icon: Icons.wifi_off_outlined, color: scheme.error),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  message,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
+                FilledButton.tonalIcon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('再試一次'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CircleCard extends StatelessWidget {
   const _CircleCard({
     required this.circle,
@@ -634,40 +684,14 @@ class _CircleCard extends StatelessWidget {
               onShowQr: () => _showCircleQr(context),
             ),
             const SizedBox(height: 12),
-            for (final member in circle.members)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: scheme.surfaceContainerHighest.withValues(
-                      alpha: 0.42,
-                    ),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 2,
-                    ),
-                    leading: CircleAvatar(
-                      backgroundImage: pickedImageProvider(member.avatarUrl),
-                      child: member.avatarUrl.isEmpty
-                          ? Text(member.nickname.characters.firstOrNull ?? '?')
-                          : null,
-                    ),
-                    title: Text(
-                      member.nickname.isEmpty ? '未命名使用者' : member.nickname,
-                    ),
-                    subtitle: Text(member.isOwner ? '建立者' : '同好成員'),
-                    onTap: () => onOpenMember(member),
-                    trailing: !circle.isOwner || member.isOwner
-                        ? const Icon(Icons.chevron_right)
-                        : IconButton(
-                            tooltip: '移除成員',
-                            onPressed: () => onRemoveMember?.call(member),
-                            icon: const Icon(Icons.person_remove_outlined),
-                          ),
-                  ),
+            for (final entry in circle.members.indexed)
+              CosReveal(
+                delay: Duration(milliseconds: 35 * entry.$1),
+                child: _CircleMemberRow(
+                  member: entry.$2,
+                  canRemove: circle.isOwner && !entry.$2.isOwner,
+                  onOpen: () => onOpenMember(entry.$2),
+                  onRemove: () => onRemoveMember?.call(entry.$2),
                 ),
               ),
           ],
@@ -732,6 +756,106 @@ class _CircleCard extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CircleMemberRow extends StatelessWidget {
+  const _CircleMemberRow({
+    required this.member,
+    required this.canRemove,
+    required this.onOpen,
+    required this.onRemove,
+  });
+
+  final CircleMember member;
+  final bool canRemove;
+  final VoidCallback onOpen;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final nickname = member.nickname.isEmpty ? '未命名使用者' : member.nickname;
+    final initial = nickname.characters.firstOrNull ?? '?';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onOpen,
+          child: Ink(
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest.withValues(alpha: 0.42),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: scheme.outlineVariant.withValues(alpha: 0.42),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 21,
+                    backgroundColor: member.isOwner
+                        ? scheme.primaryContainer
+                        : scheme.secondaryContainer,
+                    backgroundImage: pickedImageProvider(member.avatarUrl),
+                    child: member.avatarUrl.isEmpty
+                        ? Text(
+                            initial,
+                            style: TextStyle(
+                              color: member.isOwner
+                                  ? scheme.onPrimaryContainer
+                                  : scheme.onSecondaryContainer,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          )
+                        : null,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          nickname,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 5),
+                        CosBadge(
+                          label: member.isOwner ? '建立者' : '同好成員',
+                          icon: member.isOwner
+                              ? Icons.auto_awesome
+                              : Icons.handshake_outlined,
+                          color: member.isOwner
+                              ? scheme.primary
+                              : scheme.secondary,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (canRemove)
+                    IconButton(
+                      tooltip: '移除成員',
+                      onPressed: onRemove,
+                      icon: const Icon(Icons.person_remove_outlined),
+                    )
+                  else
+                    const Icon(Icons.chevron_right),
+                ],
+              ),
+            ),
           ),
         ),
       ),

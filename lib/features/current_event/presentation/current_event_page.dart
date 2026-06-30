@@ -247,38 +247,19 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                     ),
                   ),
                 if (isResolvingEvent)
-                  const Center(child: CircularProgressIndicator())
+                  const Positioned(
+                    left: 24,
+                    right: 24,
+                    top: 112,
+                    child: _CurrentEventLoadingCard(),
+                  )
                 else if (event == null)
                   Positioned(
                     left: 24,
                     right: 24,
                     top: 112,
-                    child: Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(18),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              '目前無當前活動',
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w800),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              '先到活動清單加入今天或即將參加的場次，再回來分享位置、集合與認親。',
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 14),
-                            FilledButton.icon(
-                              onPressed: widget.onOpenEvents,
-                              icon: const Icon(Icons.event_available),
-                              label: const Text('去活動清單'),
-                            ),
-                          ],
-                        ),
-                      ),
+                    child: _CurrentEventEmptyCard(
+                      onOpenEvents: widget.onOpenEvents,
                     ),
                   ),
                 if (eventId != null)
@@ -303,13 +284,20 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
               ],
             );
           },
-          error: (error, stack) => Center(
+          error: (error, stack) => SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text('位置載入失敗：$error'),
+              padding: const EdgeInsets.all(16),
+              child: Center(
+                child: _CurrentEventErrorCard(message: '位置載入失敗：$error'),
+              ),
             ),
           ),
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const Center(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: _CurrentEventLoadingCard(),
+            ),
+          ),
         ),
       ),
     );
@@ -1735,6 +1723,244 @@ class _RadarConfirmDialog extends StatelessWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CurrentEventLoadingCard extends StatelessWidget {
+  const _CurrentEventLoadingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return CosReveal(
+      child: _CurrentEventStateCard(
+        icon: Icons.radar_outlined,
+        title: '正在接上現場雷達',
+        subtitle: '讀取你已加入的活動和現場同好位置',
+        accentColor: Theme.of(context).colorScheme.primary,
+        child: const _RadarPulse(),
+      ),
+    );
+  }
+}
+
+class _CurrentEventEmptyCard extends StatelessWidget {
+  const _CurrentEventEmptyCard({required this.onOpenEvents});
+
+  final VoidCallback? onOpenEvents;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return CosReveal(
+      child: _CurrentEventStateCard(
+        icon: Icons.event_available_outlined,
+        title: '目前無當前活動',
+        subtitle: '先加入今天或即將參加的場次，再回來分享位置、集合與認親',
+        accentColor: scheme.secondary,
+        child: SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: onOpenEvents,
+            icon: const Icon(Icons.event_available),
+            label: const Text('去活動清單'),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CurrentEventErrorCard extends StatelessWidget {
+  const _CurrentEventErrorCard({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return CosReveal(
+      child: _CurrentEventStateCard(
+        icon: Icons.wifi_off_outlined,
+        title: '現場訊號沒有接上',
+        subtitle: message,
+        accentColor: scheme.error,
+      ),
+    );
+  }
+}
+
+class _CurrentEventStateCard extends StatelessWidget {
+  const _CurrentEventStateCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.accentColor,
+    this.child,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color accentColor;
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(CosUi.radiusXl),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            scheme.surfaceContainerLowest.withValues(alpha: 0.96),
+            scheme.surfaceContainerHighest.withValues(alpha: 0.88),
+          ],
+        ),
+        border: Border.all(color: accentColor.withValues(alpha: 0.28)),
+        boxShadow: [CosUi.softShadow(scheme.shadow)],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                CosIconBubble(icon: icon, color: accentColor, size: 44),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (child != null) ...[const SizedBox(height: 16), child!],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RadarPulse extends StatefulWidget {
+  const _RadarPulse();
+
+  @override
+  State<_RadarPulse> createState() => _RadarPulseState();
+}
+
+class _RadarPulseState extends State<_RadarPulse>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.stop();
+    } else if (!_controller.isAnimating) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return SizedBox(
+        height: 58,
+        child: Icon(Icons.location_searching, color: scheme.primary, size: 24),
+      );
+    }
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final value = _controller.value;
+        return SizedBox(
+          height: 58,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              for (final offset in const [0.0, 0.33, 0.66])
+                _RadarRing(
+                  progress: (value + offset) % 1,
+                  color: scheme.primary,
+                ),
+              Icon(Icons.location_searching, color: scheme.primary, size: 24),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RadarRing extends StatelessWidget {
+  const _RadarRing({required this.progress, required this.color});
+
+  final double progress;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final scale = 0.42 + progress * 0.9;
+    final opacity = (1 - progress).clamp(0.0, 1.0);
+
+    return Transform.scale(
+      scale: scale,
+      child: Opacity(
+        opacity: opacity,
+        child: Container(
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: color.withValues(alpha: 0.42), width: 2),
+          ),
         ),
       ),
     );

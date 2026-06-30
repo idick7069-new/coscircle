@@ -199,79 +199,66 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
               ),
             ),
             const SizedBox(height: 16),
-            CosCard(
+            _ShareGestureHint(
+              selectedLayer: _selectedLayer,
+              dayCount: _dayCount,
+            ),
+            const SizedBox(height: 12),
+            _ShareEditorPanel(
+              title: '背景色',
+              subtitle: '替分享卡定調，預設色票適合社群貼文和活動告知',
+              icon: Icons.palette_outlined,
+              trailing: CosBadge(
+                label: _hexColor(_backgroundColor),
+                icon: Icons.color_lens_outlined,
+                highlighted: true,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('背景色', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
                   _ColorPicker(
                     color: _backgroundColor,
                     onChanged: (color) =>
                         setState(() => _backgroundColor = color),
                   ),
                   const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      for (final color in _backgroundColors)
-                        InkWell(
-                          borderRadius: BorderRadius.circular(999),
-                          onTap: () => setState(() => _backgroundColor = color),
-                          child: Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: color,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: color == _backgroundColor
-                                    ? Theme.of(context).colorScheme.primary
-                                    : Theme.of(
-                                        context,
-                                      ).colorScheme.outlineVariant,
-                                width: color == _backgroundColor ? 3 : 1,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
+                  _PresetPaletteRow(
+                    colors: _backgroundColors,
+                    selectedColor: _backgroundColor,
+                    onChanged: (color) =>
+                        setState(() => _backgroundColor = color),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
-            CosCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('備註', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _messageController,
-                    decoration: const InputDecoration(
-                      labelText: '留言內容',
-                      helperText: '會同步顯示在左側留言欄',
-                    ),
-                    minLines: 2,
-                    maxLines: 4,
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ],
+            _ShareEditorPanel(
+              title: '備註',
+              subtitle: '同步顯示在左側留言欄，適合放認親方式或交流提醒',
+              icon: Icons.chat_bubble_outline,
+              child: TextField(
+                controller: _messageController,
+                decoration: const InputDecoration(labelText: '留言內容'),
+                minLines: 2,
+                maxLines: 4,
+                onChanged: (_) => setState(() {}),
               ),
             ),
             const SizedBox(height: 16),
-            Text('角色名', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 10),
+            const _ShareSectionIntro(),
+            const SizedBox(height: 12),
             for (var index = 1; index <= _dayCount; index += 1) ...[
-              CosCard(
+              _ShareEditorPanel(
+                title: 'D$index 角色名',
+                subtitle: '字級、底色和圓角會直接反映在預覽圖',
+                icon: Icons.badge_outlined,
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     TextField(
                       controller: _labelControllers[index],
                       decoration: InputDecoration(
-                        labelText: 'D$index 角色名',
+                        labelText: '角色名文字',
                         helperText: '先點選元件，再於預覽圖任意位置拖曳、雙指縮放旋轉',
                       ),
                       onChanged: (_) => setState(() {}),
@@ -325,65 +312,45 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        const SizedBox(width: 68, child: Text('背景')),
-                        Expanded(
-                          child: Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              for (final color in _labelBackgroundColors)
-                                _ColorSwatchButton(
-                                  color: color,
-                                  selected:
-                                      (_labelBackgroundColorByDay[index] ??
-                                          _labelBackgroundColors.first) ==
-                                      color,
-                                  onTap: () {
-                                    if (kDebugMode) {
-                                      debugPrint(
-                                        '[BookingShare] set D$index labelBackgroundColor=${_hexColor(color)}',
-                                      );
-                                    }
-                                    setState(
-                                      () => _labelBackgroundColorByDay[index] =
-                                          color,
-                                    );
-                                  },
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
+                    _ControlRow(
+                      label: '背景',
+                      child: _PresetPaletteRow(
+                        colors: _labelBackgroundColors,
+                        selectedColor:
+                            _labelBackgroundColorByDay[index] ??
+                            _labelBackgroundColors.first,
+                        swatchSize: 34,
+                        onChanged: (color) {
+                          if (kDebugMode) {
+                            debugPrint(
+                              '[BookingShare] set D$index labelBackgroundColor=${_hexColor(color)}',
+                            );
+                          }
+                          setState(
+                            () => _labelBackgroundColorByDay[index] = color,
+                          );
+                        },
+                      ),
                     ),
-                    Row(
-                      children: [
-                        SizedBox(
-                          width: 68,
-                          child: Text(
-                            '圓角 ${(_labelBorderRadiusByDay[index] ?? 36).round()}',
-                          ),
-                        ),
-                        Expanded(
-                          child: Slider(
-                            min: 0,
-                            max: 100,
-                            value: _labelBorderRadiusByDay[index] ?? 36,
-                            onChanged: (value) {
-                              if (kDebugMode) {
-                                debugPrint(
-                                  '[BookingShare] set D$index labelBorderRadius=$value',
-                                );
-                              }
-                              setState(
-                                () => _labelBorderRadiusByDay[index] = value,
-                              );
-                            },
-                          ),
-                        ),
-                      ],
+                    const SizedBox(height: 4),
+                    _ControlRow(
+                      label:
+                          '圓角 ${(_labelBorderRadiusByDay[index] ?? 36).round()}',
+                      child: Slider(
+                        min: 0,
+                        max: 100,
+                        value: _labelBorderRadiusByDay[index] ?? 36,
+                        onChanged: (value) {
+                          if (kDebugMode) {
+                            debugPrint(
+                              '[BookingShare] set D$index labelBorderRadius=$value',
+                            );
+                          }
+                          setState(
+                            () => _labelBorderRadiusByDay[index] = value,
+                          );
+                        },
+                      ),
                     ),
                   ],
                 ),
@@ -497,6 +464,230 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
       '${dir.path}/coscircle_booking_${widget.event.id}_${DateTime.now().millisecondsSinceEpoch}.png',
     );
     return file.writeAsBytes(bytes, flush: true);
+  }
+}
+
+class _ShareGestureHint extends StatelessWidget {
+  const _ShareGestureHint({
+    required this.selectedLayer,
+    required this.dayCount,
+  });
+
+  final _SelectedShareLayer? selectedLayer;
+  final int dayCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final selected = selectedLayer;
+    final title = selected == null
+        ? '尚未選取圖層'
+        : selected.kind == _ShareLayerKind.photo
+        ? '正在編輯 D${selected.dayIndex} 照片'
+        : '正在編輯 D${selected.dayIndex} 角色名';
+    final description = selected == null
+        ? '點選預覽圖中的照片或角色名，再拖曳、雙指縮放旋轉'
+        : dayCount > 1
+        ? '目前只會調整 D${selected.dayIndex} 的圖層'
+        : '拖曳、雙指縮放或旋轉，調整到適合社群分享的位置';
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: selected == null
+            ? scheme.surfaceContainerHighest.withValues(alpha: 0.52)
+            : scheme.secondaryContainer.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(CosUi.radiusLg),
+        border: Border.all(
+          color: selected == null
+              ? scheme.outlineVariant.withValues(alpha: 0.66)
+              : scheme.secondary.withValues(alpha: 0.36),
+        ),
+      ),
+      child: Row(
+        children: [
+          CosIconBubble(
+            icon: selected == null ? Icons.touch_app_outlined : Icons.open_with,
+            color: selected == null ? scheme.primary : scheme.secondary,
+            size: 38,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShareEditorPanel extends StatelessWidget {
+  const _ShareEditorPanel({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.child,
+    this.trailing,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Widget child;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(CosUi.radiusLg),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.64),
+        ),
+        boxShadow: [CosUi.softShadow(scheme.shadow)],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CosSectionHeader(
+              title: title,
+              subtitle: subtitle,
+              icon: icon,
+              trailing: trailing,
+            ),
+            const SizedBox(height: 14),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ShareSectionIntro extends StatelessWidget {
+  const _ShareSectionIntro();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Row(
+      children: [
+        CosIconBubble(
+          icon: Icons.theater_comedy_outlined,
+          color: scheme.tertiary,
+          size: 38,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '角色名樣式',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '每一天可設定不同標籤，適合多日活動分別出角',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ControlRow extends StatelessWidget {
+  const _ControlRow({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: 76,
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(
+              context,
+            ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: child),
+      ],
+    );
+  }
+}
+
+class _PresetPaletteRow extends StatelessWidget {
+  const _PresetPaletteRow({
+    required this.colors,
+    required this.selectedColor,
+    required this.onChanged,
+    this.swatchSize = 38,
+  });
+
+  final List<Color> colors;
+  final Color selectedColor;
+  final ValueChanged<Color> onChanged;
+  final double swatchSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        for (final color in colors)
+          _ColorSwatchButton(
+            color: color,
+            selected: color == selectedColor,
+            size: swatchSize,
+            onTap: () => onChanged(color),
+          ),
+      ],
+    );
   }
 }
 
@@ -1405,11 +1596,13 @@ class _ColorSwatchButton extends StatelessWidget {
     required this.color,
     required this.selected,
     required this.onTap,
+    this.size = 34,
   });
 
   final Color color;
   final bool selected;
   final VoidCallback onTap;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
@@ -1417,8 +1610,8 @@ class _ColorSwatchButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(999),
       onTap: onTap,
       child: Container(
-        width: 34,
-        height: 34,
+        width: size,
+        height: size,
         decoration: BoxDecoration(
           color: color,
           shape: BoxShape.circle,

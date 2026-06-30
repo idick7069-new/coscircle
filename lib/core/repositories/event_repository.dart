@@ -18,6 +18,7 @@ abstract class EventRepository {
   Future<List<EventParticipant>> fetchParticipants(String eventId);
   Future<void> followUser(String userId);
   Future<void> unfollowUser(String userId);
+  Future<void> blockUser(String userId);
   Future<void> upsertBooking(EventBooking booking);
   Future<void> removeBooking(String eventId, {int? dayIndex});
 }
@@ -68,6 +69,11 @@ class ApiEventRepository implements EventRepository {
   @override
   Future<void> unfollowUser(String userId) async {
     await _apiClient.delete('/users/$userId/follow');
+  }
+
+  @override
+  Future<void> blockUser(String userId) async {
+    await _apiClient.post('/users/$userId/block');
   }
 
   @override
@@ -137,6 +143,9 @@ class InMemoryEventRepository implements EventRepository {
 
   @override
   Future<void> unfollowUser(String userId) async {}
+
+  @override
+  Future<void> blockUser(String userId) async {}
 
   @override
   Future<void> upsertBooking(EventBooking booking) async {

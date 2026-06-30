@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../../core/models/booking_visibility.dart';
 import '../../../core/models/profile.dart';
 import '../../../core/models/work.dart';
 import '../../../core/repositories/profile_repository.dart';
@@ -13,6 +14,18 @@ import '../../works/presentation/work_selector.dart';
 
 const _profileRegionOptions = ['北部', '中部', '南部', '離島', '海外'];
 const _genderLabels = {'male': '生理男', 'female': '生理女', 'private': '不公開'};
+const _bookingVisibilityLabels = {'public': '全部人', 'circle': '僅小圈圈'};
+
+final bookingFollowersProvider =
+    FutureProvider.autoDispose<List<BookingFollowerGroup>>((ref) {
+      return ref.watch(profileRepositoryProvider).fetchBookingFollowers();
+    });
+
+final blockedUsersProvider = FutureProvider.autoDispose<List<BlockedUser>>((
+  ref,
+) {
+  return ref.watch(profileRepositoryProvider).fetchBlockedUsers();
+});
 
 class ProfilePage extends ConsumerStatefulWidget {
   const ProfilePage({super.key});
@@ -35,6 +48,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   List<String> _travelRegions = const [];
   bool _travelSameRegion = false;
   String _gender = 'private';
+  String _bookingVisibility = 'public';
   List<String> _otherPhotoUrls = const [];
   final List<XFile?> _pickedOtherPhotos = List<XFile?>.filled(3, null);
   late Future<UserProfile?> _profileFuture;
@@ -70,7 +84,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       future: _profileFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const _ProfileLoadingState();
         }
         final profile =
             snapshot.data ?? const UserProfile(id: 'me', nickname: '');
@@ -128,6 +142,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                       travelRegions: _travelRegions,
                       travelSameRegion: _travelSameRegion,
                       gender: _gender,
+                      bookingVisibility: _bookingVisibility,
                       otherPhotoUrls: _otherPhotoUrls,
                       onPickAvatar: _pickAvatar,
                       onDeepPitWorksChanged: (works) =>
@@ -146,6 +161,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                       }),
                       onGenderChanged: (value) =>
                           setState(() => _gender = value),
+                      onBookingVisibilityChanged: (value) =>
+                          setState(() => _bookingVisibility = value),
                       onPickOtherPhoto: _pickOtherPhoto,
                       onRemoveOtherPhoto: _removeOtherPhoto,
                       onSave: () => _saveProfile(context, profile),
@@ -182,6 +199,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     _gender = _genderLabels.containsKey(profile.gender)
         ? profile.gender
         : 'private';
+    _bookingVisibility =
+        _bookingVisibilityLabels.containsKey(profile.bookingVisibility)
+        ? profile.bookingVisibility
+        : 'public';
     _otherPhotoUrls = List<String>.from(profile.otherPhotoUrls.take(3));
     for (var index = 0; index < _pickedOtherPhotos.length; index += 1) {
       _pickedOtherPhotos[index] = null;
@@ -230,6 +251,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           travelSameRegion: _travelSameRegion,
           landmine: _landmine.text.trim(),
           gender: _gender,
+          bookingVisibility: _bookingVisibility,
           otherPhotoUrls: otherPhotoUrls
               .map((url) => url.trim())
               .where((url) => url.isNotEmpty)
@@ -420,7 +442,22 @@ class _ProfileSummary extends StatelessWidget {
         CosReveal(child: _ProfileHeroCard(profile: profile)),
         const SizedBox(height: 14),
         CosReveal(
-          delay: const Duration(milliseconds: 70),
+          delay: const Duration(milliseconds: 45),
+          child: _ProfileReadinessCard(profile: profile),
+        ),
+        const SizedBox(height: 12),
+        CosReveal(
+          delay: const Duration(milliseconds: 60),
+          child: _ProfileConnectionSignalCard(profile: profile),
+        ),
+        const SizedBox(height: 12),
+        CosReveal(
+          delay: const Duration(milliseconds: 75),
+          child: _BookingPrivacyDashboard(profile: profile),
+        ),
+        const SizedBox(height: 12),
+        CosReveal(
+          delay: const Duration(milliseconds: 90),
           child: CosCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -473,7 +510,7 @@ class _ProfileSummary extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         CosReveal(
-          delay: const Duration(milliseconds: 120),
+          delay: const Duration(milliseconds: 140),
           child: CosCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -503,7 +540,7 @@ class _ProfileSummary extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         CosReveal(
-          delay: const Duration(milliseconds: 170),
+          delay: const Duration(milliseconds: 190),
           child: CosCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -523,6 +560,133 @@ class _ProfileSummary extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ProfileLoadingState extends StatelessWidget {
+  const _ProfileLoadingState();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const CosPageHeader(
+          title: 'Cos 名片',
+          subtitle: '正在整理你的同好識別資料',
+          leading: CosIconBubble(icon: Icons.badge_outlined),
+        ),
+        const SizedBox(height: 12),
+        CosGradientPanel(
+          icon: Icons.theater_comedy_outlined,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 94,
+                    height: 94,
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerLowest.withValues(
+                        alpha: 0.62,
+                      ),
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _ProfileSkeletonLine(widthFactor: 0.42),
+                        const SizedBox(height: 10),
+                        _ProfileSkeletonLine(widthFactor: 0.86, height: 22),
+                        const SizedBox(height: 10),
+                        _ProfileSkeletonLine(widthFactor: 0.62),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: const [
+                  Expanded(child: _ProfileSkeletonMetric()),
+                  SizedBox(width: 8),
+                  Expanded(child: _ProfileSkeletonMetric()),
+                  SizedBox(width: 8),
+                  Expanded(child: _ProfileSkeletonMetric()),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        const CosCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _ProfileSkeletonLine(widthFactor: 0.42, height: 18),
+              SizedBox(height: 14),
+              _ProfileSkeletonLine(widthFactor: 0.95),
+              SizedBox(height: 10),
+              _ProfileSkeletonLine(widthFactor: 0.72),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProfileSkeletonMetric extends StatelessWidget {
+  const _ProfileSkeletonMetric();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLowest.withValues(alpha: 0.48),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.3)),
+      ),
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _ProfileSkeletonLine(widthFactor: 0.58, height: 16),
+            SizedBox(height: 8),
+            _ProfileSkeletonLine(widthFactor: 0.82, height: 10),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileSkeletonLine extends StatelessWidget {
+  const _ProfileSkeletonLine({required this.widthFactor, this.height = 12});
+
+  final double widthFactor;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return FractionallySizedBox(
+      widthFactor: widthFactor,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: scheme.onSurface.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(99),
+        ),
+        child: SizedBox(height: height),
+      ),
     );
   }
 }
@@ -617,6 +781,839 @@ class _ProfileHeroCard extends StatelessWidget {
             _ProfileQrInvite(profile: profile),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _ProfileReadinessCard extends StatelessWidget {
+  const _ProfileReadinessCard({required this.profile});
+
+  final UserProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final cues = <_ProfileReadinessCue>[
+      _ProfileReadinessCue(
+        label: '暱稱',
+        ready: profile.nickname.trim().isNotEmpty,
+        icon: Icons.badge_outlined,
+      ),
+      _ProfileReadinessCue(
+        label: '頭像',
+        ready: profile.avatarUrl.trim().isNotEmpty,
+        icon: Icons.face_retouching_natural_outlined,
+      ),
+      _ProfileReadinessCue(
+        label: '自介',
+        ready: profile.bio.trim().isNotEmpty,
+        icon: Icons.article_outlined,
+      ),
+      _ProfileReadinessCue(
+        label: '座標',
+        ready: profile.regions.isNotEmpty,
+        icon: Icons.explore_outlined,
+      ),
+      _ProfileReadinessCue(
+        label: '跑場',
+        ready: profile.travelRegions.isNotEmpty,
+        icon: Icons.directions_run_outlined,
+      ),
+      _ProfileReadinessCue(
+        label: '深坑',
+        ready: profile.deepPitWorks.isNotEmpty,
+        icon: Icons.label_important_outline,
+      ),
+      _ProfileReadinessCue(
+        label: '淺坑',
+        ready: profile.shallowPitWorks.isNotEmpty,
+        icon: Icons.sell_outlined,
+      ),
+      _ProfileReadinessCue(
+        label: '照片',
+        ready: profile.otherPhotoUrls.isNotEmpty,
+        icon: Icons.photo_library_outlined,
+      ),
+    ];
+    final readyCount = cues.where((cue) => cue.ready).length;
+    final progress = readyCount / cues.length;
+    final nextCue = cues.where((cue) => !cue.ready).firstOrNull;
+
+    return CosCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CosIconBubble(
+                icon: Icons.radar_outlined,
+                color: scheme.secondary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '認親準備度',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      nextCue == null
+                          ? '名片資訊完整，現場交換時更容易被認出。'
+                          : '下一步補上「${nextCue.label}」，同好更快找到開話題的點。',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                '$readyCount/${cues.length}',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  color: scheme.primary,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 8,
+              backgroundColor: scheme.surfaceContainerHighest,
+              color: scheme.primary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final cue in cues)
+                _ProfileReadinessChip(cue: cue, color: scheme.primary),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileReadinessCue {
+  const _ProfileReadinessCue({
+    required this.label,
+    required this.ready,
+    required this.icon,
+  });
+
+  final String label;
+  final bool ready;
+  final IconData icon;
+}
+
+class _ProfileReadinessChip extends StatelessWidget {
+  const _ProfileReadinessChip({required this.cue, required this.color});
+
+  final _ProfileReadinessCue cue;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final accent = cue.ready ? color : scheme.onSurfaceVariant;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: cue.ready ? 0.12 : 0.06),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: accent.withValues(alpha: 0.22)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              cue.ready ? Icons.check_circle : cue.icon,
+              size: 15,
+              color: accent,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              cue.label,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: cue.ready ? scheme.onSurface : scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileConnectionSignalCard extends StatelessWidget {
+  const _ProfileConnectionSignalCard({required this.profile});
+
+  final UserProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final favoriteWork =
+        profile.deepPitWorks.firstOrNull ?? profile.shallowPitWorks.firstOrNull;
+    final travelText = profile.travelRegions.isNotEmpty
+        ? profile.travelRegions.join('、')
+        : profile.regions.isNotEmpty
+        ? profile.regions.join('、')
+        : '尚未設定跑場';
+    final boundaryText = profile.landmine.trim().isEmpty
+        ? '尚未填寫雷點'
+        : profile.landmine.trim();
+
+    return CosCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const CosSectionHeader(
+            title: '同好訊號',
+            subtitle: '把最容易開場的資訊排在一起',
+            icon: Icons.diversity_3_outlined,
+          ),
+          const SizedBox(height: 12),
+          _ProfileConnectionHero(
+            title: favoriteWork == null ? '等你補上主坑' : favoriteWork.name,
+            subtitle: favoriteWork == null
+                ? '深坑或淺坑會成為同好最快的開場點'
+                : profile.deepPitWorks.contains(favoriteWork)
+                ? '主坑訊號，最適合拿來找同作品同好'
+                : '淺坑訊號，適合讓同好知道你也有興趣',
+            color: scheme.primary,
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _ProfileSignalCueTile(
+                  icon: Icons.directions_run_outlined,
+                  label: '跑場',
+                  value: travelText,
+                  color: scheme.secondary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ProfileSignalCueTile(
+                  icon: Icons.photo_library_outlined,
+                  label: '辨識',
+                  value: profile.otherPhotoUrls.isEmpty
+                      ? '照片待補'
+                      : '${profile.otherPhotoUrls.length} 張代表作',
+                  color: scheme.tertiary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _ProfileSignalCueTile(
+            icon: Icons.warning_amber_outlined,
+            label: '界線',
+            value: boundaryText,
+            color: scheme.error,
+            maxLines: 2,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BookingPrivacyDashboard extends ConsumerWidget {
+  const _BookingPrivacyDashboard({required this.profile});
+
+  final UserProfile profile;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final groups = ref.watch(bookingFollowersProvider);
+    final blockedUsers = ref.watch(blockedUsersProvider);
+    final visibilityLabel =
+        _bookingVisibilityLabels[profile.bookingVisibility] ?? '全部人';
+
+    return CosCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CosSectionHeader(
+            title: '場次安全',
+            subtitle: '管理誰能看見你的場次預定與追蹤訊號',
+            icon: Icons.shield_outlined,
+            trailing: CosBadge(
+              label: visibilityLabel,
+              icon: profile.bookingVisibility == 'circle'
+                  ? Icons.groups_outlined
+                  : Icons.public_outlined,
+              color: scheme.primary,
+              highlighted: true,
+            ),
+          ),
+          const SizedBox(height: 12),
+          groups.when(
+            data: (items) {
+              if (items.isEmpty) {
+                return const _BookingPrivacyEmptyState();
+              }
+              return Column(
+                children: [
+                  for (final group in items) ...[
+                    _BookingFollowerGroupTile(group: group),
+                    if (group != items.last) const SizedBox(height: 10),
+                  ],
+                ],
+              );
+            },
+            error: (error, stack) => _BookingPrivacyMessage(
+              icon: Icons.wifi_off_outlined,
+              message: '追蹤資訊載入失敗',
+              actionLabel: '重新整理',
+              onAction: () => ref.invalidate(bookingFollowersProvider),
+            ),
+            loading: () => const _BookingPrivacyLoadingState(),
+          ),
+          const SizedBox(height: 14),
+          Divider(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+          const SizedBox(height: 12),
+          CosSectionHeader(
+            title: '黑名單',
+            subtitle: '被封鎖的人不能看見你的名片、場次預定與現場訊號',
+            icon: Icons.block_outlined,
+            trailing: blockedUsers.whenOrNull(
+              data: (items) => CosBadge(
+                label: '${items.length}',
+                icon: Icons.shield_outlined,
+                color: scheme.error,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          blockedUsers.when(
+            data: (items) {
+              if (items.isEmpty) {
+                return const _BookingPrivacyMessage(
+                  icon: Icons.verified_user_outlined,
+                  message: '目前沒有封鎖任何使用者。',
+                );
+              }
+              return Column(
+                children: [
+                  for (final user in items)
+                    _BlockedUserRow(
+                      user: user,
+                      onUnblock: () => _confirmUnblockUser(context, ref, user),
+                    ),
+                ],
+              );
+            },
+            error: (error, stack) => _BookingPrivacyMessage(
+              icon: Icons.wifi_off_outlined,
+              message: '黑名單載入失敗',
+              actionLabel: '重新整理',
+              onAction: () => ref.invalidate(blockedUsersProvider),
+            ),
+            loading: () => const _BookingPrivacyLoadingState(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmUnblockUser(
+    BuildContext context,
+    WidgetRef ref,
+    BlockedUser user,
+  ) async {
+    final confirmed = await _confirmSafetyAction(
+      context,
+      title: '解除封鎖 ${user.nickname}？',
+      message: '解除後對方仍不會自動恢復關注，但可以依你的可見範圍重新看到公開資訊。',
+      actionLabel: '解除封鎖',
+    );
+    if (!confirmed) return;
+    await ref.read(profileRepositoryProvider).unblockUser(user.userId);
+    ref.invalidate(blockedUsersProvider);
+    ref.invalidate(bookingFollowersProvider);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已解除封鎖')));
+  }
+}
+
+class _BookingFollowerGroupTile extends ConsumerWidget {
+  const _BookingFollowerGroupTile({required this.group});
+
+  final BookingFollowerGroup group;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.38),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CosIconBubble(icon: Icons.event_available_outlined, size: 36),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        group.eventName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${_compactDate(group.startDate)} · Day ${group.dayIndex}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                CosBadge(
+                  label: '${group.followers.length}',
+                  icon: Icons.visibility_outlined,
+                  color: scheme.secondary,
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (group.followers.isEmpty)
+              Text(
+                '目前沒有追蹤者能看到這筆預定。',
+                style: Theme.of(context).textTheme.bodySmall,
+              )
+            else
+              Column(
+                children: [
+                  for (final follower in group.followers)
+                    _BookingFollowerRow(
+                      follower: follower,
+                      onRemove: () => _confirmRemoveFollower(
+                        context,
+                        ref,
+                        follower,
+                      ),
+                      onBlock: () => _confirmBlockFollower(
+                        context,
+                        ref,
+                        follower,
+                      ),
+                    ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmRemoveFollower(
+    BuildContext context,
+    WidgetRef ref,
+    BookingFollower follower,
+  ) async {
+    final confirmed = await _confirmSafetyAction(
+      context,
+      title: '取消 ${follower.nickname} 的關注？',
+      message: '對方會從你的追蹤者中移除，但仍可依你的可見範圍看到公開資訊。',
+      actionLabel: '取消關注',
+    );
+    if (!confirmed) return;
+    await ref.read(profileRepositoryProvider).removeFollower(follower.userId);
+    ref.invalidate(bookingFollowersProvider);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已移除追蹤者')));
+  }
+
+  Future<void> _confirmBlockFollower(
+    BuildContext context,
+    WidgetRef ref,
+    BookingFollower follower,
+  ) async {
+    final confirmed = await _confirmSafetyAction(
+      context,
+      title: '封鎖 ${follower.nickname}？',
+      message: '封鎖後對方將看不到你的個人資訊、場次預定與現場訊號，也不能再關注你。',
+      actionLabel: '封鎖',
+      destructive: true,
+    );
+    if (!confirmed) return;
+    await ref.read(profileRepositoryProvider).blockUser(follower.userId);
+    ref.invalidate(bookingFollowersProvider);
+    ref.invalidate(blockedUsersProvider);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已封鎖使用者')));
+  }
+}
+
+class _BookingFollowerRow extends StatelessWidget {
+  const _BookingFollowerRow({
+    required this.follower,
+    required this.onRemove,
+    required this.onBlock,
+  });
+
+  final BookingFollower follower;
+  final VoidCallback onRemove;
+  final VoidCallback onBlock;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final nickname = follower.nickname.isEmpty ? '未命名使用者' : follower.nickname;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: scheme.primaryContainer,
+            backgroundImage: pickedImageProvider(follower.avatarUrl),
+            child: follower.avatarUrl.isEmpty
+                ? Text(nickname.characters.firstOrNull ?? '?')
+                : null,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              nickname,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: '取消關注',
+            onPressed: onRemove,
+            icon: const Icon(Icons.person_remove_outlined),
+          ),
+          IconButton(
+            tooltip: '封鎖',
+            onPressed: onBlock,
+            color: scheme.error,
+            icon: const Icon(Icons.block_outlined),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BlockedUserRow extends StatelessWidget {
+  const _BlockedUserRow({required this.user, required this.onUnblock});
+
+  final BlockedUser user;
+  final VoidCallback onUnblock;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final nickname = user.nickname.isEmpty ? '未命名使用者' : user.nickname;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: scheme.errorContainer.withValues(alpha: 0.25),
+          borderRadius: BorderRadius.circular(CosUi.radiusMd),
+          border: Border.all(color: scheme.error.withValues(alpha: 0.18)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: scheme.errorContainer,
+                backgroundImage: pickedImageProvider(user.avatarUrl),
+                child: user.avatarUrl.isEmpty
+                    ? Text(nickname.characters.firstOrNull ?? '?')
+                    : null,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  nickname,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: onUnblock,
+                icon: const Icon(Icons.lock_open_outlined),
+                label: const Text('解除'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BookingPrivacyEmptyState extends StatelessWidget {
+  const _BookingPrivacyEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return const _BookingPrivacyMessage(
+      icon: Icons.visibility_off_outlined,
+      message: '目前沒有追蹤者正在看你的場次預定。',
+    );
+  }
+}
+
+class _BookingPrivacyLoadingState extends StatelessWidget {
+  const _BookingPrivacyLoadingState();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        SizedBox.square(
+          dimension: 18,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: scheme.primary,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          '正在整理追蹤訊號',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    );
+  }
+}
+
+class _BookingPrivacyMessage extends StatelessWidget {
+  const _BookingPrivacyMessage({
+    required this.icon,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final IconData icon;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        CosIconBubble(icon: icon, size: 36),
+        const SizedBox(width: 10),
+        Expanded(child: Text(message)),
+        if (actionLabel != null && onAction != null)
+          TextButton(onPressed: onAction, child: Text(actionLabel!)),
+      ],
+    );
+  }
+}
+
+String _compactDate(DateTime date) {
+  if (date.millisecondsSinceEpoch == 0) return '日期未定';
+  return '${date.month}/${date.day}';
+}
+
+Future<bool> _confirmSafetyAction(
+  BuildContext context, {
+  required String title,
+  required String message,
+  required String actionLabel,
+  bool destructive = false,
+}) async {
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (context) {
+      final scheme = Theme.of(context).colorScheme;
+      return AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('返回'),
+          ),
+          FilledButton(
+            style: destructive
+                ? FilledButton.styleFrom(
+                    backgroundColor: scheme.error,
+                    foregroundColor: scheme.onError,
+                  )
+                : null,
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(actionLabel),
+          ),
+        ],
+      );
+    },
+  );
+  return result ?? false;
+}
+
+class _ProfileConnectionHero extends StatelessWidget {
+  const _ProfileConnectionHero({
+    required this.title,
+    required this.subtitle,
+    required this.color,
+  });
+
+  final String title;
+  final String subtitle;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(CosUi.radiusLg),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            CosIconBubble(icon: Icons.auto_awesome, color: color, size: 42),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileSignalCueTile extends StatelessWidget {
+  const _ProfileSignalCueTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+    this.maxLines = 1,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+  final int maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.36),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
+        border: Border.all(color: color.withValues(alpha: 0.16)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    maxLines: maxLines,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -839,6 +1836,7 @@ class _EditProfileForm extends StatelessWidget {
     required this.travelRegions,
     required this.travelSameRegion,
     required this.gender,
+    required this.bookingVisibility,
     required this.otherPhotoUrls,
     required this.onPickAvatar,
     required this.onDeepPitWorksChanged,
@@ -847,6 +1845,7 @@ class _EditProfileForm extends StatelessWidget {
     required this.onTravelRegionsChanged,
     required this.onUseSameRegions,
     required this.onGenderChanged,
+    required this.onBookingVisibilityChanged,
     required this.onPickOtherPhoto,
     required this.onRemoveOtherPhoto,
     required this.onSave,
@@ -865,6 +1864,7 @@ class _EditProfileForm extends StatelessWidget {
   final List<String> travelRegions;
   final bool travelSameRegion;
   final String gender;
+  final String bookingVisibility;
   final List<String> otherPhotoUrls;
   final VoidCallback onPickAvatar;
   final ValueChanged<List<WorkTag>> onDeepPitWorksChanged;
@@ -873,6 +1873,7 @@ class _EditProfileForm extends StatelessWidget {
   final ValueChanged<List<String>> onTravelRegionsChanged;
   final VoidCallback onUseSameRegions;
   final ValueChanged<String> onGenderChanged;
+  final ValueChanged<String> onBookingVisibilityChanged;
   final ValueChanged<int> onPickOtherPhoto;
   final ValueChanged<int> onRemoveOtherPhoto;
   final VoidCallback onSave;
@@ -880,8 +1881,18 @@ class _EditProfileForm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final totalWorks = deepPitWorks.length + shallowPitWorks.length;
+    final photoCount = otherPhotoUrls.where((url) => url.isNotEmpty).length;
     return Column(
       children: [
+        _EditProfilePassPanel(
+          nickname: nickname.text,
+          regions: regions,
+          travelRegions: travelRegions,
+          totalWorks: totalWorks,
+          photoCount: photoCount,
+        ),
+        const SizedBox(height: 12),
         _ProfileFormSection(
           title: '基本資料',
           icon: Icons.badge_outlined,
@@ -1007,6 +2018,17 @@ class _EditProfileForm extends StatelessWidget {
           ],
         ),
         _ProfileFormSection(
+          title: '安全與可見範圍',
+          icon: Icons.shield_outlined,
+          children: [
+            _BookingVisibilitySelector(
+              value: bookingVisibility,
+              enabled: !saving,
+              onChanged: onBookingVisibilityChanged,
+            ),
+          ],
+        ),
+        _ProfileFormSection(
           title: '其他照片',
           icon: Icons.photo_library_outlined,
           children: [
@@ -1033,6 +2055,107 @@ class _EditProfileForm extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _EditProfilePassPanel extends StatelessWidget {
+  const _EditProfilePassPanel({
+    required this.nickname,
+    required this.regions,
+    required this.travelRegions,
+    required this.totalWorks,
+    required this.photoCount,
+  });
+
+  final String nickname;
+  final List<String> regions;
+  final List<String> travelRegions;
+  final int totalWorks;
+  final int photoCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return CosReveal(
+      child: CosGradientPanel(
+        icon: Icons.edit_note_outlined,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CosIconBubble(
+                  icon: Icons.theater_comedy_outlined,
+                  color: scheme.primary,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        nickname.trim().isEmpty ? '名片調整台' : nickname.trim(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '調整同好能快速辨識你的資訊，不會改變任何公開範圍設定。',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: CosMetricTile(
+                    icon: Icons.explore_outlined,
+                    label: '座標',
+                    value: regions.isEmpty ? '未設' : regions.join('、'),
+                    color: scheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: CosMetricTile(
+                    icon: Icons.label_important_outline,
+                    label: '坑單',
+                    value: '$totalWorks',
+                    color: scheme.secondary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: CosMetricTile(
+                    icon: Icons.photo_library_outlined,
+                    label: '照片',
+                    value: '$photoCount',
+                    color: scheme.tertiary,
+                  ),
+                ),
+              ],
+            ),
+            if (travelRegions.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              CosBadge(
+                label: '可跑場：${travelRegions.join('、')}',
+                icon: Icons.directions_run_outlined,
+                color: scheme.secondary,
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1068,6 +2191,126 @@ class _ProfileFormSection extends StatelessWidget {
           ),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           children: children,
+        ),
+      ),
+    );
+  }
+}
+
+class _BookingVisibilitySelector extends StatelessWidget {
+  const _BookingVisibilitySelector({
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final String value;
+  final bool enabled;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('場次預定可見範圍', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 8),
+        _BookingVisibilityOption(
+          icon: Icons.public_outlined,
+          title: '全部人',
+          subtitle: '所有登入使用者都能在活動頁看到你的場次預定。',
+          selected: value != 'circle',
+          enabled: enabled,
+          color: scheme.primary,
+          onTap: () => onChanged('public'),
+        ),
+        const SizedBox(height: 8),
+        _BookingVisibilityOption(
+          icon: Icons.groups_outlined,
+          title: '僅小圈圈',
+          subtitle: '只有和你同小圈圈的人能看到你的場次預定與現場訊號。',
+          selected: value == 'circle',
+          enabled: enabled,
+          color: scheme.secondary,
+          onTap: () => onChanged('circle'),
+        ),
+      ],
+    );
+  }
+}
+
+class _BookingVisibilityOption extends StatelessWidget {
+  const _BookingVisibilityOption({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.enabled,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final bool enabled;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(CosUi.radiusMd),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: selected
+              ? color.withValues(alpha: 0.12)
+              : scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(CosUi.radiusMd),
+          border: Border.all(
+            color: selected
+                ? color.withValues(alpha: 0.45)
+                : scheme.outlineVariant.withValues(alpha: 0.55),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              CosIconBubble(icon: icon, color: color, size: 38),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                selected
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+                color: selected ? color : scheme.onSurfaceVariant,
+              ),
+            ],
+          ),
         ),
       ),
     );

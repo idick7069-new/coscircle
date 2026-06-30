@@ -1,0 +1,24 @@
+FROM ghcr.io/cirruslabs/flutter:stable AS builder
+
+WORKDIR /app
+
+ARG API_BASE_URL
+ENV API_BASE_URL=${API_BASE_URL}
+
+COPY pubspec.yaml pubspec.lock ./
+RUN flutter pub get
+
+COPY . .
+RUN flutter build web --release --dart-define=API_BASE_URL=${API_BASE_URL}
+
+FROM nginx:1.27-alpine
+
+COPY deploy/nginx/flutter-web.conf /etc/nginx/templates/default.conf.template
+COPY --from=builder /app/build/web /usr/share/nginx/html
+
+ENV PORT=8080
+
+EXPOSE 8080
+
+CMD ["nginx", "-g", "daemon off;"]
+
