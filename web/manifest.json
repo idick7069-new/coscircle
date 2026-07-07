@@ -1,11 +1,11 @@
 {
-    "name": "coscircle",
-    "short_name": "coscircle",
+    "name": "CosCircle",
+    "short_name": "CosCircle",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FFF7F2",
+    "theme_color": "#FF5F8F",
+    "description": "Cosplay 活動、同好關注與小圈圈集合工具。",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
