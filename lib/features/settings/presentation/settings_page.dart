@@ -773,12 +773,39 @@ class BugReportPage extends StatefulWidget {
 
 class _BugReportPageState extends State<BugReportPage> {
   late final WebViewController _controller;
+  bool _loading = true;
+  int _progress = 0;
+  String? _webError;
 
   @override
   void initState() {
     super.initState();
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onProgress: (progress) {
+            if (mounted) setState(() => _progress = progress);
+          },
+          onPageStarted: (_) {
+            if (!mounted) return;
+            setState(() {
+              _loading = true;
+              _webError = null;
+            });
+          },
+          onPageFinished: (_) {
+            if (mounted) setState(() => _loading = false);
+          },
+          onWebResourceError: (error) {
+            if (!mounted) return;
+            setState(() {
+              _loading = false;
+              _webError = error.description;
+            });
+          },
+        ),
+      )
       ..loadRequest(Uri.parse('https://docs.google.com/forms/'));
   }
 
@@ -786,7 +813,231 @@ class _BugReportPageState extends State<BugReportPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('BUG回報')),
-      body: SafeArea(child: WebViewWidget(controller: _controller)),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: Column(
+            children: [
+              _BugReportHero(
+                loading: _loading,
+                progress: _progress,
+                hasError: _webError != null,
+                onReload: () => _controller.reload(),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: _BugReportWebFrame(
+                  controller: _controller,
+                  loading: _loading,
+                  progress: _progress,
+                  errorText: _webError,
+                  onReload: () => _controller.reload(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BugReportHero extends StatelessWidget {
+  const _BugReportHero({
+    required this.loading,
+    required this.progress,
+    required this.hasError,
+    required this.onReload,
+  });
+
+  final bool loading;
+  final int progress;
+  final bool hasError;
+  final VoidCallback onReload;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final title = hasError
+        ? '回報表單暫時打不開'
+        : loading
+        ? '正在載入回報表單'
+        : '把問題交給我們';
+    final subtitle = hasError
+        ? '可以重新整理，或稍後再回來提交問題'
+        : '描述你遇到的異常、畫面或流程，我們會用它修正下一版';
+    return CosGradientPanel(
+      icon: Icons.bug_report_outlined,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CosIconBubble(
+                icon: hasError
+                    ? Icons.wifi_off_outlined
+                    : Icons.bug_report_outlined,
+                color: hasError ? scheme.error : scheme.primary,
+                size: 46,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (loading)
+                CosBadge(
+                  label: '$progress%',
+                  icon: Icons.sync_outlined,
+                  color: scheme.secondary,
+                  highlighted: true,
+                )
+              else
+                IconButton.filledTonal(
+                  tooltip: '重新整理',
+                  onPressed: onReload,
+                  icon: const Icon(Icons.refresh),
+                ),
+            ],
+          ),
+          if (loading) ...[
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: LinearProgressIndicator(value: progress / 100),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _BugReportWebFrame extends StatelessWidget {
+  const _BugReportWebFrame({
+    required this.controller,
+    required this.loading,
+    required this.progress,
+    required this.errorText,
+    required this.onReload,
+  });
+
+  final WebViewController controller;
+  final bool loading;
+  final int progress;
+  final String? errorText;
+  final VoidCallback onReload;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(CosUi.radiusLg),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.72),
+        ),
+        boxShadow: [CosUi.softShadow(scheme.shadow)],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(CosUi.radiusLg),
+        child: Stack(
+          children: [
+            WebViewWidget(controller: controller),
+            if (loading)
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerLowest.withValues(
+                      alpha: 0.86,
+                    ),
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CosLoadingPulse(color: scheme.primary, size: 34),
+                        const SizedBox(height: 12),
+                        Text(
+                          '載入表單 $progress%',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            if (errorText != null)
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerLowest.withValues(
+                      alpha: 0.94,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CosIconBubble(
+                          icon: Icons.cloud_off_outlined,
+                          color: scheme.error,
+                          size: 52,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '無法載入回報表單',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          errorText!,
+                          textAlign: TextAlign.center,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                        const SizedBox(height: 14),
+                        FilledButton.icon(
+                          onPressed: onReload,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('重新載入'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
