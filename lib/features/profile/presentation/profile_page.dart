@@ -8,6 +8,7 @@ import '../../../core/models/booking_visibility.dart';
 import '../../../core/models/profile.dart';
 import '../../../core/models/work.dart';
 import '../../../core/repositories/profile_repository.dart';
+import '../../../core/utils/event_day_display.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/cos_ui.dart';
 import '../../works/presentation/work_selector.dart';
@@ -1049,6 +1050,11 @@ class _BookingPrivacyDashboard extends ConsumerWidget {
     final blockedUsers = ref.watch(blockedUsersProvider);
     final visibilityLabel =
         _bookingVisibilityLabels[profile.bookingVisibility] ?? '全部人';
+    final followerCount = groups.whenOrNull(
+      data: (items) =>
+          items.fold<int>(0, (total, group) => total + group.followers.length),
+    );
+    final blockedCount = blockedUsers.whenOrNull(data: (items) => items.length);
 
     return CosCard(
       child: Column(
@@ -1067,7 +1073,16 @@ class _BookingPrivacyDashboard extends ConsumerWidget {
               highlighted: true,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
+          _SafetySignalStrip(
+            visibilityLabel: visibilityLabel,
+            visibilityIcon: profile.bookingVisibility == 'circle'
+                ? Icons.groups_2_outlined
+                : Icons.public_outlined,
+            followerCount: followerCount,
+            blockedCount: blockedCount,
+          ),
+          const SizedBox(height: 14),
           groups.when(
             data: (items) {
               if (items.isEmpty) {
@@ -1169,27 +1184,29 @@ class _BookingFollowerGroupTile extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.38),
-        borderRadius: BorderRadius.circular(CosUi.radiusMd),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.55),
-        ),
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(CosUi.radiusLg),
+        border: Border.all(color: scheme.secondary.withValues(alpha: 0.2)),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                CosIconBubble(icon: Icons.event_available_outlined, size: 36),
+                CosIconBubble(
+                  icon: Icons.event_available_outlined,
+                  color: scheme.secondary,
+                  size: 38,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        group.eventName,
+                        cleanEventName(group.eventName),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -1298,39 +1315,181 @@ class _BookingFollowerRow extends StatelessWidget {
     final nickname = follower.nickname.isEmpty ? '未命名使用者' : follower.nickname;
     return Padding(
       padding: const EdgeInsets.only(top: 8),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: scheme.primaryContainer,
-            backgroundImage: pickedImageProvider(follower.avatarUrl),
-            child: follower.avatarUrl.isEmpty
-                ? Text(nickname.characters.firstOrNull ?? '?')
-                : null,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerLowest.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(CosUi.radiusMd),
+          border: Border.all(
+            color: scheme.outlineVariant.withValues(alpha: 0.5),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              nickname,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: scheme.primaryContainer,
+                backgroundImage: pickedImageProvider(follower.avatarUrl),
+                child: follower.avatarUrl.isEmpty
+                    ? Text(nickname.characters.firstOrNull ?? '?')
+                    : null,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      nickname,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      '正在關注你的場次預定',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton.filledTonal(
+                tooltip: '取消關注',
+                onPressed: onRemove,
+                icon: const Icon(Icons.person_remove_outlined),
+              ),
+              const SizedBox(width: 4),
+              IconButton.filledTonal(
+                tooltip: '封鎖',
+                onPressed: onBlock,
+                color: scheme.error,
+                icon: const Icon(Icons.block_outlined),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SafetySignalStrip extends StatelessWidget {
+  const _SafetySignalStrip({
+    required this.visibilityLabel,
+    required this.visibilityIcon,
+    required this.followerCount,
+    required this.blockedCount,
+  });
+
+  final String visibilityLabel;
+  final IconData visibilityIcon;
+  final int? followerCount;
+  final int? blockedCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 360;
+        final metrics = [
+          _SafetySignalMetric(
+            icon: visibilityIcon,
+            label: '可見',
+            value: visibilityLabel,
+            color: scheme.primary,
+          ),
+          _SafetySignalMetric(
+            icon: Icons.visibility_outlined,
+            label: '關注中',
+            value: followerCount == null ? '讀取中' : '$followerCount 人',
+            color: scheme.secondary,
+          ),
+          _SafetySignalMetric(
+            icon: Icons.block_outlined,
+            label: '已封鎖',
+            value: blockedCount == null ? '讀取中' : '$blockedCount 人',
+            color: scheme.error,
+          ),
+        ];
+        if (compact) {
+          return Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final metric in metrics)
+                SizedBox(width: (constraints.maxWidth - 8) / 2, child: metric),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            for (final metric in metrics) ...[
+              Expanded(child: metric),
+              if (metric != metrics.last) const SizedBox(width: 8),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _SafetySignalMetric extends StatelessWidget {
+  const _SafetySignalMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(height: 8),
+            Text(
+              value,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(
                 context,
-              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
             ),
-          ),
-          IconButton(
-            tooltip: '取消關注',
-            onPressed: onRemove,
-            icon: const Icon(Icons.person_remove_outlined),
-          ),
-          IconButton(
-            tooltip: '封鎖',
-            onPressed: onBlock,
-            color: scheme.error,
-            icon: const Icon(Icons.block_outlined),
-          ),
-        ],
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1368,13 +1527,29 @@ class _BlockedUserRow extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(
-                  nickname,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      nickname,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      user.blockedAt.isEmpty
+                          ? '已加入黑名單'
+                          : '封鎖於 ${user.blockedAt}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               TextButton.icon(

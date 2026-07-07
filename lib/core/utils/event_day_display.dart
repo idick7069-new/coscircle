@@ -4,11 +4,13 @@ int eventDayCount(CosEvent event) {
   return event.endDate.difference(event.startDate).inDays + 1;
 }
 
-String eventDisplayName(CosEvent event) {
-  return event.name
+String cleanEventName(String name) {
+  return name
       .replaceAll(RegExp(r'\s*New!!\s*$', caseSensitive: false), '')
       .trim();
 }
+
+String eventDisplayName(CosEvent event) => cleanEventName(event.name);
 
 String eventDayTitle(CosEvent event, int dayIndex) {
   final name = eventDisplayName(event);
