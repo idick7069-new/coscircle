@@ -47,95 +47,27 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           const SizedBox(height: 28),
           const _LoginStageHero(),
           const SizedBox(height: 18),
-          CosCard(
-            child: Column(
-              children: [
-                _LoginModeSwitch(
-                  isRegister: _isRegister,
-                  onChanged: (value) {
-                    setState(() {
-                      _isRegister = value;
-                      _errorText = null;
-                    });
-                  },
-                ),
-                const SizedBox(height: 18),
-                if (_isRegister) ...[
-                  TextField(
-                    controller: _nickname,
-                    decoration: const InputDecoration(labelText: '暱稱'),
-                    textInputAction: TextInputAction.next,
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                TextField(
-                  controller: _email,
-                  decoration: const InputDecoration(labelText: 'Email'),
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  autofillHints: const [AutofillHints.email],
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _password,
-                  decoration: const InputDecoration(
-                    labelText: '密碼',
-                    helperText: '至少 8 個字元',
-                  ),
-                  obscureText: true,
-                  onSubmitted: (_) => _submit(),
-                  autofillHints: const [AutofillHints.password],
-                ),
-                if (_errorText != null) ...[
-                  const SizedBox(height: 10),
-                  _LoginErrorBanner(message: _errorText!),
-                ],
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: _loading ? null : _submit,
-                    icon: _loading
-                        ? CosLoadingPulse(
-                            color: Theme.of(context).colorScheme.onPrimary,
-                            size: 20,
-                          )
-                        : Icon(_isRegister ? Icons.person_add : Icons.login),
-                    label: Text(_isRegister ? '建立帳號' : '登入'),
-                  ),
-                ),
-              ],
-            ),
+          _LoginAccessCard(
+            isRegister: _isRegister,
+            loading: _loading,
+            errorText: _errorText,
+            nicknameController: _nickname,
+            emailController: _email,
+            passwordController: _password,
+            onModeChanged: (value) {
+              setState(() {
+                _isRegister = value;
+                _errorText = null;
+              });
+            },
+            onSubmit: _submit,
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              const Expanded(child: Divider()),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text(
-                  '或使用社群帳號',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-              const Expanded(child: Divider()),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _SocialLoginButton(
-            icon: Icons.facebook,
-            label: '使用 Facebook 登入',
-            onPressed: _loading
-                ? null
-                : () => _showSocialTokenDialog(SocialLoginProvider.facebook),
-          ),
-          const SizedBox(height: 10),
-          _SocialLoginButton(
-            icon: Icons.chat_bubble_outline,
-            label: '使用 LINE 登入',
-            onPressed: _loading
-                ? null
-                : () => _showSocialTokenDialog(SocialLoginProvider.line),
+          _SocialLoginPanel(
+            loading: _loading,
+            onFacebook: () =>
+                _showSocialTokenDialog(SocialLoginProvider.facebook),
+            onLine: () => _showSocialTokenDialog(SocialLoginProvider.line),
           ),
         ],
       ),
@@ -242,6 +174,108 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final completed = await oobe.isCompleted(session.user.id);
     if (!mounted) return;
     context.go(session.isNewUser || !completed ? '/onboarding' : '/');
+  }
+}
+
+class _LoginAccessCard extends StatelessWidget {
+  const _LoginAccessCard({
+    required this.isRegister,
+    required this.loading,
+    required this.errorText,
+    required this.nicknameController,
+    required this.emailController,
+    required this.passwordController,
+    required this.onModeChanged,
+    required this.onSubmit,
+  });
+
+  final bool isRegister;
+  final bool loading;
+  final String? errorText;
+  final TextEditingController nicknameController;
+  final TextEditingController emailController;
+  final TextEditingController passwordController;
+  final ValueChanged<bool> onModeChanged;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return CosCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CosSectionHeader(
+            title: isRegister ? '建立入場通行證' : '回到你的同好圈',
+            subtitle: isRegister
+                ? '建立名片後，就能加入場次、設定小圈圈與分享預定'
+                : '登入後同步你的活動預定、同好訊號與安全設定',
+            icon: isRegister
+                ? Icons.person_add_alt_1_outlined
+                : Icons.login_outlined,
+            trailing: CosBadge(
+              label: isRegister ? '新朋友' : '已登錄',
+              icon: isRegister
+                  ? Icons.auto_awesome_outlined
+                  : Icons.verified_user_outlined,
+              highlighted: true,
+              color: isRegister ? scheme.secondary : scheme.primary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _LoginModeSwitch(isRegister: isRegister, onChanged: onModeChanged),
+          const SizedBox(height: 18),
+          if (isRegister) ...[
+            TextField(
+              controller: nicknameController,
+              decoration: const InputDecoration(
+                labelText: '暱稱',
+                prefixIcon: Icon(Icons.badge_outlined),
+              ),
+              textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 12),
+          ],
+          TextField(
+            controller: emailController,
+            decoration: const InputDecoration(
+              labelText: 'Email',
+              prefixIcon: Icon(Icons.alternate_email),
+            ),
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.email],
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: passwordController,
+            decoration: const InputDecoration(
+              labelText: '密碼',
+              helperText: '至少 8 個字元',
+              prefixIcon: Icon(Icons.lock_outline),
+            ),
+            obscureText: true,
+            onSubmitted: (_) => onSubmit(),
+            autofillHints: const [AutofillHints.password],
+          ),
+          if (errorText != null) ...[
+            const SizedBox(height: 10),
+            _LoginErrorBanner(message: errorText!),
+          ],
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: loading ? null : onSubmit,
+              icon: loading
+                  ? CosLoadingPulse(color: scheme.onPrimary, size: 20)
+                  : Icon(isRegister ? Icons.person_add : Icons.login),
+              label: Text(isRegister ? '建立帳號' : '登入'),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -550,6 +584,85 @@ class _LoginErrorBanner extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SocialLoginPanel extends StatelessWidget {
+  const _SocialLoginPanel({
+    required this.loading,
+    required this.onFacebook,
+    required this.onLine,
+  });
+
+  final bool loading;
+  final VoidCallback onFacebook;
+  final VoidCallback onLine;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.32),
+        borderRadius: BorderRadius.circular(CosUi.radiusLg),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.54),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CosIconBubble(
+                  icon: Icons.hub_outlined,
+                  color: scheme.tertiary,
+                  size: 34,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '社群帳號',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '正式版可接原生 SDK，這裡先保留 token 登入流程',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _SocialLoginButton(
+              icon: Icons.facebook,
+              label: '使用 Facebook 登入',
+              onPressed: loading ? null : onFacebook,
+            ),
+            const SizedBox(height: 10),
+            _SocialLoginButton(
+              icon: Icons.chat_bubble_outline,
+              label: '使用 LINE 登入',
+              onPressed: loading ? null : onLine,
             ),
           ],
         ),
