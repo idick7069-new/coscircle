@@ -11,6 +11,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/models/event.dart';
 import '../../../core/models/participant.dart';
+import '../../../core/utils/event_day_display.dart';
 import '../../../core/utils/participant_role_style.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/cos_ui.dart';
@@ -447,8 +448,8 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
       final file = await _writeTempImage(bytes);
       await SharePlus.instance.share(
         ShareParams(
-          title: '${widget.event.name} 參加預定',
-          text: '${widget.event.name} 參加預定',
+          title: '${eventDisplayName(widget.event)} 參加預定',
+          text: '${eventDisplayName(widget.event)} 參加預定',
           files: [XFile(file.path, mimeType: 'image/png')],
           fileNameOverrides: ['coscircle_booking_${widget.event.id}.png'],
         ),
@@ -914,7 +915,7 @@ class _TicketHeader extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${event.name} / COSPLAY 參加預定',
+                    '${eventDisplayName(event)} / COSPLAY 參加預定',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -1060,7 +1061,7 @@ class _InfoPanel extends StatelessWidget {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  event.name,
+                  eventDisplayName(event),
                   textAlign: TextAlign.start,
                   maxLines: 4,
                   overflow: TextOverflow.ellipsis,
@@ -1099,7 +1100,7 @@ class _InfoPanel extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              '#${event.name.replaceAll(' ', '')} #cosplay #CosCircle',
+              '#${eventDisplayName(event).replaceAll(' ', '')} #cosplay #CosCircle',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(

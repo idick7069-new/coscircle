@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/models/event.dart';
 import '../../../../core/models/participant.dart';
 import '../../../../core/providers/event_providers.dart';
+import '../../../../core/utils/event_day_display.dart';
 import '../../../../core/utils/picked_image_provider.dart';
 import '../../../../shared/widgets/cos_ui.dart';
 
@@ -95,7 +96,7 @@ class EventCard extends ConsumerWidget {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            title ?? event.name,
+                            title ?? eventDisplayName(event),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.titleMedium

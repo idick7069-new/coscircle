@@ -9,6 +9,7 @@ import '../../../core/models/participant.dart';
 import '../../../core/providers/event_providers.dart';
 import '../../../core/repositories/event_repository.dart';
 import '../../../core/utils/error_message.dart';
+import '../../../core/utils/event_day_display.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../core/utils/participant_role_style.dart';
 import '../../../shared/widgets/app_page.dart';
@@ -338,7 +339,7 @@ class _EventDetailHero extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  event.name,
+                  eventDisplayName(event),
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w900,
                   ),
