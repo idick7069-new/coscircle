@@ -1663,11 +1663,10 @@ class _RadarConfirmDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-      contentPadding: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
-      content: CosGradientPanel(
+      child: CosGradientPanel(
         icon: icon,
         padding: const EdgeInsets.all(18),
         child: Column(
@@ -1845,10 +1844,7 @@ class _MeetupSubmitBar extends StatelessWidget {
         child: FilledButton.icon(
           onPressed: isSaving ? null : onSubmit,
           icon: isSaving
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+              ? CosLoadingPulse(color: scheme.onPrimary, size: 20)
               : const Icon(Icons.notifications_active_outlined),
           label: Text(
             isSaving
@@ -2316,9 +2312,9 @@ class _MapActionDock extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: onShareLocation,
                   icon: isSharing
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                      ? CosLoadingPulse(
+                          color: Theme.of(context).colorScheme.primary,
+                          size: 20,
                         )
                       : const Icon(Icons.share_location),
                   label: Text(isSharing ? '定位中' : '分享位置'),
