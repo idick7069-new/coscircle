@@ -44,14 +44,9 @@ class _WorkMultiSelectorState extends ConsumerState<WorkMultiSelector> {
           selectedCount: widget.selected.length,
         ),
         const SizedBox(height: 8),
-        TextField(
+        _WorkSearchField(
           controller: _controller,
-          decoration: InputDecoration(
-            hintText: '搜尋作品或輸入新作品名',
-            prefixIcon: const Icon(Icons.search),
-            suffixIcon: _WorkSearchSuffix(loading: _loading),
-          ),
-          textInputAction: TextInputAction.done,
+          loading: _loading,
           onChanged: _search,
           onSubmitted: _createAndSelect,
         ),
@@ -201,14 +196,9 @@ class _WorkSingleSelectorState extends ConsumerState<WorkSingleSelector> {
           ),
           const SizedBox(height: 8),
         ],
-        TextField(
+        _WorkSearchField(
           controller: _controller,
-          decoration: InputDecoration(
-            hintText: '搜尋作品或輸入新作品名',
-            prefixIcon: const Icon(Icons.search),
-            suffixIcon: _WorkSearchSuffix(loading: _loading),
-          ),
-          textInputAction: TextInputAction.done,
+          loading: _loading,
           onChanged: _search,
           onSubmitted: _createAndSelect,
         ),
@@ -293,6 +283,83 @@ class _WorkSingleSelectorState extends ConsumerState<WorkSingleSelector> {
       _suggestions = const [];
       _errorText = null;
     });
+  }
+}
+
+class _WorkSearchField extends StatelessWidget {
+  const _WorkSearchField({
+    required this.controller,
+    required this.loading,
+    required this.onChanged,
+    required this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final bool loading;
+  final ValueChanged<String> onChanged;
+  final ValueChanged<String> onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(CosUi.radiusLg),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.72),
+        ),
+        boxShadow: [CosUi.softShadow(scheme.shadow)],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CosIconBubble(
+                  icon: Icons.travel_explore_outlined,
+                  color: scheme.secondary,
+                  size: 34,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '作品訊號搜尋',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                _WorkSearchSuffix(loading: loading),
+              ],
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                hintText: '搜尋作品或輸入新作品名',
+                prefixIcon: Icon(Icons.search),
+              ),
+              textInputAction: TextInputAction.done,
+              onChanged: onChanged,
+              onSubmitted: onSubmitted,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '選作品能讓同好更快從場次預定和個人名片找到同坑訊號。',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -459,15 +526,91 @@ class _SelectedWorkWrap extends StatelessWidget {
       runSpacing: 8,
       children: [
         for (final work in works)
-          InputChip(
-            avatar: Icon(Icons.check_circle, color: scheme.primary, size: 16),
-            label: Text(work.name),
-            onDeleted: () => onRemove(work),
-            backgroundColor: scheme.primaryContainer.withValues(alpha: 0.46),
-            deleteIconColor: scheme.onPrimaryContainer,
-            side: BorderSide(color: scheme.primary.withValues(alpha: 0.24)),
+          _SelectedWorkChip(
+            work: work,
+            color: scheme.primary,
+            onRemove: () => onRemove(work),
           ),
       ],
+    );
+  }
+}
+
+class _SelectedWorkChip extends StatefulWidget {
+  const _SelectedWorkChip({
+    required this.work,
+    required this.color,
+    required this.onRemove,
+  });
+
+  final WorkTag work;
+  final Color color;
+  final VoidCallback onRemove;
+
+  @override
+  State<_SelectedWorkChip> createState() => _SelectedWorkChipState();
+}
+
+class _SelectedWorkChipState extends State<_SelectedWorkChip> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return AnimatedScale(
+      duration: reduceMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 110),
+      curve: Curves.easeOutCubic,
+      scale: _pressed ? 0.98 : 1,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: widget.color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(CosUi.radiusMd),
+          border: Border.all(color: widget.color.withValues(alpha: 0.24)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.only(left: 10, right: 4, top: 7, bottom: 7),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.check_circle, color: widget.color, size: 16),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  widget.work.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: scheme.onSurface,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 2),
+              Tooltip(
+                message: '移除 ${widget.work.name}',
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(99),
+                  onTap: widget.onRemove,
+                  onTapDown: (_) => setState(() => _pressed = true),
+                  onTapCancel: () => setState(() => _pressed = false),
+                  onTapUp: (_) => setState(() => _pressed = false),
+                  child: SizedBox.square(
+                    dimension: 30,
+                    child: Icon(
+                      Icons.close,
+                      size: 16,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
