@@ -210,7 +210,7 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                   Positioned(
                     left: 16,
                     right: 16,
-                    top: noticeRecognition == null ? 104 : 198,
+                    top: noticeRecognition == null ? 158 : 252,
                     child: MeetupNoticeCard(
                       meetup: activeMeetup,
                       onNavigate: () => _navigateTo(
@@ -233,7 +233,7 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                   Positioned(
                     left: 16,
                     right: 16,
-                    top: 104,
+                    top: 158,
                     child: RecognitionNoticeCard(
                       request: noticeRecognition,
                       onCome: () => _respondRecognition(
@@ -250,14 +250,14 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                   const Positioned(
                     left: 24,
                     right: 24,
-                    top: 112,
+                    top: 166,
                     child: _CurrentEventLoadingCard(),
                   )
                 else if (event == null)
                   Positioned(
                     left: 24,
                     right: 24,
-                    top: 112,
+                    top: 166,
                     child: _CurrentEventEmptyCard(
                       onOpenEvents: widget.onOpenEvents,
                     ),
@@ -2125,102 +2125,210 @@ class _EventMapHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return CosCard(
-      padding: const EdgeInsets.all(12),
-      child: Row(
-        children: [
-          CosIconBubble(
-            icon: Icons.location_on_outlined,
-            color: scheme.primary,
-            size: 40,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+    final filterLabel = switch (filter) {
+      LocationFilter.all => '全部',
+      LocationFilter.followed => '關注',
+      LocationFilter.circle => '小圈圈',
+    };
+    final visibilityText = event == null
+        ? '從活動頁加入場次後會顯示現場資訊'
+        : '$visibleCount / $totalCount 位同好可見';
+
+    return CosReveal(
+      child: CosCard(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
               children: [
-                Text(
-                  event == null
-                      ? '目前無當前活動'
-                      : currentEventTitle(event!, dayIndex),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium,
+                CosIconBubble(
+                  icon: Icons.location_on_outlined,
+                  color: scheme.primary,
+                  size: 40,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  event == null
-                      ? '從活動頁加入場次後會顯示現場資訊'
-                      : '$visibleCount / $totalCount 位同好可見',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-          if (switchTargets.length > 1)
-            PopupMenuButton<CurrentEventTarget>(
-              tooltip: '切換當前活動',
-              icon: const Icon(Icons.swap_horiz),
-              onSelected: onTargetChanged,
-              itemBuilder: (context) => [
-                for (final item in switchTargets)
-                  PopupMenuItem(
-                    value: CurrentEventTarget(
-                      eventId: item.event.id,
-                      dayIndex: item.dayIndex,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _sameTarget(item, selectedTarget)
-                              ? Icons.radio_button_checked
-                              : Icons.radio_button_unchecked,
-                          size: 18,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        event == null
+                            ? '目前無當前活動'
+                            : currentEventTitle(event!, dayIndex),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        visibilityText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w700,
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            '${item.title} · ${DateFormat('MM/dd E', 'zh_TW').format(item.date)}',
-                            overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                if (switchTargets.length > 1)
+                  PopupMenuButton<CurrentEventTarget>(
+                    tooltip: '切換當前活動',
+                    icon: const Icon(Icons.swap_horiz),
+                    onSelected: onTargetChanged,
+                    itemBuilder: (context) => [
+                      for (final item in switchTargets)
+                        PopupMenuItem(
+                          value: CurrentEventTarget(
+                            eventId: item.event.id,
+                            dayIndex: item.dayIndex,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _sameTarget(item, selectedTarget)
+                                    ? Icons.radio_button_checked
+                                    : Icons.radio_button_unchecked,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  '${item.title} · ${DateFormat('MM/dd E', 'zh_TW').format(item.date)}',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
+                    ],
                   ),
+                if (onRefresh != null)
+                  IconButton(
+                    tooltip: '重新整理',
+                    onPressed: onRefresh,
+                    icon: const Icon(Icons.refresh),
+                  ),
+                PopupMenuButton<LocationFilter>(
+                  tooltip: '篩選',
+                  initialValue: filter,
+                  onSelected: onFilterChanged,
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: LocationFilter.all, child: Text('全部')),
+                    PopupMenuItem(
+                      value: LocationFilter.followed,
+                      child: Text('僅顯示關注'),
+                    ),
+                    PopupMenuItem(
+                      value: LocationFilter.circle,
+                      child: Text('僅顯示小圈圈'),
+                    ),
+                  ],
+                ),
               ],
             ),
-          if (onRefresh != null)
-            IconButton(
-              tooltip: '重新整理',
-              onPressed: onRefresh,
-              icon: const Icon(Icons.refresh),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _MapHeaderSignal(
+                    icon: Icons.people_alt_outlined,
+                    label: '現場同好',
+                    value: '$visibleCount',
+                    color: scheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _MapHeaderSignal(
+                    icon: Icons.tune_outlined,
+                    label: '顯示',
+                    value: filterLabel,
+                    color: scheme.tertiary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _MapHeaderSignal(
+                    icon: Icons.calendar_today_outlined,
+                    label: '活動日',
+                    value: 'D$dayIndex',
+                    color: scheme.secondary,
+                  ),
+                ),
+              ],
             ),
-          PopupMenuButton<LocationFilter>(
-            tooltip: '篩選',
-            initialValue: filter,
-            onSelected: onFilterChanged,
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: LocationFilter.all, child: Text('全部')),
-              PopupMenuItem(
-                value: LocationFilter.followed,
-                child: Text('僅顯示關注'),
-              ),
-              PopupMenuItem(
-                value: LocationFilter.circle,
-                child: Text('僅顯示小圈圈'),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   bool _sameTarget(EventDayItem item, CurrentEventTarget target) {
     return item.event.id == target.eventId && item.dayIndex == target.dayIndex;
+  }
+}
+
+class _MapHeaderSignal extends StatelessWidget {
+  const _MapHeaderSignal({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -2246,88 +2354,155 @@ class _MapActionDock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return CosCard(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CosIconBubble(
-                icon: Icons.radar_outlined,
-                color: scheme.secondary,
-                size: 36,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  '現場雷達',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              CosBadge(
-                label: '${circleItems.length} 個小圈圈',
-                icon: Icons.groups_2_outlined,
-                color: scheme.tertiary,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: CosMetricTile(
-                  icon: Icons.location_on_outlined,
-                  label: '現場同好',
-                  value: '$visibleCount / $totalCount',
-                  color: scheme.primary,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: CosMetricTile(
-                  icon: Icons.flag_outlined,
-                  label: '集合點',
-                  value: activeMeetup == null
-                      ? '尚未設定'
-                      : activeMeetup!.circleName,
+    final meetupLabel = activeMeetup == null
+        ? '尚未設定'
+        : activeMeetup!.circleName;
+    return CosReveal(
+      delay: const Duration(milliseconds: 110),
+      offset: const Offset(0, 18),
+      child: CosCard(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CosIconBubble(
+                  icon: Icons.radar_outlined,
                   color: scheme.secondary,
+                  size: 36,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: onMeetup,
-                  icon: const Icon(Icons.flag_outlined),
-                  label: const Text('集合點'),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '現場雷達',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '分享位置、放置集合點，讓熟人更快找到你。',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onShareLocation,
-                  icon: isSharing
-                      ? CosLoadingPulse(
-                          color: Theme.of(context).colorScheme.primary,
-                          size: 20,
-                        )
-                      : const Icon(Icons.share_location),
-                  label: Text(isSharing ? '定位中' : '分享位置'),
+                CosBadge(
+                  label: '${circleItems.length} 個小圈圈',
+                  icon: Icons.groups_2_outlined,
+                  color: scheme.tertiary,
                 ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final compact = constraints.maxWidth < 380;
+                final metricTiles = [
+                  CosMetricTile(
+                    icon: Icons.location_on_outlined,
+                    label: '現場同好',
+                    value: '$visibleCount / $totalCount',
+                    color: scheme.primary,
+                  ),
+                  CosMetricTile(
+                    icon: Icons.flag_outlined,
+                    label: '集合點',
+                    value: meetupLabel,
+                    color: scheme.secondary,
+                  ),
+                ];
+                final actionButtons = [
+                  FilledButton.icon(
+                    onPressed: onMeetup,
+                    icon: const Icon(Icons.flag_outlined),
+                    label: const Text('集合點'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: onShareLocation,
+                    icon: isSharing
+                        ? CosLoadingPulse(color: scheme.primary, size: 20)
+                        : const Icon(Icons.share_location),
+                    label: Text(isSharing ? '定位中' : '分享位置'),
+                  ),
+                ];
+
+                if (compact) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (
+                        var index = 0;
+                        index < metricTiles.length;
+                        index++
+                      ) ...[
+                        if (index > 0) const SizedBox(height: 8),
+                        metricTiles[index],
+                      ],
+                      const SizedBox(height: 12),
+                      for (
+                        var index = 0;
+                        index < actionButtons.length;
+                        index++
+                      ) ...[
+                        if (index > 0) const SizedBox(height: 8),
+                        actionButtons[index],
+                      ],
+                    ],
+                  );
+                }
+
+                return Column(
+                  children: [
+                    Row(
+                      children: [
+                        for (
+                          var index = 0;
+                          index < metricTiles.length;
+                          index++
+                        ) ...[
+                          if (index > 0) const SizedBox(width: 8),
+                          Expanded(child: metricTiles[index]),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        for (
+                          var index = 0;
+                          index < actionButtons.length;
+                          index++
+                        ) ...[
+                          if (index > 0) const SizedBox(width: 10),
+                          Expanded(child: actionButtons[index]),
+                        ],
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '長按地圖可先放置集合點草稿，再通知小圈圈。',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '長按地圖可先放置集合點草稿，再通知小圈圈。',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
