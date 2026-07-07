@@ -205,6 +205,13 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
               dayCount: _dayCount,
             ),
             const SizedBox(height: 12),
+            _ShareQuickActionPanel(
+              dayCount: _dayCount,
+              selectedLayer: _selectedLayer,
+              sharing: _sharing,
+              onShare: _shareImage,
+            ),
+            const SizedBox(height: 16),
             _ShareEditorPanel(
               title: '背景色',
               subtitle: '替分享卡定調，預設色票適合社群貼文和活動告知',
@@ -543,6 +550,87 @@ class _ShareGestureHint extends StatelessWidget {
   }
 }
 
+class _ShareQuickActionPanel extends StatelessWidget {
+  const _ShareQuickActionPanel({
+    required this.dayCount,
+    required this.selectedLayer,
+    required this.sharing,
+    required this.onShare,
+  });
+
+  final int dayCount;
+  final _SelectedShareLayer? selectedLayer;
+  final bool sharing;
+  final VoidCallback onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final layerText = selectedLayer == null
+        ? '尚未選取'
+        : selectedLayer!.kind == _ShareLayerKind.photo
+        ? 'D${selectedLayer!.dayIndex} 照片'
+        : 'D${selectedLayer!.dayIndex} 角色名';
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer.withValues(alpha: 0.34),
+        borderRadius: BorderRadius.circular(CosUi.radiusLg),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.22)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final summary = Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                CosBadge(
+                  label: '$dayCount 日',
+                  icon: Icons.calendar_month_outlined,
+                  color: scheme.primary,
+                  highlighted: true,
+                ),
+                CosBadge(
+                  label: layerText,
+                  icon: Icons.layers_outlined,
+                  color: scheme.secondary,
+                ),
+                CosBadge(
+                  label: '社群貼文尺寸',
+                  icon: Icons.crop_landscape_outlined,
+                  color: scheme.tertiary,
+                ),
+              ],
+            );
+            final button = FilledButton.icon(
+              onPressed: sharing ? null : onShare,
+              icon: sharing
+                  ? CosLoadingPulse(color: scheme.onPrimary, size: 20)
+                  : const Icon(Icons.ios_share),
+              label: Text(sharing ? '產生中' : '產生並分享'),
+            );
+            if (constraints.maxWidth < 390) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [summary, const SizedBox(height: 12), button],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(child: summary),
+                const SizedBox(width: 12),
+                button,
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
 class _ShareEditorPanel extends StatelessWidget {
   const _ShareEditorPanel({
     required this.title,
@@ -640,23 +728,31 @@ class _ControlRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        SizedBox(
-          width: 76,
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(
-              context,
-            ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(child: child),
-      ],
+    final labelWidget = Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(
+        context,
+      ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 330) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [labelWidget, const SizedBox(height: 6), child],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(width: 76, child: labelWidget),
+            const SizedBox(width: 8),
+            Expanded(child: child),
+          ],
+        );
+      },
     );
   }
 }
