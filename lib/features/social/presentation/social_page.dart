@@ -50,6 +50,13 @@ class SocialPage extends ConsumerWidget {
             ],
           ),
           Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+            child: _SocialSignalOverview(
+              circles: circles,
+              following: following,
+            ),
+          ),
+          Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -530,6 +537,171 @@ class _EmptyActionCard extends StatelessWidget {
             label: Text(actionLabel),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SocialSignalOverview extends StatelessWidget {
+  const _SocialSignalOverview({required this.circles, required this.following});
+
+  final AsyncValue<List<CircleGroup>> circles;
+  final AsyncValue<List<FollowedUser>> following;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final circleCount = circles.whenOrNull(data: (items) => items.length);
+    final memberCount = circles.whenOrNull(
+      data: (items) =>
+          items.fold<int>(0, (total, circle) => total + circle.members.length),
+    );
+    final followingCount = following.whenOrNull(data: (items) => items.length);
+
+    return CosGradientPanel(
+      icon: Icons.diversity_3_outlined,
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CosIconBubble(
+                icon: Icons.auto_awesome,
+                color: scheme.primary,
+                size: 42,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '同好訊號',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '先整理小圈圈和關注名單，活動現場更快找到朋友。',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final metrics = [
+                _SocialSignalMetric(
+                  icon: Icons.groups_outlined,
+                  label: '小圈圈',
+                  value: circleCount == null ? '同步中' : '$circleCount',
+                  color: scheme.primary,
+                ),
+                _SocialSignalMetric(
+                  icon: Icons.diversity_3_outlined,
+                  label: '成員訊號',
+                  value: memberCount == null ? '同步中' : '$memberCount',
+                  color: scheme.secondary,
+                ),
+                _SocialSignalMetric(
+                  icon: Icons.favorite_border,
+                  label: '已關注',
+                  value: followingCount == null ? '同步中' : '$followingCount',
+                  color: scheme.tertiary,
+                ),
+              ];
+              if (constraints.maxWidth < 360) {
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final metric in metrics)
+                      SizedBox(
+                        width: (constraints.maxWidth - 8) / 2,
+                        child: metric,
+                      ),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  for (final metric in metrics) ...[
+                    Expanded(child: metric),
+                    if (metric != metrics.last) const SizedBox(width: 8),
+                  ],
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SocialSignalMetric extends StatelessWidget {
+  const _SocialSignalMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1260,46 +1432,78 @@ class _SocialActionGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        for (final entry in actions.indexed) ...[
-          Expanded(
-            child: CosReveal(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cards = [
+          for (final entry in actions.indexed)
+            CosReveal(
               delay: Duration(milliseconds: 35 * entry.$1),
-              child: CosCard(
-                onTap: entry.$2.onTap,
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    CosIconBubble(
-                      icon: entry.$2.icon,
-                      color: switch (entry.$1) {
-                        0 => scheme.primary,
-                        1 => scheme.secondary,
-                        _ => scheme.tertiary,
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      entry.$2.title,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      entry.$2.subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
+              child: _SocialActionCard(
+                action: entry.$2,
+                color: switch (entry.$1) {
+                  0 => scheme.primary,
+                  1 => scheme.secondary,
+                  _ => scheme.tertiary,
+                },
               ),
             ),
+        ];
+        if (constraints.maxWidth < 360) {
+          return Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              for (final card in cards)
+                SizedBox(width: (constraints.maxWidth - 10) / 2, child: card),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            for (final card in cards) ...[
+              Expanded(child: card),
+              if (card != cards.last) const SizedBox(width: 10),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _SocialActionCard extends StatelessWidget {
+  const _SocialActionCard({required this.action, required this.color});
+
+  final _SocialAction action;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return CosCard(
+      onTap: action.onTap,
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CosIconBubble(icon: action.icon, color: color),
+          const SizedBox(height: 12),
+          Text(
+            action.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
           ),
-          if (entry.$1 != actions.length - 1) const SizedBox(width: 10),
+          const SizedBox(height: 4),
+          Text(
+            action.subtitle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ],
-      ],
+      ),
     );
   }
 }
