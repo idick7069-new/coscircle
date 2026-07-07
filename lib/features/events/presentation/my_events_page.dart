@@ -81,37 +81,10 @@ class _MyEventsPageState extends ConsumerState<MyEventsPage> {
                             icon: Icons.wallet_outlined,
                           ),
                           const SizedBox(height: 14),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: CosMetricTile(
-                                  icon: Icons.event_available_outlined,
-                                  label: '未來場次',
-                                  value: '$activeItems',
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: CosMetricTile(
-                                  icon: Icons.badge_outlined,
-                                  label: '預訂名片',
-                                  value: '${allItems.length}',
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.secondary,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: CosMetricTile(
-                                  icon: Icons.image_outlined,
-                                  label: '可產圖',
-                                  value: '$shareReadyItems',
-                                  color: Theme.of(context).colorScheme.tertiary,
-                                ),
-                              ),
-                            ],
+                          _MyEventsReadinessPanel(
+                            activeItems: activeItems,
+                            totalItems: allItems.length,
+                            shareReadyItems: shareReadyItems,
                           ),
                         ],
                       ),
@@ -343,6 +316,110 @@ class _MyBookingSkeletonCard extends StatelessWidget {
   }
 }
 
+class _MyEventsReadinessPanel extends StatelessWidget {
+  const _MyEventsReadinessPanel({
+    required this.activeItems,
+    required this.totalItems,
+    required this.shareReadyItems,
+  });
+
+  final int activeItems;
+  final int totalItems;
+  final int shareReadyItems;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final readyText = totalItems == 0
+        ? '先加入場次，票夾會整理你的角色預訂'
+        : shareReadyItems == totalItems
+        ? '分享素材已就緒，可以直接產生出角卡'
+        : '還有 ${totalItems - shareReadyItems} 張名片可補上照片素材';
+    final tiles = [
+      CosMetricTile(
+        icon: Icons.event_available_outlined,
+        label: '未來場次',
+        value: '$activeItems',
+        color: scheme.primary,
+      ),
+      CosMetricTile(
+        icon: Icons.badge_outlined,
+        label: '預訂名片',
+        value: '$totalItems',
+        color: scheme.secondary,
+      ),
+      CosMetricTile(
+        icon: Icons.image_outlined,
+        label: '可產圖',
+        value: '$shareReadyItems',
+        color: scheme.tertiary,
+      ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 420) {
+              return Column(
+                children: [
+                  for (var index = 0; index < tiles.length; index++) ...[
+                    if (index > 0) const SizedBox(height: 8),
+                    tiles[index],
+                  ],
+                ],
+              );
+            }
+            return Row(
+              children: [
+                for (var index = 0; index < tiles.length; index++) ...[
+                  if (index > 0) const SizedBox(width: 8),
+                  Expanded(child: tiles[index]),
+                ],
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: scheme.surface.withValues(alpha: 0.48),
+            borderRadius: BorderRadius.circular(CosUi.radiusMd),
+            border: Border.all(
+              color: scheme.outlineVariant.withValues(alpha: 0.34),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.auto_awesome_outlined,
+                  color: scheme.primary,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    readyText,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _MyEventsSkeletonLine extends StatelessWidget {
   const _MyEventsSkeletonLine({required this.widthFactor, this.height = 10});
 
@@ -490,30 +567,10 @@ class _MyBookingCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: CosMetricTile(
-                          icon: Icons.auto_awesome,
-                          label: '角色',
-                          value: participant.characterName.isEmpty
-                              ? '未填寫'
-                              : participant.characterName,
-                          color: roleColor,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: CosMetricTile(
-                          icon: Icons.photo_library_outlined,
-                          label: '分享素材',
-                          value: participant.outfitImageUrl.isEmpty
-                              ? '待補'
-                              : '已準備',
-                          color: scheme.tertiary,
-                        ),
-                      ),
-                    ],
+                  _MyBookingStatusGrid(
+                    characterName: participant.characterName,
+                    hasOutfitImage: participant.outfitImageUrl.isNotEmpty,
+                    roleColor: roleColor,
                   ),
                   if (participant.message.isNotEmpty) ...[
                     const SizedBox(height: 10),
@@ -540,30 +597,10 @@ class _MyBookingCard extends StatelessWidget {
                     ),
                   ],
                   const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: onEdit,
-                          icon: const Icon(Icons.edit_outlined),
-                          label: const Text('修改'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton.filledTonal(
-                        tooltip: '取消預訂',
-                        onPressed: onCancel,
-                        icon: const Icon(Icons.delete_outline),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: onShare,
-                          icon: const Icon(Icons.image_outlined),
-                          label: const Text('產圖'),
-                        ),
-                      ),
-                    ],
+                  _MyBookingActionRow(
+                    onEdit: onEdit,
+                    onCancel: onCancel,
+                    onShare: onShare,
                   ),
                 ],
               ),
@@ -571,6 +608,120 @@ class _MyBookingCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _MyBookingStatusGrid extends StatelessWidget {
+  const _MyBookingStatusGrid({
+    required this.characterName,
+    required this.hasOutfitImage,
+    required this.roleColor,
+  });
+
+  final String characterName;
+  final bool hasOutfitImage;
+  final Color roleColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final tiles = [
+      CosMetricTile(
+        icon: Icons.auto_awesome,
+        label: '角色',
+        value: characterName.isEmpty ? '未填寫' : characterName,
+        color: roleColor,
+      ),
+      CosMetricTile(
+        icon: Icons.photo_library_outlined,
+        label: '分享素材',
+        value: hasOutfitImage ? '已準備' : '待補',
+        color: scheme.tertiary,
+      ),
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 340) {
+          return Column(
+            children: [
+              for (var index = 0; index < tiles.length; index++) ...[
+                if (index > 0) const SizedBox(height: 8),
+                tiles[index],
+              ],
+            ],
+          );
+        }
+        return Row(
+          children: [
+            for (var index = 0; index < tiles.length; index++) ...[
+              if (index > 0) const SizedBox(width: 8),
+              Expanded(child: tiles[index]),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _MyBookingActionRow extends StatelessWidget {
+  const _MyBookingActionRow({
+    required this.onEdit,
+    required this.onCancel,
+    required this.onShare,
+  });
+
+  final VoidCallback onEdit;
+  final VoidCallback onCancel;
+  final VoidCallback onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    final editButton = OutlinedButton.icon(
+      onPressed: onEdit,
+      icon: const Icon(Icons.edit_outlined),
+      label: const Text('修改'),
+    );
+    final cancelButton = IconButton.filledTonal(
+      tooltip: '取消預訂',
+      onPressed: onCancel,
+      icon: const Icon(Icons.delete_outline),
+    );
+    final shareButton = FilledButton.icon(
+      onPressed: onShare,
+      icon: const Icon(Icons.image_outlined),
+      label: const Text('產圖'),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 360) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              shareButton,
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(child: editButton),
+                  const SizedBox(width: 8),
+                  cancelButton,
+                ],
+              ),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: editButton),
+            const SizedBox(width: 8),
+            cancelButton,
+            const SizedBox(width: 8),
+            Expanded(child: shareButton),
+          ],
+        );
+      },
     );
   }
 }
