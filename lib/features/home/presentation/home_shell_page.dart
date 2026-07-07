@@ -155,7 +155,7 @@ class _HomeNavDestination {
   final String label;
 }
 
-class _HomeNavButton extends StatelessWidget {
+class _HomeNavButton extends StatefulWidget {
   const _HomeNavButton({
     required this.destination,
     required this.selected,
@@ -167,9 +167,18 @@ class _HomeNavButton extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  State<_HomeNavButton> createState() => _HomeNavButtonState();
+}
+
+class _HomeNavButtonState extends State<_HomeNavButton> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final selected = widget.selected;
+    final destination = widget.destination;
     final accent = selected ? scheme.primary : scheme.onSurfaceVariant;
     return Semantics(
       button: true,
@@ -177,53 +186,98 @@ class _HomeNavButton extends StatelessWidget {
       label: destination.label,
       child: Tooltip(
         message: destination.label,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(CosUi.radiusLg),
-          onTap: onTap,
-          child: AnimatedContainer(
-            duration: reduceMotion
-                ? Duration.zero
-                : const Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
-            margin: const EdgeInsets.symmetric(horizontal: 2),
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-            decoration: BoxDecoration(
-              color: selected
-                  ? scheme.primaryContainer.withValues(alpha: 0.88)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(CosUi.radiusLg),
-              border: Border.all(
+        child: AnimatedScale(
+          duration: reduceMotion
+              ? Duration.zero
+              : const Duration(milliseconds: 120),
+          curve: Curves.easeOutCubic,
+          scale: _pressed ? 0.96 : 1,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(CosUi.radiusLg),
+            onTap: widget.onTap,
+            onTapDown: (_) => setState(() => _pressed = true),
+            onTapCancel: () => setState(() => _pressed = false),
+            onTapUp: (_) => setState(() => _pressed = false),
+            child: AnimatedContainer(
+              duration: reduceMotion
+                  ? Duration.zero
+                  : const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+              decoration: BoxDecoration(
                 color: selected
-                    ? scheme.primary.withValues(alpha: 0.22)
+                    ? scheme.primaryContainer.withValues(alpha: 0.88)
                     : Colors.transparent,
+                borderRadius: BorderRadius.circular(CosUi.radiusLg),
+                border: Border.all(
+                  color: selected
+                      ? scheme.primary.withValues(alpha: 0.24)
+                      : Colors.transparent,
+                ),
               ),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AnimatedScale(
-                  duration: reduceMotion
-                      ? Duration.zero
-                      : const Duration(milliseconds: 180),
-                  curve: Curves.easeOutBack,
-                  scale: selected ? 1.08 : 1,
-                  child: Icon(
-                    selected ? destination.selectedIcon : destination.icon,
-                    color: accent,
-                    size: 22,
-                  ),
+              child: SizedBox(
+                height: 54,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    AnimatedPositioned(
+                      duration: reduceMotion
+                          ? Duration.zero
+                          : const Duration(milliseconds: 220),
+                      curve: Curves.easeOutCubic,
+                      top: selected ? 0 : -8,
+                      child: AnimatedOpacity(
+                        duration: reduceMotion
+                            ? Duration.zero
+                            : const Duration(milliseconds: 180),
+                        opacity: selected ? 1 : 0,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: scheme.primary,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                          child: const SizedBox(width: 22, height: 3),
+                        ),
+                      ),
+                    ),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        AnimatedScale(
+                          duration: reduceMotion
+                              ? Duration.zero
+                              : const Duration(milliseconds: 180),
+                          curve: Curves.easeOutBack,
+                          scale: selected ? 1.08 : 1,
+                          child: Icon(
+                            selected
+                                ? destination.selectedIcon
+                                : destination.icon,
+                            color: accent,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          destination.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: selected
+                                    ? scheme.onPrimaryContainer
+                                    : accent,
+                                fontWeight: selected
+                                    ? FontWeight.w900
+                                    : FontWeight.w700,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  destination.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: selected ? scheme.onPrimaryContainer : accent,
-                    fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
