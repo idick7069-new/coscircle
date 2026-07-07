@@ -580,37 +580,164 @@ class _DiscoveryStats extends StatelessWidget {
           (event) => event.hasFollowedParticipants || event.hasCircleMembers,
         )
         .length;
+    final active = filtered
+        .where((item) => item.status(DateTime.now()) == EventStatus.active)
+        .length;
+    final upcoming = filtered
+        .where((item) => item.status(DateTime.now()) == EventStatus.upcoming)
+        .length;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: CosMetricTile(
-              icon: Icons.search_outlined,
-              label: '篩選結果',
-              value: '${filtered.length} 場',
-              color: scheme.primary,
-            ),
+      child: CosReveal(
+        delay: const Duration(milliseconds: 70),
+        child: CosGradientPanel(
+          icon: Icons.diversity_3_outlined,
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const CosLogoMark(size: 44),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '今天想在哪裡認親？',
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '從場次、已加入名片和小圈圈訊號，先找到比較安心的交流路線。',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  CosBadge(
+                    label: active > 0 ? '$active 進行中' : '$upcoming 待出發',
+                    icon: active > 0
+                        ? Icons.bolt_outlined
+                        : Icons.flag_outlined,
+                    highlighted: active > 0,
+                    color: active > 0 ? scheme.secondary : scheme.tertiary,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact = constraints.maxWidth < 420;
+                  final tiles = [
+                    CosMetricTile(
+                      icon: Icons.search_outlined,
+                      label: '篩選結果',
+                      value: '${filtered.length} 場',
+                      color: scheme.primary,
+                    ),
+                    CosMetricTile(
+                      icon: Icons.check_circle_outline,
+                      label: '已加入',
+                      value: '$joined',
+                      color: scheme.secondary,
+                    ),
+                    CosMetricTile(
+                      icon: Icons.diversity_3_outlined,
+                      label: '同好訊號',
+                      value: '$social',
+                      color: scheme.tertiary,
+                    ),
+                  ];
+                  if (compact) {
+                    return Column(
+                      children: [
+                        for (var index = 0; index < tiles.length; index++) ...[
+                          if (index > 0) const SizedBox(height: 8),
+                          tiles[index],
+                        ],
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      for (var index = 0; index < tiles.length; index++) ...[
+                        if (index > 0) const SizedBox(width: 8),
+                        Expanded(child: tiles[index]),
+                      ],
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              _DiscoverySignalStrip(
+                joined: joined,
+                social: social,
+                upcoming: upcoming,
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: CosMetricTile(
-              icon: Icons.check_circle_outline,
-              label: '已加入',
-              value: '$joined',
-              color: scheme.secondary,
+        ),
+      ),
+    );
+  }
+}
+
+class _DiscoverySignalStrip extends StatelessWidget {
+  const _DiscoverySignalStrip({
+    required this.joined,
+    required this.social,
+    required this.upcoming,
+  });
+
+  final int joined;
+  final int social;
+  final int upcoming;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = joined > 0
+        ? '已加入的場次會優先帶你去現場地圖'
+        : social > 0
+        ? '同好訊號可用來挑選更熟悉的場次'
+        : upcoming > 0
+        ? '先建立參戰名片，讓朋友知道你會到'
+        : '調整日期或篩選條件看看其他場次';
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surface.withValues(alpha: 0.48),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.36),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            Icon(Icons.auto_awesome_outlined, color: scheme.primary, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                text,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w800),
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: CosMetricTile(
-              icon: Icons.diversity_3_outlined,
-              label: '同好訊號',
-              value: '$social',
-              color: scheme.tertiary,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -672,156 +799,185 @@ class _EventSpotlightCard extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-      child: CosCard(
-        padding: EdgeInsets.zero,
-        onTap: status == EventStatus.active
-            ? () => onOpenCurrentEvent(item)
-            : null,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(CosUi.radiusLg),
-              ),
-              child: AspectRatio(
-                aspectRatio: 1.95,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if (imageProvider == null)
+      child: CosReveal(
+        delay: const Duration(milliseconds: 120),
+        child: CosCard(
+          padding: EdgeInsets.zero,
+          onTap: status == EventStatus.active
+              ? () => onOpenCurrentEvent(item)
+              : null,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(CosUi.radiusLg),
+                ),
+                child: AspectRatio(
+                  aspectRatio: 1.95,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (imageProvider == null)
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                scheme.primaryContainer,
+                                scheme.secondaryContainer,
+                                scheme.tertiaryContainer,
+                              ],
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.photo_camera_outlined,
+                            size: 58,
+                            color: scheme.primary,
+                          ),
+                        )
+                      else
+                        Image(image: imageProvider, fit: BoxFit.cover),
                       DecoratedBox(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
                             colors: [
-                              scheme.primaryContainer,
-                              scheme.secondaryContainer,
-                              scheme.tertiaryContainer,
+                              Colors.transparent,
+                              Colors.black.withValues(alpha: 0.64),
                             ],
                           ),
                         ),
-                        child: Icon(
-                          Icons.photo_camera_outlined,
-                          size: 58,
-                          color: scheme.primary,
-                        ),
-                      )
-                    else
-                      Image(image: imageProvider, fit: BoxFit.cover),
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withValues(alpha: 0.64),
-                          ],
-                        ),
                       ),
-                    ),
-                    Positioned(
-                      left: 14,
-                      right: 14,
-                      bottom: 14,
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          CosBadge(
-                            label: statusText,
-                            highlighted: status == EventStatus.active,
-                            color: status == EventStatus.active
-                                ? scheme.secondary
-                                : scheme.tertiary,
-                          ),
-                          CosBadge(
-                            label: event.category,
-                            color: scheme.primary,
-                          ),
-                          if (event.isJoined)
+                      Positioned(
+                        left: 14,
+                        right: 14,
+                        bottom: 14,
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
                             CosBadge(
-                              label: '已加入',
-                              icon: Icons.check_circle,
-                              highlighted: true,
+                              label: statusText,
+                              highlighted: status == EventStatus.active,
+                              color: status == EventStatus.active
+                                  ? scheme.secondary
+                                  : scheme.tertiary,
                             ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _SpotlightLine(
-                          icon: Icons.calendar_month_outlined,
-                          text: DateFormat(
-                            'MM/dd E',
-                            'zh_TW',
-                          ).format(item.date),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _SpotlightLine(
-                          icon: Icons.place_outlined,
-                          text: event.venue,
+                            CosBadge(
+                              label: event.category,
+                              color: scheme.primary,
+                            ),
+                            if (event.isJoined)
+                              CosBadge(
+                                label: '已加入',
+                                icon: Icons.check_circle,
+                                highlighted: true,
+                              ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _SpotlightLine(
+                            icon: Icons.calendar_month_outlined,
+                            text: DateFormat(
+                              'MM/dd E',
+                              'zh_TW',
+                            ).format(item.date),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _SpotlightLine(
+                            icon: Icons.place_outlined,
+                            text: event.venue,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final compact = constraints.maxWidth < 360;
+                        final actions = [
+                          OutlinedButton(
+                            onPressed: () => onDetailPressed(event),
+                            child: const Text('詳細'),
+                          ),
+                          FilledButton.icon(
+                            onPressed: status == EventStatus.ended
+                                ? null
+                                : () => onBookingPressed(event, item.dayIndex),
+                            icon: Icon(
+                              event.isJoined
+                                  ? Icons.edit_outlined
+                                  : Icons.add_circle_outline,
+                            ),
+                            label: Text(event.isJoined ? '修改' : '加入'),
+                          ),
+                        ];
+                        final message = Text(
                           '找到同作品、同圈圈的人，現場認親更快。',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      OutlinedButton(
-                        onPressed: () => onDetailPressed(event),
-                        child: const Text('詳細'),
-                      ),
-                      const SizedBox(width: 8),
-                      FilledButton.icon(
-                        onPressed: status == EventStatus.ended
-                            ? null
-                            : () => onBookingPressed(event, item.dayIndex),
-                        icon: Icon(
-                          event.isJoined
-                              ? Icons.edit_outlined
-                              : Icons.add_circle_outline,
-                        ),
-                        label: Text(event.isJoined ? '修改' : '加入'),
-                      ),
-                    ],
-                  ),
-                ],
+                        );
+                        if (compact) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              message,
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                alignment: WrapAlignment.end,
+                                children: actions,
+                              ),
+                            ],
+                          );
+                        }
+                        return Row(
+                          children: [
+                            Expanded(child: message),
+                            const SizedBox(width: 10),
+                            ...actions.expand(
+                              (action) => [
+                                action,
+                                if (action != actions.last)
+                                  const SizedBox(width: 8),
+                              ],
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
