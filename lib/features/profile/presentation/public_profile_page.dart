@@ -444,112 +444,179 @@ class _PublicProfileHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return CosGradientPanel(
       icon: Icons.diversity_3_outlined,
       child: Column(
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(5),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(32),
-                  gradient: LinearGradient(
-                    colors: [scheme.primary, scheme.secondary],
-                  ),
-                  boxShadow: [CosUi.softShadow(scheme.primary)],
-                ),
-                child: CircleAvatar(
-                  radius: 52,
-                  backgroundColor: scheme.surfaceContainerLowest,
-                  backgroundImage: pickedImageProvider(profile.avatarUrl),
-                  child: profile.avatarUrl.isEmpty
-                      ? Icon(Icons.person, size: 46, color: scheme.primary)
-                      : null,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 360;
+              final avatar = _PublicProfileAvatar(profile: profile);
+              final identity = _PublicProfileIdentity(profile: profile);
+              if (compact) {
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    CosBadge(
-                      label: profile.isFollowed ? '已在關注名單' : '可加入關注',
-                      icon: profile.isFollowed
-                          ? Icons.person_pin_circle_outlined
-                          : Icons.person_add_alt_1_outlined,
-                      highlighted: true,
-                      color: scheme.primary,
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      profile.nickname.isEmpty ? '未命名使用者' : profile.nickname,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.headlineMedium
-                          ?.copyWith(fontWeight: FontWeight.w900, height: 1.02),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        CosBadge(
-                          label: profile.regions.isEmpty
-                              ? '尚未設定座標'
-                              : profile.regions.join('、'),
-                          icon: Icons.explore_outlined,
-                        ),
-                        CosBadge(
-                          label: profile.deepPitWorks.isEmpty
-                              ? '深坑待補'
-                              : '${profile.deepPitWorks.length} 個深坑',
-                          icon: Icons.label_important_outline,
-                          color: scheme.secondary,
-                        ),
-                        CosBadge(
-                          label: _publicGenderLabel(profile.gender),
-                          icon: Icons.person_outline,
-                          color: scheme.tertiary,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
+                  children: [avatar, const SizedBox(height: 14), identity],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  avatar,
+                  const SizedBox(width: 16),
+                  Expanded(child: identity),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 16),
           _PublicSignalRow(profile: profile),
           if (onFollowToggle != null) ...[
             const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: onFollowToggle,
-                    icon: Icon(
-                      profile.isFollowed
-                          ? Icons.person_remove_outlined
-                          : Icons.person_add_outlined,
-                    ),
-                    label: Text(profile.isFollowed ? '取消關注' : '加入關注'),
-                  ),
-                ),
-                if (onBlock != null) ...[
-                  const SizedBox(width: 10),
-                  IconButton.filledTonal(
-                    tooltip: '封鎖',
-                    onPressed: onBlock,
-                    icon: const Icon(Icons.block_outlined),
-                  ),
-                ],
-              ],
+            _PublicProfileActions(
+              followed: profile.isFollowed,
+              onFollowToggle: onFollowToggle!,
+              onBlock: onBlock,
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _PublicProfileAvatar extends StatelessWidget {
+  const _PublicProfileAvatar({required this.profile});
+
+  final UserProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(32),
+        gradient: LinearGradient(colors: [scheme.primary, scheme.secondary]),
+        boxShadow: [CosUi.softShadow(scheme.primary)],
+      ),
+      child: CircleAvatar(
+        radius: 52,
+        backgroundColor: scheme.surfaceContainerLowest,
+        backgroundImage: pickedImageProvider(profile.avatarUrl),
+        child: profile.avatarUrl.isEmpty
+            ? Icon(Icons.person, size: 46, color: scheme.primary)
+            : null,
+      ),
+    );
+  }
+}
+
+class _PublicProfileIdentity extends StatelessWidget {
+  const _PublicProfileIdentity({required this.profile});
+
+  final UserProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CosBadge(
+          label: profile.isFollowed ? '已在關注名單' : '可加入關注',
+          icon: profile.isFollowed
+              ? Icons.person_pin_circle_outlined
+              : Icons.person_add_alt_1_outlined,
+          highlighted: true,
+          color: scheme.primary,
+        ),
+        const SizedBox(height: 10),
+        Text(
+          profile.nickname.isEmpty ? '未命名使用者' : profile.nickname,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.w900,
+            height: 1.02,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            CosBadge(
+              label: profile.regions.isEmpty
+                  ? '尚未設定座標'
+                  : profile.regions.join('、'),
+              icon: Icons.explore_outlined,
+            ),
+            CosBadge(
+              label: profile.deepPitWorks.isEmpty
+                  ? '深坑待補'
+                  : '${profile.deepPitWorks.length} 個深坑',
+              icon: Icons.label_important_outline,
+              color: scheme.secondary,
+            ),
+            CosBadge(
+              label: _publicGenderLabel(profile.gender),
+              icon: Icons.person_outline,
+              color: scheme.tertiary,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _PublicProfileActions extends StatelessWidget {
+  const _PublicProfileActions({
+    required this.followed,
+    required this.onFollowToggle,
+    required this.onBlock,
+  });
+
+  final bool followed;
+  final Future<void> Function() onFollowToggle;
+  final Future<void> Function()? onBlock;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.28),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: onFollowToggle,
+                icon: Icon(
+                  followed
+                      ? Icons.person_remove_outlined
+                      : Icons.person_add_outlined,
+                ),
+                label: Text(followed ? '取消關注' : '加入關注'),
+              ),
+            ),
+            if (onBlock != null) ...[
+              const SizedBox(width: 10),
+              IconButton.filledTonal(
+                tooltip: '封鎖',
+                onPressed: onBlock,
+                color: scheme.error,
+                icon: const Icon(Icons.block_outlined),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -654,37 +721,73 @@ class _PublicSignalRow extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final totalWorks =
         profile.deepPitWorks.length + profile.shallowPitWorks.length;
-    return Row(
-      children: [
-        Expanded(
-          child: CosMetricTile(
-            icon: Icons.label_important_outline,
-            label: '坑單',
-            value: '$totalWorks',
-            color: scheme.primary,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: CosMetricTile(
-            icon: Icons.photo_library_outlined,
-            label: '照片',
-            value: '${profile.otherPhotoUrls.length}',
-            color: scheme.secondary,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: CosMetricTile(
-            icon: profile.isFollowed
-                ? Icons.person_pin_circle_outlined
-                : Icons.person_add_alt_1_outlined,
-            label: '關係',
-            value: profile.isFollowed ? '已關注' : '可關注',
-            color: scheme.tertiary,
-          ),
-        ),
-      ],
+    final metrics = [
+      CosMetricTile(
+        icon: Icons.label_important_outline,
+        label: '坑單',
+        value: '$totalWorks',
+        color: scheme.primary,
+      ),
+      CosMetricTile(
+        icon: Icons.photo_library_outlined,
+        label: '照片',
+        value: '${profile.otherPhotoUrls.length}',
+        color: scheme.secondary,
+      ),
+      CosMetricTile(
+        icon: profile.isFollowed
+            ? Icons.person_pin_circle_outlined
+            : Icons.person_add_alt_1_outlined,
+        label: '關係',
+        value: profile.isFollowed ? '已關注' : '可關注',
+        color: scheme.tertiary,
+      ),
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 340) {
+          return Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final metric in metrics)
+                SizedBox(width: (constraints.maxWidth - 8) / 2, child: metric),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(
+              child: CosMetricTile(
+                icon: Icons.label_important_outline,
+                label: '坑單',
+                value: '$totalWorks',
+                color: scheme.primary,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: CosMetricTile(
+                icon: Icons.photo_library_outlined,
+                label: '照片',
+                value: '${profile.otherPhotoUrls.length}',
+                color: scheme.secondary,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: CosMetricTile(
+                icon: profile.isFollowed
+                    ? Icons.person_pin_circle_outlined
+                    : Icons.person_add_alt_1_outlined,
+                label: '關係',
+                value: profile.isFollowed ? '已關注' : '可關注',
+                color: scheme.tertiary,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
