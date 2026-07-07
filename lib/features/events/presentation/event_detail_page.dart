@@ -213,30 +213,73 @@ class _InfoGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return CosCard(
       padding: const EdgeInsets.all(14),
       child: Column(
         children: [
           for (final row in rows)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 5),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 92,
-                    child: Text(
-                      row.label,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth < 340) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _InfoLabel(label: row.label),
+                        const SizedBox(height: 4),
+                        row.child,
+                      ],
+                    );
+                  }
+                  return DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerHighest.withValues(
+                        alpha: 0.18,
+                      ),
+                      borderRadius: BorderRadius.circular(CosUi.radiusSm),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 92,
+                            child: _InfoLabel(label: row.label),
+                          ),
+                          Expanded(child: row.child),
+                        ],
                       ),
                     ),
-                  ),
-                  Expanded(child: row.child),
-                ],
+                  );
+                },
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _InfoLabel extends StatelessWidget {
+  const _InfoLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+        fontWeight: FontWeight.w800,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
     );
   }
@@ -340,27 +383,40 @@ class _EventDetailHero extends StatelessWidget {
               children: [
                 Text(
                   eventDisplayName(event),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w900,
                   ),
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _HeroMeta(
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final metas = [
+                      _HeroMeta(
                         icon: Icons.calendar_month_outlined,
                         text: _dateText(event),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _HeroMeta(
-                        icon: Icons.place_outlined,
-                        text: event.venue,
-                      ),
-                    ),
-                  ],
+                      _HeroMeta(icon: Icons.place_outlined, text: event.venue),
+                    ];
+                    if (constraints.maxWidth < 360) {
+                      return Column(
+                        children: [
+                          for (final meta in metas) ...[
+                            meta,
+                            if (meta != metas.last) const SizedBox(height: 8),
+                          ],
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: metas.first),
+                        const SizedBox(width: 10),
+                        Expanded(child: metas.last),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
