@@ -96,9 +96,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   child: FilledButton.icon(
                     onPressed: _loading ? null : _submit,
                     icon: _loading
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                        ? CosLoadingPulse(
+                            color: Theme.of(context).colorScheme.onPrimary,
+                            size: 20,
                           )
                         : Icon(_isRegister ? Icons.person_add : Icons.login),
                     label: Text(_isRegister ? '建立帳號' : '登入'),
@@ -193,28 +193,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final tokenController = TextEditingController();
     final token = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('${provider.label} 登入'),
-        content: TextField(
-          controller: tokenController,
-          decoration: InputDecoration(
-            labelText: '${provider.label} access token',
-            helperText: '正式版可接原生 SDK，這裡先支援 token 登入流程。',
-          ),
-          minLines: 1,
-          maxLines: 3,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, tokenController.text),
-            child: const Text('登入'),
-          ),
-        ],
-      ),
+      builder: (context) =>
+          _SocialTokenDialog(provider: provider, controller: tokenController),
     );
     tokenController.dispose();
     if (token == null || token.trim().isEmpty) return;
@@ -262,6 +242,70 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final completed = await oobe.isCompleted(session.user.id);
     if (!mounted) return;
     context.go(session.isNewUser || !completed ? '/onboarding' : '/');
+  }
+}
+
+class _SocialTokenDialog extends StatelessWidget {
+  const _SocialTokenDialog({required this.provider, required this.controller});
+
+  final SocialLoginProvider provider;
+  final TextEditingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 22),
+      clipBehavior: Clip.antiAlias,
+      child: CosGradientPanel(
+        icon: provider == SocialLoginProvider.facebook
+            ? Icons.facebook
+            : Icons.chat_bubble_outline,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CosSectionHeader(
+              title: '${provider.label} 登入',
+              subtitle: '正式版可接原生 SDK，這裡先支援 token 登入流程',
+              icon: provider == SocialLoginProvider.facebook
+                  ? Icons.facebook
+                  : Icons.chat_bubble_outline,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: '${provider.label} access token',
+                prefixIcon: Icon(Icons.vpn_key_outlined, color: scheme.primary),
+              ),
+              minLines: 1,
+              maxLines: 3,
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('取消'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => Navigator.pop(context, controller.text),
+                    icon: const Icon(Icons.login),
+                    label: const Text('登入'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

@@ -129,9 +129,9 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
                     ? _finish
                     : _next,
                 icon: _saving
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                    ? CosLoadingPulse(
+                        color: Theme.of(context).colorScheme.onPrimary,
+                        size: 20,
                       )
                     : Icon(
                         _page == pages.length - 1
@@ -284,8 +284,8 @@ class _ProfileSetupStep extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   for (final role in roleOptions)
-                    _OnboardingChoiceChip(
-                      label: Text(role),
+                    CosChoicePill(
+                      label: role,
                       selected: roles.contains(role),
                       icon: Icons.badge_outlined,
                       onTap: () {
@@ -305,8 +305,8 @@ class _ProfileSetupStep extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   for (final region in regionOptions)
-                    _OnboardingChoiceChip(
-                      label: Text(region),
+                    CosChoicePill(
+                      label: region,
                       selected: regions.contains(region),
                       icon: Icons.place_outlined,
                       onTap: () {
@@ -322,66 +322,6 @@ class _ProfileSetupStep extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _OnboardingChoiceChip extends StatelessWidget {
-  const _OnboardingChoiceChip({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final Widget label;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    return InkWell(
-      borderRadius: BorderRadius.circular(99),
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: reduceMotion
-            ? Duration.zero
-            : const Duration(milliseconds: 160),
-        curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(
-          color: selected
-              ? scheme.primaryContainer
-              : scheme.surfaceContainerHighest.withValues(alpha: 0.42),
-          borderRadius: BorderRadius.circular(99),
-          border: Border.all(
-            color: selected
-                ? scheme.primary.withValues(alpha: 0.42)
-                : scheme.outlineVariant.withValues(alpha: 0.58),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              selected ? Icons.check_circle : icon,
-              size: 16,
-              color: selected ? scheme.primary : scheme.onSurfaceVariant,
-            ),
-            const SizedBox(width: 6),
-            DefaultTextStyle.merge(
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: selected ? scheme.onPrimaryContainer : scheme.onSurface,
-                fontWeight: FontWeight.w900,
-              ),
-              child: label,
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
