@@ -43,16 +43,19 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
         icon: Icons.event_available,
         title: '加入活動，公開今天會去哪',
         message: '在活動清單找到場次，發布「出席預訂」讓同好知道你會在哪一天出現。',
+        cues: const ['場次預定', '同日認親', '快速加入'],
       ),
       _GuideStep(
         icon: Icons.map_outlined,
         title: '現場找人更容易',
         message: '當前活動可以分享位置、看小圈圈集合點，也能通知朋友你要過去認親。',
+        cues: const ['集合訊號', '小圈圈', '現場交流'],
       ),
       _GuideStep(
         icon: Icons.qr_code_2,
         title: '掃 QR 快速認識新朋友',
         message: '個人資料與小圈圈都能用 QRCode 分享，活動現場不用再慢慢搜尋帳號。',
+        cues: const ['Cos 名片', '掃碼交換', '坑單比對'],
       ),
       _ProfileSetupStep(
         nicknameController: _nicknameController,
@@ -76,28 +79,10 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
       ),
       child: Column(
         children: [
-          CosCard(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                const CosLogoMark(size: 38),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(999),
-                    child: LinearProgressIndicator(
-                      minHeight: 8,
-                      value: (_page + 1) / pages.length,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  '${_page + 1}/${pages.length}',
-                  style: Theme.of(context).textTheme.labelLarge,
-                ),
-              ],
-            ),
+          _OnboardingProgressCard(
+            current: _page + 1,
+            total: pages.length,
+            finalStep: _page == pages.length - 1,
           ),
           const SizedBox(height: 20),
           Expanded(
@@ -200,38 +185,146 @@ class _GuideStep extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.message,
+    required this.cues,
   });
 
   final IconData icon;
   final String title;
   final String message;
+  final List<String> cues;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Center(
-      child: CosCard(
-        padding: const EdgeInsets.all(24),
+      child: CosGradientPanel(
+        icon: icon,
+        padding: const EdgeInsets.all(22),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CosIconBubble(icon: icon, color: scheme.primary, size: 68),
-            const SizedBox(height: 20),
+            Row(
+              children: [
+                CosIconBubble(icon: icon, color: scheme.primary, size: 68),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CosBadge(
+                        label: '新手任務',
+                        icon: Icons.auto_awesome,
+                        color: scheme.primary,
+                        highlighted: true,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '先把現場交流變簡單',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 22),
             Text(
               title,
-              textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w900,
+                height: 1.05,
+              ),
             ),
             const SizedBox(height: 12),
             Text(
               message,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyLarge,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final cue in cues)
+                  CosBadge(
+                    label: cue,
+                    icon: Icons.check_circle_outline,
+                    color: scheme.secondary,
+                  ),
+              ],
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _OnboardingProgressCard extends StatelessWidget {
+  const _OnboardingProgressCard({
+    required this.current,
+    required this.total,
+    required this.finalStep,
+  });
+
+  final int current;
+  final int total;
+  final bool finalStep;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final progress = current / total;
+    return CosCard(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          const CosLogoMark(size: 38),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        finalStep ? '建立你的 Cos 名片' : '熟悉活動交流流程',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '$current/$total',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(minHeight: 8, value: progress),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -256,6 +349,7 @@ class _ProfileSetupStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return ListView(
       children: [
         CosCard(
@@ -271,6 +365,32 @@ class _ProfileSetupStep extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               const Text('這些資料之後都能在個人資訊頁修改。'),
+              const SizedBox(height: 14),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(CosUi.radiusMd),
+                  border: Border.all(
+                    color: scheme.primary.withValues(alpha: 0.18),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.diversity_3_outlined, color: scheme.primary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '暱稱、身份與常跑地區會幫同好更快判斷是否能現場認親。',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               const SizedBox(height: 20),
               TextField(
                 controller: nicknameController,
