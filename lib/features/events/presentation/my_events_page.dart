@@ -608,43 +608,13 @@ class _CancelBookingDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-      contentPadding: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      content: CosGradientPanel(
-        icon: Icons.delete_outline,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            CosSectionHeader(
-              title: '取消預訂',
-              subtitle: '確定要取消 ${item.title} 的預訂嗎？取消後同好將看不到這張參戰名片。',
-              icon: Icons.delete_outline,
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('保留'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () => Navigator.pop(context, true),
-                    icon: const Icon(Icons.delete_outline),
-                    label: const Text('取消預訂'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+    return CosSafetyConfirmDialog(
+      title: '取消預訂',
+      message: '確定要取消 ${item.title} 的預訂嗎？取消後同好將看不到這張參戰名片。',
+      actionLabel: '取消預訂',
+      cancelLabel: '保留',
+      icon: Icons.delete_outline,
+      destructive: true,
     );
   }
 }

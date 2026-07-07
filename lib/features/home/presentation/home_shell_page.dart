@@ -128,19 +128,12 @@ class _HomeShellPageState extends ConsumerState<HomeShellPage> {
     _showingExitConfirm = true;
     final shouldExit = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('離開 CosCircle？'),
-        content: const Text('確定要關閉 App 嗎？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('離開'),
-          ),
-        ],
+      builder: (context) => const CosSafetyConfirmDialog(
+        title: '離開 CosCircle？',
+        message: '確定要關閉 App 嗎？',
+        actionLabel: '離開',
+        cancelLabel: '取消',
+        icon: Icons.logout_outlined,
       ),
     );
     _showingExitConfirm = false;
