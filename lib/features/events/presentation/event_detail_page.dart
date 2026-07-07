@@ -649,6 +649,7 @@ class _ParticipantsSection extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       builder: (context) {
+        final scheme = Theme.of(context).colorScheme;
         return SafeArea(
           child: ConstrainedBox(
             constraints: BoxConstraints(
@@ -658,111 +659,93 @@ class _ParticipantsSection extends ConsumerWidget {
               shrinkWrap: true,
               padding: const EdgeInsets.all(16),
               children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        color: participantRoleColor(participant.role),
-                        shape: BoxShape.circle,
-                      ),
-                      child: CircleAvatar(
-                        radius: 30,
-                        backgroundColor: Theme.of(
-                          context,
-                        ).colorScheme.primaryContainer,
-                        backgroundImage: pickedImageProvider(
-                          participant.avatarUrl,
-                        ),
-                        child: participant.avatarUrl.isEmpty
-                            ? Text(
-                                participant.nickname.characters.firstOrNull ??
-                                    '?',
-                              )
-                            : null,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            participant.nickname,
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          Text(_roleText(participant)),
-                        ],
-                      ),
-                    ),
-                  ],
+                const _SheetGrabber(),
+                _ParticipantSheetHeader(
+                  participant: participant,
+                  roleText: _roleText(participant),
                 ),
                 if (participant.message.isNotEmpty) ...[
                   const SizedBox(height: 12),
-                  Text(participant.message),
+                  _ParticipantMessageCard(message: participant.message),
                 ],
                 if (participant.outfitImageUrl.isNotEmpty) ...[
                   const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image(
-                      image: pickedImageProvider(participant.outfitImageUrl)!,
-                      height: 220,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          Text('當天出的角：${participant.outfitImageUrl}'),
-                    ),
-                  ),
+                  _ParticipantOutfitPreview(participant: participant),
                 ],
                 const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: participant.isMe
-                            ? null
-                            : () async {
-                                if (participant.isFollowed) {
-                                  await ref
-                                      .read(eventRepositoryProvider)
-                                      .unfollowUser(participant.userId);
-                                } else {
-                                  await ref
-                                      .read(eventRepositoryProvider)
-                                      .followUser(participant.userId);
-                                }
-                                ref.invalidate(
-                                  eventParticipantsProvider(eventId),
-                                );
-                                if (context.mounted) Navigator.pop(context);
-                              },
-                        icon: Icon(
-                          participant.isFollowed
-                              ? Icons.person_remove
-                              : Icons.person_add,
-                        ),
-                        label: Text(participant.isFollowed ? '取消關注' : '關注'),
-                      ),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest.withValues(
+                      alpha: 0.32,
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          if (participant.publicCode.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('尚未取得分享碼')),
-                            );
-                            return;
-                          }
-                          Navigator.of(context).pop();
-                          context.push('/profiles/${participant.publicCode}');
-                        },
-                        icon: const Icon(Icons.info_outline),
-                        label: const Text('詳細資料'),
-                      ),
+                    borderRadius: BorderRadius.circular(CosUi.radiusMd),
+                    border: Border.all(
+                      color: scheme.outlineVariant.withValues(alpha: 0.5),
                     ),
-                  ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final followButton = FilledButton.icon(
+                          onPressed: participant.isMe
+                              ? null
+                              : () async {
+                                  if (participant.isFollowed) {
+                                    await ref
+                                        .read(eventRepositoryProvider)
+                                        .unfollowUser(participant.userId);
+                                  } else {
+                                    await ref
+                                        .read(eventRepositoryProvider)
+                                        .followUser(participant.userId);
+                                  }
+                                  ref.invalidate(
+                                    eventParticipantsProvider(eventId),
+                                  );
+                                  if (context.mounted) Navigator.pop(context);
+                                },
+                          icon: Icon(
+                            participant.isFollowed
+                                ? Icons.person_remove
+                                : Icons.person_add,
+                          ),
+                          label: Text(participant.isFollowed ? '取消關注' : '關注'),
+                        );
+                        final detailButton = OutlinedButton.icon(
+                          onPressed: () {
+                            if (participant.publicCode.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('尚未取得分享碼')),
+                              );
+                              return;
+                            }
+                            Navigator.of(context).pop();
+                            context.push('/profiles/${participant.publicCode}');
+                          },
+                          icon: const Icon(Icons.info_outline),
+                          label: const Text('詳細資料'),
+                        );
+                        if (constraints.maxWidth < 330) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              followButton,
+                              const SizedBox(height: 8),
+                              detailButton,
+                            ],
+                          );
+                        }
+                        return Row(
+                          children: [
+                            Expanded(child: followButton),
+                            const SizedBox(width: 12),
+                            Expanded(child: detailButton),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
                 ),
                 if (!participant.isMe) ...[
                   const SizedBox(height: 10),
@@ -816,6 +799,158 @@ class _ParticipantsSection extends ConsumerWidget {
     ];
     if (details.isEmpty) return label;
     return '$label / ${details.join(' / ')}';
+  }
+}
+
+class _SheetGrabber extends StatelessWidget {
+  const _SheetGrabber();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Container(
+        width: 42,
+        height: 5,
+        margin: const EdgeInsets.only(bottom: 14),
+        decoration: BoxDecoration(
+          color: scheme.outlineVariant,
+          borderRadius: BorderRadius.circular(999),
+        ),
+      ),
+    );
+  }
+}
+
+class _ParticipantSheetHeader extends StatelessWidget {
+  const _ParticipantSheetHeader({
+    required this.participant,
+    required this.roleText,
+  });
+
+  final EventParticipant participant;
+  final String roleText;
+
+  @override
+  Widget build(BuildContext context) {
+    final roleColor = participantRoleColor(participant.role);
+    final scheme = Theme.of(context).colorScheme;
+    return CosGradientPanel(
+      icon: Icons.badge_outlined,
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(color: roleColor, shape: BoxShape.circle),
+            child: CircleAvatar(
+              radius: 32,
+              backgroundColor: scheme.primaryContainer,
+              backgroundImage: pickedImageProvider(participant.avatarUrl),
+              child: participant.avatarUrl.isEmpty
+                  ? Text(participant.nickname.characters.firstOrNull ?? '?')
+                  : null,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CosBadge(
+                  label: participant.isMe ? '你的預定' : '現場同好',
+                  icon: participant.isMe
+                      ? Icons.check_circle_outline
+                      : Icons.diversity_3_outlined,
+                  color: roleColor,
+                  highlighted: true,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  participant.nickname,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  roleText,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ParticipantMessageCard extends StatelessWidget {
+  const _ParticipantMessageCard({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.36),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CosIconBubble(
+              icon: Icons.chat_bubble_outline,
+              color: scheme.secondary,
+              size: 34,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ParticipantOutfitPreview extends StatelessWidget {
+  const _ParticipantOutfitPreview({required this.participant});
+
+  final EventParticipant participant;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(CosUi.radiusMd),
+      child: Image(
+        image: pickedImageProvider(participant.outfitImageUrl)!,
+        height: 220,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) =>
+            Text('當天出的角：${participant.outfitImageUrl}'),
+      ),
+    );
   }
 }
 
