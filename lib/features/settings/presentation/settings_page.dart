@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/providers/theme_mode_provider.dart';
 import '../../../core/repositories/auth_repository.dart';
 import '../../../core/repositories/profile_repository.dart';
 import '../../../core/repositories/submission_repository.dart';
@@ -21,6 +22,7 @@ class SettingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(appThemeModeProvider);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -59,6 +61,13 @@ class SettingsPage extends ConsumerWidget {
               icon: Icons.palette_outlined,
               title: '介面主題',
               subtitle: '切換星夜暗色或社群亮色',
+              trailing: CosBadge(
+                label: themeMode.label,
+                icon: themeMode == CosCircleThemeMode.neonDark
+                    ? Icons.dark_mode_outlined
+                    : Icons.light_mode_outlined,
+                highlighted: true,
+              ),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const ThemeSettingsPage()),
               ),
@@ -261,19 +270,24 @@ class _SettingsAction extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.48),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child:
-                      trailing ??
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        color: scheme.onSurfaceVariant,
-                      ),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 128),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest.withValues(
+                      alpha: 0.48,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child:
+                        trailing ??
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                  ),
                 ),
               ),
             ],

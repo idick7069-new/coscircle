@@ -24,12 +24,7 @@ class ThemeSettingsPage extends ConsumerWidget {
             leading: CosIconBubble(icon: Icons.palette_outlined),
           ),
           const SizedBox(height: 8),
-          CosCard(
-            child: Text(
-              '設定會保存在這台裝置，下次開啟 App 時自動套用。',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ),
+          _ThemeModeHero(selectedMode: selectedMode),
           const SizedBox(height: 16),
           CosReveal(
             child: _ThemeOptionCard(
@@ -64,6 +59,149 @@ class ThemeSettingsPage extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ThemeModeHero extends StatelessWidget {
+  const _ThemeModeHero({required this.selectedMode});
+
+  final CosCircleThemeMode selectedMode;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final dark = selectedMode == CosCircleThemeMode.neonDark;
+    return CosGradientPanel(
+      icon: dark ? Icons.nights_stay_outlined : Icons.wb_sunny_outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CosIconBubble(
+                icon: dark
+                    ? Icons.dark_mode_outlined
+                    : Icons.light_mode_outlined,
+                color: scheme.primary,
+                size: 44,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CosBadge(
+                      label: '目前使用 ${selectedMode.label}',
+                      icon: Icons.check_circle_outline,
+                      color: scheme.primary,
+                      highlighted: true,
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      dark ? '現場拍攝優先' : '日常瀏覽優先',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '設定會保存在這台裝置，下次開啟 App 時自動套用。',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _ThemeCueTile(
+                  icon: Icons.photo_camera_outlined,
+                  label: '作品辨識',
+                  value: dark ? '高對比' : '柔和色',
+                  color: scheme.secondary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ThemeCueTile(
+                  icon: Icons.groups_2_outlined,
+                  label: '同好交流',
+                  value: dark ? '聚焦動線' : '清楚閱讀',
+                  color: scheme.tertiary,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ThemeCueTile extends StatelessWidget {
+  const _ThemeCueTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.34),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
