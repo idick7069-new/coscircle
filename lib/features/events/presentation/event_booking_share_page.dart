@@ -152,50 +152,83 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
               subtitle: '整理當天角色與留言，快速分享給同好',
               leading: const CosIconBubble(icon: Icons.ios_share_outlined),
             ),
-            const SizedBox(height: 8),
-            CosCard(
-              padding: const EdgeInsets.all(10),
-              child: Listener(
-                onPointerDown: (_) => _handlePreviewPointerDown(),
-                onPointerUp: (_) => _handlePreviewPointerEnd(),
-                onPointerCancel: (_) => _handlePreviewPointerEnd(),
-                child: GestureDetector(
-                  key: _previewKey,
-                  behavior: HitTestBehavior.translucent,
-                  onScaleStart: _handlePreviewScaleStart,
-                  onScaleUpdate: _handlePreviewScaleUpdate,
-                  child: AspectRatio(
-                    aspectRatio: 1800 / 1200,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(CosUi.radiusMd),
-                      child: FittedBox(
-                        child: RepaintBoundary(
-                          key: _boundaryKey,
-                          child: SizedBox(
-                            width: 1800,
-                            height: 1200,
-                            child: _ShareCanvas(
-                              event: widget.event,
-                              bookings: widget.bookings,
-                              backgroundColor: _backgroundColor,
-                              dayCount: _dayCount,
-                              photoTransforms: _photoTransforms,
-                              labelControllers: _labelControllers,
-                              labelTransforms: _labelTransforms,
-                              labelFontSizes: _labelFontSizes,
-                              labelBackgroundColors: _labelBackgroundColorByDay,
-                              labelBorderRadii: _labelBorderRadiusByDay,
-                              message: _messageController.text,
-                              selectedLayer: _sharing ? null : _selectedLayer,
-                              onLayerSelected: (layer) {
-                                setState(() => _selectedLayer = layer);
-                              },
+            const SizedBox(height: 10),
+            _ShareComposerHero(
+              event: widget.event,
+              bookingCount: widget.bookings.length,
+              dayCount: _dayCount,
+              selectedLayer: _selectedLayer,
+              sharing: _sharing,
+              onShare: _shareImage,
+            ),
+            const SizedBox(height: 12),
+            CosReveal(
+              delay: const Duration(milliseconds: 80),
+              child: CosCard(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 2, 4, 10),
+                      child: CosSectionHeader(
+                        title: '分享圖預覽',
+                        subtitle: '點選照片或角色名後，可直接拖曳、縮放與旋轉',
+                        icon: Icons.dashboard_customize_outlined,
+                        trailing: CosBadge(
+                          label: '1800 x 1200',
+                          icon: Icons.crop_landscape_outlined,
+                          color: Theme.of(context).colorScheme.tertiary,
+                        ),
+                      ),
+                    ),
+                    Listener(
+                      onPointerDown: (_) => _handlePreviewPointerDown(),
+                      onPointerUp: (_) => _handlePreviewPointerEnd(),
+                      onPointerCancel: (_) => _handlePreviewPointerEnd(),
+                      child: GestureDetector(
+                        key: _previewKey,
+                        behavior: HitTestBehavior.translucent,
+                        onScaleStart: _handlePreviewScaleStart,
+                        onScaleUpdate: _handlePreviewScaleUpdate,
+                        child: AspectRatio(
+                          aspectRatio: 1800 / 1200,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(CosUi.radiusMd),
+                            child: FittedBox(
+                              child: RepaintBoundary(
+                                key: _boundaryKey,
+                                child: SizedBox(
+                                  width: 1800,
+                                  height: 1200,
+                                  child: _ShareCanvas(
+                                    event: widget.event,
+                                    bookings: widget.bookings,
+                                    backgroundColor: _backgroundColor,
+                                    dayCount: _dayCount,
+                                    photoTransforms: _photoTransforms,
+                                    labelControllers: _labelControllers,
+                                    labelTransforms: _labelTransforms,
+                                    labelFontSizes: _labelFontSizes,
+                                    labelBackgroundColors:
+                                        _labelBackgroundColorByDay,
+                                    labelBorderRadii: _labelBorderRadiusByDay,
+                                    message: _messageController.text,
+                                    selectedLayer: _sharing
+                                        ? null
+                                        : _selectedLayer,
+                                    onLayerSelected: (layer) {
+                                      setState(() => _selectedLayer = layer);
+                                    },
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ),
@@ -472,6 +505,130 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
       '${dir.path}/coscircle_booking_${widget.event.id}_${DateTime.now().millisecondsSinceEpoch}.png',
     );
     return file.writeAsBytes(bytes, flush: true);
+  }
+}
+
+class _ShareComposerHero extends StatelessWidget {
+  const _ShareComposerHero({
+    required this.event,
+    required this.bookingCount,
+    required this.dayCount,
+    required this.selectedLayer,
+    required this.sharing,
+    required this.onShare,
+  });
+
+  final CosEvent event;
+  final int bookingCount;
+  final int dayCount;
+  final _SelectedShareLayer? selectedLayer;
+  final bool sharing;
+  final VoidCallback onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final layerLabel = selectedLayer == null
+        ? '等待選取'
+        : selectedLayer!.kind == _ShareLayerKind.photo
+        ? 'D${selectedLayer!.dayIndex} 照片'
+        : 'D${selectedLayer!.dayIndex} 角色名';
+    final dateText = DateFormat('MM/dd', 'zh_TW').format(event.startDate);
+
+    return CosReveal(
+      child: CosGradientPanel(
+        icon: Icons.theater_comedy_outlined,
+        padding: const EdgeInsets.all(16),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 420;
+            final action = FilledButton.icon(
+              onPressed: sharing ? null : onShare,
+              icon: sharing
+                  ? CosLoadingPulse(color: scheme.onPrimary, size: 20)
+                  : const Icon(Icons.ios_share),
+              label: Text(sharing ? '產生中' : '分享圖片'),
+            );
+            final intro = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const CosLogoMark(size: 46),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            eventDisplayName(event),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w900),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '把出角、留言和活動日整理成一張可分享的同好名片。',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    CosBadge(
+                      label: '$dateText 開始',
+                      icon: Icons.calendar_month_outlined,
+                      color: scheme.primary,
+                      highlighted: true,
+                    ),
+                    CosBadge(
+                      label: '$bookingCount 張名片',
+                      icon: Icons.badge_outlined,
+                      color: scheme.secondary,
+                    ),
+                    CosBadge(
+                      label: '$dayCount 日',
+                      icon: Icons.view_week_outlined,
+                      color: scheme.tertiary,
+                    ),
+                    CosBadge(label: layerLabel, icon: Icons.layers_outlined),
+                  ],
+                ),
+              ],
+            );
+
+            if (compact) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [intro, const SizedBox(height: 14), action],
+              );
+            }
+
+            return Row(
+              children: [
+                Expanded(child: intro),
+                const SizedBox(width: 16),
+                action,
+              ],
+            );
+          },
+        ),
+      ),
+    );
   }
 }
 
