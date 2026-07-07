@@ -8,6 +8,7 @@ import '../../../core/models/event.dart';
 import '../../../core/models/event_submission.dart';
 import '../../../core/repositories/admin_repository.dart';
 import '../../../core/utils/error_message.dart';
+import '../../../shared/widgets/cos_ui.dart';
 
 final adminStatsProvider = FutureProvider.autoDispose<AdminStats>((ref) {
   return ref.watch(adminRepositoryProvider).fetchStats();
@@ -75,9 +76,8 @@ class AdminDashboardPage extends ConsumerWidget {
             children: [
               stats.when(
                 data: (value) => _StatsGrid(stats: value),
-                error: (error, stack) => _ErrorPanel(
-                  message: '資料庫狀態載入失敗：${userFacingError(error)}',
-                ),
+                error: (error, stack) =>
+                    _ErrorPanel(message: '資料庫狀態載入失敗：${userFacingError(error)}'),
                 loading: () => const _LoadingPanel(message: '載入資料庫狀態...'),
               ),
               const SizedBox(height: 20),
@@ -173,15 +173,33 @@ class AdminDashboardPage extends ConsumerWidget {
     final apiUrl = ref.read(adminRepositoryProvider).apiBaseUrl;
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('後台 API 位址'),
-        content: Text(apiUrl),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('關閉'),
+      builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 22),
+        clipBehavior: Clip.antiAlias,
+        child: CosGradientPanel(
+          icon: Icons.link,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const CosSectionHeader(
+                title: '後台 API 位址',
+                subtitle: '目前管理工具連線的服務端點',
+                icon: Icons.link,
+              ),
+              const SizedBox(height: 14),
+              SelectableText(apiUrl),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('關閉'),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -225,19 +243,13 @@ class AdminDashboardPage extends ConsumerWidget {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('刪除活動'),
-        content: Text('確定要刪除「${event.name}」？相關預訂與位置資料也會一併移除。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          FilledButton.tonal(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('刪除'),
-          ),
-        ],
+      builder: (context) => CosSafetyConfirmDialog(
+        title: '刪除活動',
+        message: '確定要刪除「${event.name}」？相關預訂與位置資料也會一併移除。',
+        actionLabel: '刪除',
+        cancelLabel: '取消',
+        icon: Icons.delete_outline,
+        destructive: true,
       ),
     );
     if (confirmed != true) return;
@@ -261,19 +273,13 @@ class AdminDashboardPage extends ConsumerWidget {
     final label = user.email.isEmpty ? user.nickname : user.email;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('刪除使用者'),
-        content: Text('確定要刪除「$label」？相關出席、位置、關注與小圈圈資料也會一併移除。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          FilledButton.tonal(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('刪除'),
-          ),
-        ],
+      builder: (context) => CosSafetyConfirmDialog(
+        title: '刪除使用者',
+        message: '確定要刪除「$label」？相關出席、位置、關注與小圈圈資料也會一併移除。',
+        actionLabel: '刪除',
+        cancelLabel: '取消',
+        icon: Icons.person_remove_outlined,
+        destructive: true,
       ),
     );
     if (confirmed != true) return;
@@ -418,9 +424,10 @@ class _EventEditorSheetState extends ConsumerState<_EventEditorSheet> {
         child: ListView(
           shrinkWrap: true,
           children: [
-            Text(
-              _isEditing ? '編輯活動' : '新增活動',
-              style: Theme.of(context).textTheme.titleLarge,
+            CosSectionHeader(
+              title: _isEditing ? '編輯活動' : '新增活動',
+              subtitle: '管理活動資料、來源與前台顯示狀態',
+              icon: _isEditing ? Icons.edit_outlined : Icons.add_location_alt,
             ),
             const SizedBox(height: 12),
             TextField(
@@ -521,36 +528,54 @@ class _EventEditorSheetState extends ConsumerState<_EventEditorSheet> {
               ],
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _status,
-              decoration: const InputDecoration(labelText: '審核狀態'),
-              items: _validStatuses
-                  .map(
-                    (status) => DropdownMenuItem(
-                      value: status,
-                      child: Text(_statusLabel(status)),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                if (value == null) return;
-                setState(() => _status = value);
-              },
+            Text(
+              '審核狀態',
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final status in _validStatuses)
+                  CosChoicePill(
+                    label: _statusLabel(status),
+                    selected: _status == status,
+                    icon: _statusIcon(status),
+                    color: _statusColor(Theme.of(context).colorScheme, status),
+                    onTap: () => setState(() => _status = status),
+                  ),
+              ],
             ),
             if (_errorText != null) ...[
               const SizedBox(height: 10),
-              Text(
-                _errorText!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.errorContainer.withValues(alpha: 0.34),
+                  borderRadius: BorderRadius.circular(CosUi.radiusMd),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    _errorText!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
               ),
             ],
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: _saving ? null : _save,
               icon: _saving
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                  ? CosLoadingPulse(
+                      color: Theme.of(context).colorScheme.onPrimary,
+                      size: 20,
                     )
                   : const Icon(Icons.save),
               label: Text(_isEditing ? '儲存活動' : '建立活動'),
@@ -671,6 +696,24 @@ class _EventEditorSheetState extends ConsumerState<_EventEditorSheet> {
     };
   }
 
+  static IconData _statusIcon(String status) {
+    return switch (status) {
+      'pending' => Icons.pending_actions_outlined,
+      'approved' => Icons.verified_outlined,
+      'rejected' => Icons.visibility_off_outlined,
+      _ => Icons.info_outline,
+    };
+  }
+
+  static Color _statusColor(ColorScheme scheme, String status) {
+    return switch (status) {
+      'pending' => scheme.tertiary,
+      'approved' => scheme.secondary,
+      'rejected' => scheme.error,
+      _ => scheme.primary,
+    };
+  }
+
   static String _sourceNameForType(int sourceType) {
     return switch (sourceType) {
       1 => '同人誌中心',
@@ -688,14 +731,20 @@ class _StatsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final items = [
-      ('使用者', stats.users, Icons.people_alt_outlined),
-      ('活動', stats.events, Icons.event_outlined),
-      ('已上架', stats.approvedEvents, Icons.verified_outlined),
-      ('預訂', stats.bookings, Icons.how_to_reg_outlined),
-      ('位置', stats.sharedLocations, Icons.location_on_outlined),
-      ('小圈圈', stats.circles, Icons.groups_outlined),
-      ('投稿', stats.eventSubmissions, Icons.post_add_outlined),
+      ('使用者', stats.users, Icons.people_alt_outlined, scheme.primary),
+      ('活動', stats.events, Icons.event_outlined, scheme.secondary),
+      ('已上架', stats.approvedEvents, Icons.verified_outlined, scheme.tertiary),
+      ('預訂', stats.bookings, Icons.how_to_reg_outlined, scheme.primary),
+      (
+        '位置',
+        stats.sharedLocations,
+        Icons.location_on_outlined,
+        scheme.secondary,
+      ),
+      ('小圈圈', stats.circles, Icons.groups_outlined, scheme.tertiary),
+      ('投稿', stats.eventSubmissions, Icons.post_add_outlined, scheme.primary),
     ];
 
     return GridView.builder(
@@ -710,37 +759,11 @@ class _StatsGrid extends StatelessWidget {
       ),
       itemBuilder: (context, index) {
         final item = items[index];
-        return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Icon(item.$3),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        item.$1,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        '${item.$2}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+        return CosMetricTile(
+          icon: item.$3,
+          label: item.$1,
+          value: '${item.$2}',
+          color: item.$4,
         );
       },
     );
@@ -762,24 +785,46 @@ class _AdminEventTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final date = DateFormat('yyyy/MM/dd').format(event.startDate);
     final endDate = DateFormat('yyyy/MM/dd').format(event.endDate);
-    return Card(
-      child: ListTile(
-        title: Text(event.name),
-        subtitle: Text(
-          event.startDate == event.endDate
-              ? '$date · ${event.venue}'
-              : '$date - $endDate · ${event.venue}',
-        ),
-        leading: const Icon(Icons.event),
-        trailing: Wrap(
-          spacing: 2,
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: CosCard(
+        padding: const EdgeInsets.all(14),
+        child: Row(
           children: [
+            CosIconBubble(icon: Icons.event_outlined, color: scheme.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    event.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    event.startDate == event.endDate
+                        ? '$date · ${event.venue}'
+                        : '$date - $endDate · ${event.venue}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
             IconButton(
               tooltip: '編輯活動',
               onPressed: onEdit,
               icon: const Icon(Icons.edit_outlined),
             ),
-            IconButton(
+            IconButton.filledTonal(
               tooltip: '刪除',
               onPressed: onDelete,
               icon: const Icon(Icons.delete_outline),
@@ -800,35 +845,65 @@ class _AdminUserList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (users.isEmpty) {
-      return const Card(
-        child: Padding(padding: EdgeInsets.all(16), child: Text('目前沒有使用者')),
+      return const CosCard(
+        child: _AdminEmptyRow(
+          icon: Icons.people_alt_outlined,
+          message: '目前沒有使用者',
+        ),
       );
     }
+    final scheme = Theme.of(context).colorScheme;
     return Column(
       children: [
         for (final user in users)
-          Card(
-            child: ListTile(
-              leading: CircleAvatar(
-                child: Text(
-                  (user.nickname.isNotEmpty ? user.nickname : user.email)
-                          .characters
-                          .firstOrNull ??
-                      '?',
-                ),
-              ),
-              title: Text(user.nickname.isEmpty ? '未命名使用者' : user.nickname),
-              subtitle: Text(
-                [
-                  if (user.email.isNotEmpty) user.email,
-                  if (user.isAdmin) 'Admin',
-                  if (user.isMe) '目前登入',
-                ].join(' · '),
-              ),
-              trailing: IconButton(
-                tooltip: '刪除使用者',
-                onPressed: user.isMe ? null : () => onDelete(user),
-                icon: const Icon(Icons.delete_outline),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: CosCard(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: scheme.primaryContainer,
+                    foregroundColor: scheme.onPrimaryContainer,
+                    child: Text(
+                      (user.nickname.isNotEmpty ? user.nickname : user.email)
+                              .characters
+                              .firstOrNull ??
+                          '?',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user.nickname.isEmpty ? '未命名使用者' : user.nickname,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          [
+                            if (user.email.isNotEmpty) user.email,
+                            if (user.isAdmin) 'Admin',
+                            if (user.isMe) '目前登入',
+                          ].join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton.filledTonal(
+                    tooltip: '刪除使用者',
+                    onPressed: user.isMe ? null : () => onDelete(user),
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+                ],
               ),
             ),
           ),
@@ -851,8 +926,8 @@ class _SubmissionList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (submissions.isEmpty) {
-      return const Card(
-        child: Padding(padding: EdgeInsets.all(16), child: Text('目前沒有投稿')),
+      return const CosCard(
+        child: _AdminEmptyRow(icon: Icons.post_add_outlined, message: '目前沒有投稿'),
       );
     }
 
@@ -885,8 +960,9 @@ class _SubmissionTile extends StatelessWidget {
     final date = DateFormat('yyyy/MM/dd').format(submission.startDate);
     final pending = submission.reviewStatus == 'pending';
 
-    return Card(
-      child: Padding(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: CosCard(
         padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -901,7 +977,13 @@ class _SubmissionTile extends StatelessWidget {
                     ),
                   ),
                 ),
-                Chip(label: Text(_statusText(submission.reviewStatus))),
+                CosBadge(
+                  label: _statusText(submission.reviewStatus),
+                  icon: pending
+                      ? Icons.pending_actions_outlined
+                      : Icons.verified_outlined,
+                  highlighted: pending,
+                ),
               ],
             ),
             const SizedBox(height: 6),
@@ -954,8 +1036,16 @@ class _ErrorPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(padding: const EdgeInsets.all(16), child: Text(message)),
+    final scheme = Theme.of(context).colorScheme;
+    return CosCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CosIconBubble(icon: Icons.error_outline, color: scheme.error),
+          const SizedBox(width: 12),
+          Expanded(child: Text(message)),
+        ],
+      ),
     );
   }
 }
@@ -967,20 +1057,33 @@ class _LoadingPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            const SizedBox.square(
-              dimension: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            const SizedBox(width: 12),
-            Expanded(child: Text(message)),
-          ],
-        ),
+    final scheme = Theme.of(context).colorScheme;
+    return CosCard(
+      child: Row(
+        children: [
+          CosLoadingPulse(color: scheme.secondary, size: 24),
+          const SizedBox(width: 12),
+          Expanded(child: Text(message)),
+        ],
       ),
+    );
+  }
+}
+
+class _AdminEmptyRow extends StatelessWidget {
+  const _AdminEmptyRow({required this.icon, required this.message});
+
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        CosIconBubble(icon: icon),
+        const SizedBox(width: 12),
+        Expanded(child: Text(message)),
+      ],
     );
   }
 }
