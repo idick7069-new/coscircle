@@ -372,90 +372,115 @@ class _CosScannerOverlayState extends State<CosScannerOverlay>
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final accent = widget.accentColor ?? scheme.secondary;
     return IgnorePointer(
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: Alignment.center,
-                  radius: 0.86,
-                  colors: [
-                    Colors.transparent,
-                    Colors.black.withValues(alpha: 0.22),
-                    Colors.black.withValues(alpha: 0.56),
-                  ],
-                  stops: const [0, 0.56, 1],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final height = constraints.maxHeight;
+          final scanSize = (width - 72).clamp(220.0, 340.0);
+          final top = (height * 0.18).clamp(84.0, 154.0);
+          final bottomCardWidth = (width - 48).clamp(0.0, 440.0);
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: Alignment.center,
+                      radius: 0.86,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.22),
+                        Colors.black.withValues(alpha: 0.56),
+                      ],
+                      stops: const [0, 0.56, 1],
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-          Positioned(
-            left: 42,
-            right: 42,
-            top: 142,
-            bottom: 218,
-            child: AnimatedBuilder(
-              animation: _pulse,
-              builder: (context, child) {
-                final glow = reduceMotion ? 0.65 : 0.44 + _pulse.value * 0.28;
-                return DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(CosUi.radiusXl),
-                    border: Border.all(
-                      color: accent.withValues(alpha: glow),
-                      width: 2.4,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: accent.withValues(alpha: glow * 0.28),
-                        blurRadius: 26,
-                        spreadRadius: 1,
+              Positioned(
+                left: (width - scanSize) / 2,
+                top: top,
+                width: scanSize,
+                height: scanSize,
+                child: AnimatedBuilder(
+                  animation: _pulse,
+                  builder: (context, child) {
+                    final glow = reduceMotion
+                        ? 0.65
+                        : 0.44 + _pulse.value * 0.28;
+                    return DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(CosUi.radiusXl),
+                        border: Border.all(
+                          color: accent.withValues(alpha: glow),
+                          width: 2.4,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: accent.withValues(alpha: glow * 0.28),
+                            blurRadius: 26,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
+                      child: child,
+                    );
+                  },
+                  child: Stack(
+                    children: [
+                      for (final corner in _ScannerCornerAlignment.values)
+                        _ScannerCorner(
+                          alignment: corner.alignment,
+                          color: accent,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned(
+                left: (width - bottomCardWidth) / 2,
+                width: bottomCardWidth,
+                bottom: 24,
+                child: CosCard(
+                  child: Row(
+                    children: [
+                      CosIconBubble(icon: widget.icon, color: accent),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            CosBadge(
+                              label: 'CosCircle 掃描',
+                              icon: Icons.center_focus_strong_outlined,
+                              color: accent,
+                              highlighted: true,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              widget.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w900),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              widget.message,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
-                  child: child,
-                );
-              },
-              child: Stack(
-                children: [
-                  for (final corner in _ScannerCornerAlignment.values)
-                    _ScannerCorner(alignment: corner.alignment),
-                ],
+                ),
               ),
-            ),
-          ),
-          Positioned(
-            left: 24,
-            right: 24,
-            bottom: 32,
-            child: CosCard(
-              child: Row(
-                children: [
-                  CosIconBubble(icon: widget.icon, color: accent),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.title,
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w900),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          widget.message,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -473,20 +498,20 @@ enum _ScannerCornerAlignment {
 }
 
 class _ScannerCorner extends StatelessWidget {
-  const _ScannerCorner({required this.alignment});
+  const _ScannerCorner({required this.alignment, required this.color});
 
   final Alignment alignment;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Align(
       alignment: alignment,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Icon(
           Icons.crop_free_rounded,
-          color: scheme.tertiary.withValues(alpha: 0.9),
+          color: color.withValues(alpha: 0.9),
           size: 24,
         ),
       ),
