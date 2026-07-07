@@ -49,12 +49,7 @@ class _WorkMultiSelectorState extends ConsumerState<WorkMultiSelector> {
           decoration: InputDecoration(
             hintText: '搜尋作品或輸入新作品名',
             prefixIcon: const Icon(Icons.search),
-            suffixIcon: _loading
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.search),
+            suffixIcon: _WorkSearchSuffix(loading: _loading),
           ),
           textInputAction: TextInputAction.done,
           onChanged: _search,
@@ -84,12 +79,11 @@ class _WorkMultiSelectorState extends ConsumerState<WorkMultiSelector> {
         if (query.isNotEmpty && !_suggestions.any((work) => work.name == query))
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: OutlinedButton.icon(
+            child: _CreateWorkButton(
               onPressed: _loading
                   ? null
                   : () => _createAndSelect(_controller.text),
-              icon: const Icon(Icons.add),
-              label: Text('新增「$query」'),
+              label: '新增「$query」',
             ),
           ),
       ],
@@ -212,12 +206,7 @@ class _WorkSingleSelectorState extends ConsumerState<WorkSingleSelector> {
           decoration: InputDecoration(
             hintText: '搜尋作品或輸入新作品名',
             prefixIcon: const Icon(Icons.search),
-            suffixIcon: _loading
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.search),
+            suffixIcon: _WorkSearchSuffix(loading: _loading),
           ),
           textInputAction: TextInputAction.done,
           onChanged: _search,
@@ -238,12 +227,11 @@ class _WorkSingleSelectorState extends ConsumerState<WorkSingleSelector> {
         if (query.isNotEmpty && !_suggestions.any((work) => work.name == query))
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: OutlinedButton.icon(
+            child: _CreateWorkButton(
               onPressed: _loading
                   ? null
                   : () => _createAndSelect(_controller.text),
-              icon: const Icon(Icons.add),
-              label: Text('新增「$query」'),
+              label: '新增「$query」',
             ),
           ),
       ],
@@ -355,6 +343,103 @@ class _WorkSelectorLabel extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _WorkSearchSuffix extends StatelessWidget {
+  const _WorkSearchSuffix({required this.loading});
+
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 180),
+        child: loading
+            ? CosLoadingPulse(
+                key: const ValueKey('loading'),
+                color: scheme.secondary,
+                size: 22,
+              )
+            : Icon(
+                Icons.travel_explore_outlined,
+                key: const ValueKey('idle'),
+                color: scheme.onSurfaceVariant,
+                size: 21,
+              ),
+      ),
+    );
+  }
+}
+
+class _CreateWorkButton extends StatefulWidget {
+  const _CreateWorkButton({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  State<_CreateWorkButton> createState() => _CreateWorkButtonState();
+}
+
+class _CreateWorkButtonState extends State<_CreateWorkButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final enabled = widget.onPressed != null;
+    return AnimatedScale(
+      duration: const Duration(milliseconds: 110),
+      curve: Curves.easeOutCubic,
+      scale: _pressed ? 0.985 : 1,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(CosUi.radiusMd),
+          onTap: widget.onPressed,
+          onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+          onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+          onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            decoration: BoxDecoration(
+              color: scheme.primary.withValues(alpha: enabled ? 0.12 : 0.05),
+              borderRadius: BorderRadius.circular(CosUi.radiusMd),
+              border: Border.all(
+                color: scheme.primary.withValues(alpha: enabled ? 0.34 : 0.12),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CosIconBubble(
+                  icon: Icons.add_circle_outline,
+                  color: enabled ? scheme.primary : scheme.onSurfaceVariant,
+                  size: 28,
+                ),
+                const SizedBox(width: 9),
+                Flexible(
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: enabled ? scheme.primary : scheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

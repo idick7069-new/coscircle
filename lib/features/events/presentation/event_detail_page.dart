@@ -715,31 +715,13 @@ class _ParticipantsSection extends ConsumerWidget {
                       onPressed: () async {
                         final confirmed = await showDialog<bool>(
                           context: context,
-                          builder: (context) {
-                            final scheme = Theme.of(context).colorScheme;
-                            return AlertDialog(
-                              title: Text('封鎖 ${participant.nickname}？'),
-                              content: const Text(
-                                '封鎖後對方將看不到你的個人資訊、場次預定與現場訊號，也不能再關注你。',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () =>
-                                      Navigator.of(context).pop(false),
-                                  child: const Text('返回'),
-                                ),
-                                FilledButton(
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: scheme.error,
-                                    foregroundColor: scheme.onError,
-                                  ),
-                                  onPressed: () =>
-                                      Navigator.of(context).pop(true),
-                                  child: const Text('封鎖'),
-                                ),
-                              ],
-                            );
-                          },
+                          builder: (context) => CosSafetyConfirmDialog(
+                            title: '封鎖 ${participant.nickname}？',
+                            message: '封鎖後對方將看不到你的個人資訊、場次預定與現場訊號，也不能再關注你。',
+                            actionLabel: '封鎖',
+                            icon: Icons.block_outlined,
+                            destructive: true,
+                          ),
                         );
                         if (confirmed != true) return;
                         await ref

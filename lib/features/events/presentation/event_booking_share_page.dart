@@ -131,9 +131,9 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
             tooltip: '分享圖片',
             onPressed: _sharing ? null : _shareImage,
             icon: _sharing
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                ? CosLoadingPulse(
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 22,
                   )
                 : const Icon(Icons.ios_share),
           ),

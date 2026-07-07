@@ -771,6 +771,276 @@ class CosBadge extends StatelessWidget {
   }
 }
 
+class CosChoicePill extends StatefulWidget {
+  const CosChoicePill({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.icon,
+    this.color,
+    this.enabled = true,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final IconData? icon;
+  final Color? color;
+  final bool enabled;
+
+  @override
+  State<CosChoicePill> createState() => _CosChoicePillState();
+}
+
+class _CosChoicePillState extends State<CosChoicePill> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final accent = widget.color ?? scheme.primary;
+    final enabled = widget.enabled;
+    return AnimatedScale(
+      duration: reduceMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 110),
+      curve: Curves.easeOutCubic,
+      scale: _pressed ? 0.97 : 1,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: enabled ? widget.onTap : null,
+          onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+          onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+          onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+          child: AnimatedContainer(
+            duration: reduceMotion
+                ? Duration.zero
+                : const Duration(milliseconds: 170),
+            curve: Curves.easeOutCubic,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: widget.selected
+                  ? accent.withValues(alpha: 0.14)
+                  : scheme.surfaceContainerHighest.withValues(alpha: 0.38),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: widget.selected
+                    ? accent.withValues(alpha: 0.5)
+                    : scheme.outlineVariant.withValues(alpha: 0.58),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  widget.selected
+                      ? Icons.check_circle_outline
+                      : (widget.icon ?? Icons.radio_button_unchecked),
+                  size: 16,
+                  color: enabled
+                      ? (widget.selected ? accent : scheme.onSurfaceVariant)
+                      : scheme.onSurfaceVariant.withValues(alpha: 0.5),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  widget.label,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: enabled
+                        ? (widget.selected ? accent : scheme.onSurface)
+                        : scheme.onSurfaceVariant.withValues(alpha: 0.6),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class CosLoadingPulse extends StatefulWidget {
+  const CosLoadingPulse({
+    super.key,
+    this.color,
+    this.size = 22,
+    this.dotCount = 3,
+  });
+
+  final Color? color;
+  final double size;
+  final int dotCount;
+
+  @override
+  State<CosLoadingPulse> createState() => _CosLoadingPulseState();
+}
+
+class _CosLoadingPulseState extends State<CosLoadingPulse>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 920),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final accent = widget.color ?? scheme.primary;
+    final count = widget.dotCount.clamp(2, 5);
+    final dotSize = widget.size * 0.22;
+
+    if (reduceMotion) {
+      return SizedBox(
+        width: widget.size,
+        height: widget.size,
+        child: Center(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: accent,
+              borderRadius: BorderRadius.circular(99),
+            ),
+            child: SizedBox.square(dimension: dotSize),
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      width: widget.size,
+      height: widget.size,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (var index = 0; index < count; index += 1) ...[
+                Transform.translate(
+                  offset: Offset(
+                    0,
+                    -math.sin((_controller.value * math.pi * 2) + index) *
+                        widget.size *
+                        0.08,
+                  ),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: accent.withValues(
+                        alpha: 0.36 + (index + 1) / count * 0.46,
+                      ),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: SizedBox.square(dimension: dotSize),
+                  ),
+                ),
+                if (index != count - 1) SizedBox(width: dotSize * 0.62),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class CosSafetyConfirmDialog extends StatelessWidget {
+  const CosSafetyConfirmDialog({
+    super.key,
+    required this.title,
+    required this.message,
+    required this.actionLabel,
+    this.icon = Icons.shield_outlined,
+    this.cancelLabel = '返回',
+    this.destructive = false,
+  });
+
+  final String title;
+  final String message;
+  final String actionLabel;
+  final IconData icon;
+  final String cancelLabel;
+  final bool destructive;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final accent = destructive ? scheme.error : scheme.primary;
+    return Dialog(
+      insetPadding: const EdgeInsets.all(22),
+      child: CosGradientPanel(
+        icon: icon,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CosIconBubble(icon: icon, color: accent, size: 52),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      height: 1.08,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(message, style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: Text(cancelLabel),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    style: destructive
+                        ? FilledButton.styleFrom(
+                            backgroundColor: scheme.error,
+                            foregroundColor: scheme.onError,
+                          )
+                        : null,
+                    onPressed: () => Navigator.of(context).pop(true),
+                    icon: Icon(icon),
+                    label: Text(actionLabel),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class CosIconBubble extends StatelessWidget {
   const CosIconBubble({
     super.key,

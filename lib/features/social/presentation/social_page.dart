@@ -249,13 +249,12 @@ class SocialPage extends ConsumerWidget {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => _SocialConfirmDialog(
+      builder: (context) => CosSafetyConfirmDialog(
         icon: Icons.favorite_border,
         title: '取消關注',
         message: '確定要取消關注「${user.nickname}」？之後活動現場就不會優先顯示這位同好。',
         cancelLabel: '保留',
-        confirmLabel: '取消關注',
-        confirmIcon: Icons.person_remove_outlined,
+        actionLabel: '取消關注',
       ),
     );
     if (confirmed != true) return;
@@ -297,13 +296,13 @@ class SocialPage extends ConsumerWidget {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => _SocialConfirmDialog(
+      builder: (context) => CosSafetyConfirmDialog(
         icon: Icons.person_remove_outlined,
         title: '移除成員',
         message: '確定要將「${member.nickname}」移出「${circle.name}」？',
         cancelLabel: '保留',
-        confirmLabel: '移除',
-        confirmIcon: Icons.person_remove_outlined,
+        actionLabel: '移除',
+        destructive: true,
       ),
     );
     if (confirmed != true) return;
@@ -324,13 +323,13 @@ class SocialPage extends ConsumerWidget {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => _SocialConfirmDialog(
+      builder: (context) => CosSafetyConfirmDialog(
         icon: Icons.logout_outlined,
         title: '離開小圈圈',
         message: '確定要離開「${circle.name}」？離開後就不會收到這個小圈圈的集合訊號。',
         cancelLabel: '保留',
-        confirmLabel: '離開',
-        confirmIcon: Icons.logout_outlined,
+        actionLabel: '離開',
+        destructive: true,
       ),
     );
     if (confirmed != true) return;
@@ -340,62 +339,6 @@ class SocialPage extends ConsumerWidget {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('已離開小圈圈')));
-  }
-}
-
-class _SocialConfirmDialog extends StatelessWidget {
-  const _SocialConfirmDialog({
-    required this.icon,
-    required this.title,
-    required this.message,
-    required this.cancelLabel,
-    required this.confirmLabel,
-    required this.confirmIcon,
-  });
-
-  final IconData icon;
-  final String title;
-  final String message;
-  final String cancelLabel;
-  final String confirmLabel;
-  final IconData confirmIcon;
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-      contentPadding: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      content: CosGradientPanel(
-        icon: icon,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            CosSectionHeader(title: title, subtitle: message, icon: icon),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: Text(cancelLabel),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () => Navigator.pop(context, true),
-                    icon: Icon(confirmIcon),
-                    label: Text(confirmLabel),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -412,6 +355,7 @@ class _CircleDialog extends ConsumerStatefulWidget {
 class _CircleDialogState extends ConsumerState<_CircleDialog> {
   final _controller = TextEditingController();
   final _descriptionController = TextEditingController();
+  bool _submitting = false;
 
   @override
   void initState() {
@@ -435,11 +379,10 @@ class _CircleDialogState extends ConsumerState<_CircleDialog> {
     final create = widget.create;
     final editing = widget.circle != null;
 
-    return AlertDialog(
+    return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-      contentPadding: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
-      content: CosGradientPanel(
+      child: CosGradientPanel(
         icon: create ? Icons.groups_2_outlined : Icons.qr_code_2,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -475,43 +418,63 @@ class _CircleDialogState extends ConsumerState<_CircleDialog> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: _submitting
+                        ? null
+                        : () => Navigator.pop(context),
                     child: const Text('取消'),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: () async {
-                      final value = _controller.text.trim();
-                      if (value.isEmpty) return;
-                      final repository = ref.read(socialRepositoryProvider);
-                      if (editing) {
-                        await repository.updateCircle(
-                          circleId: widget.circle!.id,
-                          name: value,
-                          description: _descriptionController.text.trim(),
-                        );
-                      } else if (create) {
-                        await repository.createCircle(
-                          value,
-                          description: _descriptionController.text.trim(),
-                        );
-                      } else {
-                        await repository.joinCircle(value);
-                      }
-                      ref.invalidate(circlesProvider);
-                      if (context.mounted) Navigator.pop(context);
-                    },
-                    icon: Icon(
-                      editing
-                          ? Icons.save_outlined
-                          : create
-                          ? Icons.group_add
-                          : Icons.login,
-                    ),
+                    onPressed: _submitting
+                        ? null
+                        : () async {
+                            final value = _controller.text.trim();
+                            if (value.isEmpty) return;
+                            setState(() => _submitting = true);
+                            final repository = ref.read(
+                              socialRepositoryProvider,
+                            );
+                            try {
+                              if (editing) {
+                                await repository.updateCircle(
+                                  circleId: widget.circle!.id,
+                                  name: value,
+                                  description: _descriptionController.text
+                                      .trim(),
+                                );
+                              } else if (create) {
+                                await repository.createCircle(
+                                  value,
+                                  description: _descriptionController.text
+                                      .trim(),
+                                );
+                              } else {
+                                await repository.joinCircle(value);
+                              }
+                              ref.invalidate(circlesProvider);
+                              if (context.mounted) Navigator.pop(context);
+                            } finally {
+                              if (mounted) setState(() => _submitting = false);
+                            }
+                          },
+                    icon: _submitting
+                        ? CosLoadingPulse(
+                            color: Theme.of(context).colorScheme.onPrimary,
+                            size: 20,
+                          )
+                        : Icon(
+                            editing
+                                ? Icons.save_outlined
+                                : create
+                                ? Icons.group_add
+                                : Icons.login,
+                          ),
                     label: Text(
-                      editing
+                      _submitting
+                          ? '處理中'
+                          : editing
                           ? '儲存'
                           : create
                           ? '建立'
@@ -911,11 +874,10 @@ class _CircleCardState extends State<_CircleCard> {
     final circle = widget.circle;
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => Dialog(
         insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-        contentPadding: EdgeInsets.zero,
         clipBehavior: Clip.antiAlias,
-        content: CosGradientPanel(
+        child: CosGradientPanel(
           icon: Icons.qr_code_2,
           child: Column(
             mainAxisSize: MainAxisSize.min,

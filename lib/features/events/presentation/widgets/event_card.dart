@@ -363,10 +363,13 @@ class _ParticipantStrip extends StatelessWidget {
       },
       error: (error, stackTrace) =>
           Text('參與者載入失敗', style: Theme.of(context).textTheme.bodySmall),
-      loading: () => const SizedBox(
+      loading: () => SizedBox(
         height: 24,
         width: 24,
-        child: CircularProgressIndicator(strokeWidth: 2),
+        child: CosLoadingPulse(
+          color: Theme.of(context).colorScheme.secondary,
+          size: 22,
+        ),
       ),
     );
   }

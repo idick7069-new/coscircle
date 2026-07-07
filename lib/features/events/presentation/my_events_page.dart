@@ -60,11 +60,11 @@ class _MyEventsPageState extends ConsumerState<MyEventsPage> {
                       icon: Icons.event_available_outlined,
                     ),
                     actions: [
-                      FilterChip(
-                        label: const Text('顯示已過期'),
+                      CosChoicePill(
+                        label: '顯示已過期',
                         selected: _showEnded,
-                        onSelected: (value) =>
-                            setState(() => _showEnded = value),
+                        icon: Icons.history_toggle_off_outlined,
+                        onTap: () => setState(() => _showEnded = !_showEnded),
                       ),
                     ],
                   ),

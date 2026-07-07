@@ -1408,18 +1408,26 @@ class _BookingPrivacyLoadingState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        SizedBox.square(
-          dimension: 18,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: scheme.primary,
-          ),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.34),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            CosLoadingPulse(color: scheme.secondary, size: 24),
+            const SizedBox(width: 10),
+            Text(
+              '正在整理追蹤訊號',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+          ],
         ),
-        const SizedBox(width: 10),
-        Text('正在整理追蹤訊號', style: Theme.of(context).textTheme.bodySmall),
-      ],
+      ),
     );
   }
 }
@@ -1465,29 +1473,13 @@ Future<bool> _confirmSafetyAction(
 }) async {
   final result = await showDialog<bool>(
     context: context,
-    builder: (context) {
-      final scheme = Theme.of(context).colorScheme;
-      return AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('返回'),
-          ),
-          FilledButton(
-            style: destructive
-                ? FilledButton.styleFrom(
-                    backgroundColor: scheme.error,
-                    foregroundColor: scheme.onError,
-                  )
-                : null,
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(actionLabel),
-          ),
-        ],
-      );
-    },
+    builder: (context) => CosSafetyConfirmDialog(
+      title: title,
+      message: message,
+      actionLabel: actionLabel,
+      icon: destructive ? Icons.block_outlined : Icons.verified_user_outlined,
+      destructive: destructive,
+    ),
   );
   return result ?? false;
 }
@@ -1917,34 +1909,15 @@ class _EditProfileForm extends StatelessWidget {
               decoration: const InputDecoration(labelText: '暱稱'),
             ),
             const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: age,
-                    decoration: const InputDecoration(labelText: '年齡'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _genderLabels.containsKey(gender)
-                        ? gender
-                        : 'private',
-                    decoration: const InputDecoration(labelText: '性別'),
-                    items: [
-                      for (final entry in _genderLabels.entries)
-                        DropdownMenuItem(
-                          value: entry.key,
-                          child: Text(entry.value),
-                        ),
-                    ],
-                    onChanged: saving
-                        ? null
-                        : (value) => onGenderChanged(value ?? 'private'),
-                  ),
-                ),
-              ],
+            TextField(
+              controller: age,
+              decoration: const InputDecoration(labelText: '年齡'),
+            ),
+            const SizedBox(height: 10),
+            _GenderSelector(
+              value: _genderLabels.containsKey(gender) ? gender : 'private',
+              enabled: !saving,
+              onChanged: onGenderChanged,
             ),
             const SizedBox(height: 10),
             TextField(
@@ -2037,18 +2010,79 @@ class _EditProfileForm extends StatelessWidget {
         const SizedBox(height: 14),
         SizedBox(
           width: double.infinity,
-          child: FilledButton.icon(
+          child: _ProfileSaveButton(
+            saving: saving,
             onPressed: saving ? null : onSave,
-            icon: saving
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.save),
-            label: Text(saving ? '儲存中' : '儲存'),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _GenderSelector extends StatelessWidget {
+  const _GenderSelector({
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final String value;
+  final bool enabled;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '性別',
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+            color: scheme.onSurfaceVariant,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final entry in _genderLabels.entries)
+              CosChoicePill(
+                label: entry.value,
+                selected: value == entry.key,
+                enabled: enabled,
+                icon: switch (entry.key) {
+                  'male' => Icons.male,
+                  'female' => Icons.female,
+                  _ => Icons.visibility_off_outlined,
+                },
+                onTap: () => onChanged(entry.key),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ProfileSaveButton extends StatelessWidget {
+  const _ProfileSaveButton({required this.saving, required this.onPressed});
+
+  final bool saving;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return FilledButton.icon(
+      onPressed: onPressed,
+      icon: saving
+          ? CosLoadingPulse(color: scheme.onPrimary, size: 20)
+          : const Icon(Icons.save),
+      label: Text(saving ? '儲存中' : '儲存'),
     );
   }
 }
@@ -2427,23 +2461,23 @@ class _RegionSelector extends StatelessWidget {
         const SizedBox(height: 6),
         Wrap(
           spacing: 8,
-          runSpacing: 6,
+          runSpacing: 8,
           children: [
             for (final region in _profileRegionOptions)
-              FilterChip(
-                label: Text(region),
+              CosChoicePill(
+                label: region,
                 selected: selected.contains(region),
-                onSelected: enabled
-                    ? (value) {
-                        final next = List<String>.from(selected);
-                        if (value) {
-                          if (!next.contains(region)) next.add(region);
-                        } else {
-                          next.remove(region);
-                        }
-                        onChanged(next);
-                      }
-                    : null,
+                enabled: enabled,
+                icon: Icons.place_outlined,
+                onTap: () {
+                  final next = List<String>.from(selected);
+                  if (next.contains(region)) {
+                    next.remove(region);
+                  } else {
+                    next.add(region);
+                  }
+                  onChanged(next);
+                },
               ),
           ],
         ),

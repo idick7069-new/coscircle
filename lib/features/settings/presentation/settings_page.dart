@@ -11,6 +11,7 @@ import '../../../core/repositories/profile_repository.dart';
 import '../../../core/repositories/submission_repository.dart';
 import '../../../core/services/oobe_service.dart';
 import '../../../core/utils/error_message.dart';
+import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/cos_ui.dart';
 import '../../admin/presentation/admin_dashboard_page.dart';
 import 'theme_settings_page.dart';
@@ -327,7 +328,11 @@ class _SubmitEventSheetState extends ConsumerState<_SubmitEventSheet> {
         child: ListView(
           shrinkWrap: true,
           children: [
-            Text('投稿活動', style: Theme.of(context).textTheme.titleLarge),
+            const CosSectionHeader(
+              title: '投稿活動',
+              subtitle: '把你知道的 cosplay / 同人場次補進資料庫',
+              icon: Icons.add_location_alt_outlined,
+            ),
             const SizedBox(height: 12),
             TextField(
               controller: _name,
@@ -378,15 +383,9 @@ class _SubmitEventSheetState extends ConsumerState<_SubmitEventSheet> {
               maxLines: 3,
             ),
             const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: _submitting ? null : _submit,
-              icon: _submitting
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.send),
-              label: const Text('送出審核'),
+            _SubmitEventActionBar(
+              submitting: _submitting,
+              onSubmit: _submitting ? null : _submit,
             ),
           ],
         ),
@@ -452,45 +451,105 @@ class _SubmitEventSheetState extends ConsumerState<_SubmitEventSheet> {
   }
 }
 
+class _SubmitEventActionBar extends StatelessWidget {
+  const _SubmitEventActionBar({
+    required this.submitting,
+    required this.onSubmit,
+  });
+
+  final bool submitting;
+  final VoidCallback? onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.46),
+        borderRadius: BorderRadius.circular(CosUi.radiusLg),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.52),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                submitting ? '送出活動投稿中' : '送出後會等待管理者審核',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            FilledButton.icon(
+              onPressed: onSubmit,
+              icon: submitting
+                  ? CosLoadingPulse(color: scheme.onPrimary, size: 20)
+                  : const Icon(Icons.send),
+              label: Text(submitting ? '送出中' : '送出審核'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class ConnectionStatusPage extends ConsumerWidget {
   const ConnectionStatusPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final apiClient = ref.watch(apiClientProvider);
-    return Scaffold(
+    return AppPage(
       appBar: AppBar(title: const Text('連線狀態')),
-      body: FutureBuilder<_ConnectionStatus>(
+      padding: EdgeInsets.zero,
+      child: FutureBuilder<_ConnectionStatus>(
         future: _check(apiClient),
         builder: (context, snapshot) {
           final status = snapshot.data;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Card(
-                child: ListTile(
-                  leading: Icon(
-                    status?.ok == true
-                        ? Icons.check_circle_outline
-                        : Icons.info_outline,
-                    color: status?.ok == true
-                        ? Theme.of(context).colorScheme.primary
-                        : null,
-                  ),
-                  title: Text(status?.ok == true ? '後端連線正常' : '正在檢查後端'),
-                  subtitle: Text(apiClient.baseUrl),
-                ),
+              const CosPageHeader(
+                title: '連線狀態',
+                subtitle: '確認 App 與後端 API 是否能互相找到',
+                leading: CosIconBubble(icon: Icons.wifi_tethering_outlined),
+              ),
+              const SizedBox(height: 8),
+              _ConnectionHeroCard(
+                checking: snapshot.connectionState == ConnectionState.waiting,
+                ok: status?.ok == true,
+                baseUrl: apiClient.baseUrl,
               ),
               const SizedBox(height: 12),
               if (snapshot.connectionState == ConnectionState.waiting)
-                const Center(child: CircularProgressIndicator())
+                const _ConnectionCheckingCard()
               else if (snapshot.hasError)
                 _ConnectionHelp(message: userFacingError(snapshot.error!))
               else
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(status?.message ?? 'CosCircle API 可正常連線'),
+                CosCard(
+                  child: Row(
+                    children: [
+                      CosIconBubble(
+                        icon: Icons.verified_outlined,
+                        color: Theme.of(context).colorScheme.secondary,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          status?.message ?? 'CosCircle API 可正常連線',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               const SizedBox(height: 12),
@@ -530,6 +589,121 @@ class _ConnectionStatus {
   final String message;
 }
 
+class _ConnectionHeroCard extends StatelessWidget {
+  const _ConnectionHeroCard({
+    required this.checking,
+    required this.ok,
+    required this.baseUrl,
+  });
+
+  final bool checking;
+  final bool ok;
+  final String baseUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final icon = checking
+        ? Icons.sync_outlined
+        : ok
+        ? Icons.check_circle_outline
+        : Icons.info_outline;
+    final title = checking ? '正在檢查後端' : (ok ? '後端連線正常' : '等待檢查結果');
+    final accent = ok ? scheme.secondary : scheme.primary;
+    return CosGradientPanel(
+      icon: Icons.wifi_tethering_outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CosIconBubble(icon: icon, color: accent, size: 52),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w900, height: 1.05),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '目前 API 端點',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (checking) CosLoadingPulse(color: accent),
+            ],
+          ),
+          const SizedBox(height: 14),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerLowest.withValues(alpha: 0.52),
+              borderRadius: BorderRadius.circular(CosUi.radiusMd),
+              border: Border.all(
+                color: scheme.outlineVariant.withValues(alpha: 0.42),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  Icon(Icons.link, color: scheme.primary, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      baseUrl,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConnectionCheckingCard extends StatelessWidget {
+  const _ConnectionCheckingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return CosCard(
+      child: Row(
+        children: [
+          CosLoadingPulse(color: scheme.secondary, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '正在送出健康檢查訊號，請稍候。',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ConnectionHelp extends StatelessWidget {
   const _ConnectionHelp({required this.message});
 
@@ -537,22 +711,38 @@ class _ConnectionHelp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    final scheme = Theme.of(context).colorScheme;
+    return CosCard(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.zero,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '連線失敗',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            CosSectionHeader(
+              title: '連線失敗',
+              subtitle: '確認本機後端與手機網路後再重新檢查',
+              icon: Icons.wifi_off_outlined,
+              trailing: CosBadge(
+                label: 'API',
+                icon: Icons.cloud_off_outlined,
+                color: scheme.error,
+                highlighted: true,
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text(message),
             const SizedBox(height: 12),
-            const Text('請確認後端已啟動，且手機與電腦位於同一個 Wi-Fi。'),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: scheme.errorContainer.withValues(alpha: 0.36),
+                borderRadius: BorderRadius.circular(CosUi.radiusMd),
+                border: Border.all(color: scheme.error.withValues(alpha: 0.18)),
+              ),
+              child: const Padding(
+                padding: EdgeInsets.all(12),
+                child: Text('請確認後端已啟動，且手機與電腦位於同一個 Wi-Fi。'),
+              ),
+            ),
           ],
         ),
       ),

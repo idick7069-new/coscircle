@@ -296,23 +296,20 @@ class _EventListPageState extends ConsumerState<EventListPage> {
               child: Row(
                 children: [
                   for (final filter in filters) ...[
-                    ChoiceChip(
-                      label: Text(filter),
+                    CosChoicePill(
+                      label: filter,
                       selected: _filter == filter,
-                      onSelected: (_) => _updateFilters(filter: filter),
+                      icon: Icons.filter_alt_outlined,
+                      onTap: () => _updateFilters(filter: filter),
                     ),
                     const SizedBox(width: 8),
                   ],
-                  FilterChip(
-                    avatar: Icon(
-                      _hideEnded
-                          ? Icons.check_box
-                          : Icons.check_box_outline_blank,
-                      size: 18,
-                    ),
-                    label: const Text('隱藏已結束'),
+                  CosChoicePill(
+                    label: '隱藏已結束',
                     selected: _hideEnded,
-                    onSelected: (value) => _updateFilters(hideEnded: value),
+                    icon: Icons.event_busy_outlined,
+                    color: Theme.of(context).colorScheme.secondary,
+                    onTap: () => _updateFilters(hideEnded: !_hideEnded),
                   ),
                 ],
               ),
@@ -1028,15 +1025,11 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
                           index <= _eventDayCount(event);
                           index += 1
                         )
-                          ChoiceChip(
-                            label: Text('D$index'),
-                            avatar: const Icon(
-                              Icons.calendar_today_outlined,
-                              size: 16,
-                            ),
+                          CosChoicePill(
+                            label: 'D$index',
                             selected: _dayIndex == index,
-                            onSelected: (_) =>
-                                setState(() => _dayIndex = index),
+                            icon: Icons.calendar_today_outlined,
+                            onTap: () => setState(() => _dayIndex = index),
                           ),
                       ],
                     ),
@@ -1099,9 +1092,11 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
                       runSpacing: 8,
                       children: [
                         for (final option in _interactionOptions)
-                          _InteractionChoiceChip(
+                          CosChoicePill(
                             label: option,
                             selected: _interactionTags.contains(option),
+                            icon: Icons.add_circle_outline,
+                            color: Theme.of(context).colorScheme.secondary,
                             onTap: () {
                               setState(() {
                                 if (_interactionTags.contains(option)) {
@@ -1115,21 +1110,11 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: _presenceStatus,
-                      decoration: const InputDecoration(labelText: '現場狀態'),
-                      items: [
-                        for (final option in _statusOptions)
-                          DropdownMenuItem(
-                            value: option.$1,
-                            child: Text(option.$2),
-                          ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => _presenceStatus = value);
-                        }
-                      },
+                    _PresenceStatusSelector(
+                      value: _presenceStatus,
+                      options: _statusOptions,
+                      onChanged: (value) =>
+                          setState(() => _presenceStatus = value),
                     ),
                   ],
                 ),
@@ -1449,63 +1434,68 @@ class _RoleChoiceCard extends StatelessWidget {
   }
 }
 
-class _InteractionChoiceChip extends StatelessWidget {
-  const _InteractionChoiceChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
+class _PresenceStatusSelector extends StatelessWidget {
+  const _PresenceStatusSelector({
+    required this.value,
+    required this.options,
+    required this.onChanged,
   });
 
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
+  final String value;
+  final List<(String, String)> options;
+  final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    return InkWell(
-      borderRadius: BorderRadius.circular(99),
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: reduceMotion
-            ? Duration.zero
-            : const Duration(milliseconds: 160),
-        curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(
-          color: selected
-              ? scheme.secondaryContainer
-              : scheme.surfaceContainerHighest.withValues(alpha: 0.42),
-          borderRadius: BorderRadius.circular(99),
-          border: Border.all(
-            color: selected
-                ? scheme.secondary.withValues(alpha: 0.45)
-                : scheme.outlineVariant.withValues(alpha: 0.6),
-          ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '現場狀態',
+          style: Theme.of(
+            context,
+          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            Icon(
-              selected ? Icons.check_circle : Icons.add_circle_outline,
-              color: selected ? scheme.secondary : scheme.onSurfaceVariant,
-              size: 16,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: selected
-                    ? scheme.onSecondaryContainer
-                    : scheme.onSurface,
-                fontWeight: FontWeight.w900,
+            for (final option in options)
+              CosChoicePill(
+                label: option.$2,
+                selected: value == option.$1,
+                icon: _presenceStatusIcon(option.$1),
+                color: _presenceStatusColor(scheme, option.$1),
+                onTap: () => onChanged(option.$1),
               ),
-            ),
           ],
         ),
-      ),
+      ],
     );
+  }
+
+  IconData _presenceStatusIcon(String value) {
+    return switch (value) {
+      'open' => Icons.waving_hand_outlined,
+      'moving' => Icons.directions_walk_outlined,
+      'resting' => Icons.local_cafe_outlined,
+      'quiet' => Icons.do_not_disturb_on_outlined,
+      'left' => Icons.logout_outlined,
+      _ => Icons.info_outline,
+    };
+  }
+
+  Color _presenceStatusColor(ColorScheme scheme, String value) {
+    return switch (value) {
+      'open' => scheme.secondary,
+      'moving' => scheme.primary,
+      'resting' => scheme.tertiary,
+      'quiet' => scheme.error,
+      'left' => scheme.onSurfaceVariant,
+      _ => scheme.primary,
+    };
   }
 }
 
@@ -1551,10 +1541,7 @@ class _BookingSubmitBar extends StatelessWidget {
               child: FilledButton.icon(
                 onPressed: submitting ? null : onSave,
                 icon: submitting
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                    ? CosLoadingPulse(color: scheme.onPrimary, size: 20)
                     : Icon(
                         editing
                             ? Icons.save_outlined
