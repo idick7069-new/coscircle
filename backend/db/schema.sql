@@ -131,8 +131,11 @@ CREATE TABLE shared_locations (
   user_id BIGINT UNSIGNED NOT NULL,
   latitude DECIMAL(10, 7) NOT NULL,
   longitude DECIMAL(10, 7) NOT NULL,
+  visibility ENUM('public','followed','circle') NOT NULL DEFAULT 'circle',
   shared_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at TIMESTAMP NULL,
   UNIQUE KEY uniq_latest_location (event_id, user_id),
+  KEY idx_shared_locations_event_expiry (event_id, expires_at),
   FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );

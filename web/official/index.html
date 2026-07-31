@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="CosCircle 是為 Cosplay 與同人活動設計的小圈圈集合、活動預訂、現場位置分享與同好管理工具。">
+  <title>CosCircle | Cos 小圈圈</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="stylesheet" href="/official/styles.css">
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations()
+        .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+        .catch(() => {});
+    }
+    if ("caches" in window) {
+      caches.keys()
+        .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+        .catch(() => {});
+    }
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="CosCircle 首頁">
+      <img src="/icons/Icon-192.png" alt="" width="32" height="32">
+      <span>CosCircle</span>
+    </a>
+    <nav aria-label="主要導覽">
+      <a href="#privacy">安心保護</a>
+      <a href="#events">活動工具</a>
+      <a href="/app/">開啟 Web App</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Cosplay 活動同好工具</p>
+        <h1>CosCircle 是給 Coser、攝影與同好一起跑場的小圈圈工具。</h1>
+        <p class="lead">
+          它不是公開交友牆，而是把活動預定、Cos 名片、同行小圈圈、現場集合和隱私保護放在同一個地方。你可以知道朋友今天出什麼角、在哪個活動、什麼時段方便互動，也能控制哪些資訊只給信任的人看。
+        </p>
+        <div class="actions">
+          <a class="button primary" href="/app/">開啟 Web App</a>
+          <a class="button secondary" href="#privacy">了解隱私設計</a>
+        </div>
+      </div>
+      <div class="phone-stage" aria-label="CosCircle App 預覽">
+        <div class="phone">
+          <div class="phone-top"></div>
+          <div class="screen">
+            <div class="screen-header">
+              <span>活動發現</span>
+              <strong>FF 開拓祭</strong>
+            </div>
+            <div class="event-card">
+              <span class="pill">今日</span>
+              <h2>找同好、約集合、看現場</h2>
+              <p>以小圈圈為單位管理同行者，不把行蹤灑到整個公開場域。</p>
+            </div>
+            <div class="map-preview">
+              <span class="pin one"></span>
+              <span class="pin two"></span>
+              <span class="pin three"></span>
+            </div>
+            <div class="privacy-strip">
+              <span>緊急隱身</span>
+              <span>15 分鐘</span>
+              <span>小圈圈可見</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="privacy" class="section">
+      <div class="section-heading">
+        <p class="eyebrow">CosCircle 在做什麼</p>
+        <h2>讓活動前、活動中、活動後的資訊不再散落各處。</h2>
+      </div>
+      <div class="feature-grid">
+        <article>
+          <span class="icon">1</span>
+          <h3>活動預定</h3>
+          <p>收藏即將參加的場次，標記出席日期、角色、作品、同行身分與可互動時間，讓約拍和認親不用一直翻聊天紀錄。</p>
+        </article>
+        <article>
+          <span class="icon">2</span>
+          <h3>Cos 名片</h3>
+          <p>整理暱稱、作品坑單、常去地區、互動偏好與地雷資訊，用 QR Code 快速交換，不必在現場臨時補一堆自我介紹。</p>
+        </article>
+        <article>
+          <span class="icon">3</span>
+          <h3>小圈圈管理</h3>
+          <p>把熟人、同坑朋友、攝影夥伴分成可信任的小圈圈，資訊分享可以依關係收放，不需要一次公開給所有人。</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="events" class="section split">
+      <div>
+        <p class="eyebrow">現場與安全</p>
+        <h2>大型活動裡最容易混亂的集合與隱私，CosCircle 也一起處理。</h2>
+      </div>
+      <div class="timeline">
+        <div><strong>限時</strong><span>位置分享可設定 15、30、60 分鐘，到期自動失效。</span></div>
+        <div><strong>可見</strong><span>位置與預定資訊可限制給小圈圈或活動內使用者。</span></div>
+        <div><strong>封鎖</strong><span>遇到不舒服的人可以封鎖，降低被持續看見的風險。</span></div>
+        <div><strong>隱身</strong><span>緊急隱身會停止位置分享，並把個人可見性收緊。</span></div>
+      </div>
+    </section>
+
+    <section class="section use-cases">
+      <div>
+        <p class="eyebrow">適合誰使用</p>
+        <h2>不是只有 Coser，整個活動同行圈都能用。</h2>
+      </div>
+      <div class="use-case-grid">
+        <article>
+          <h3>Coser</h3>
+          <p>公開今天出的角色、可互動時段與地雷，讓認親更順，也讓界線更清楚。</p>
+        </article>
+        <article>
+          <h3>攝影</h3>
+          <p>快速確認朋友場次、集合點與預定角色，減少現場找不到人的時間。</p>
+        </article>
+        <article>
+          <h3>同行朋友</h3>
+          <p>用小圈圈掌握大家的活動狀態，需要集合時才分享有限時間的位置。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="cta-band">
+      <h2>準備好讓活動現場少一點混亂了嗎？</h2>
+      <a class="button primary" href="/app/">進入 CosCircle</a>
+    </section>
+  </main>
+</body>
+</html>

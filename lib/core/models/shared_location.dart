@@ -7,6 +7,8 @@ class SharedLocation {
     required this.longitude,
     required this.sharedAt,
     this.dayIndex = 1,
+    this.visibility = 'circle',
+    this.expiresAt,
     this.publicCode = '',
     this.avatarUrl = '',
     this.characterName = '',
@@ -27,6 +29,8 @@ class SharedLocation {
   final double latitude;
   final double longitude;
   final DateTime sharedAt;
+  final String visibility;
+  final DateTime? expiresAt;
   final String publicCode;
   final String avatarUrl;
   final String characterName;
@@ -48,6 +52,8 @@ class SharedLocation {
       latitude: double.parse(json['latitude'].toString()),
       longitude: double.parse(json['longitude'].toString()),
       sharedAt: DateTime.parse(json['sharedAt'].toString()),
+      visibility: json['visibility']?.toString() ?? 'circle',
+      expiresAt: _nullableDateTime(json['expiresAt']),
       publicCode: json['publicCode']?.toString() ?? '',
       avatarUrl: json['avatarUrl']?.toString() ?? '',
       characterName: json['characterName']?.toString() ?? '',
@@ -65,6 +71,12 @@ class SharedLocation {
 
   int minutesAgo(DateTime now) {
     return now.difference(sharedAt).inMinutes.clamp(0, 99999);
+  }
+
+  int? minutesUntilExpiry(DateTime now) {
+    final expiry = expiresAt;
+    if (expiry == null) return null;
+    return expiry.difference(now).inMinutes.clamp(0, 99999);
   }
 }
 
@@ -87,4 +99,10 @@ List<String> _stringList(Object? value) {
       .map((item) => item.trim())
       .where((item) => item.isNotEmpty)
       .toList();
+}
+
+DateTime? _nullableDateTime(Object? value) {
+  final text = value?.toString() ?? '';
+  if (text.isEmpty) return null;
+  return DateTime.tryParse(text);
 }

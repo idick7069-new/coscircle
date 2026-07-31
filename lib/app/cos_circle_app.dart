@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -29,6 +30,48 @@ class CosCircleApp extends ConsumerWidget {
       supportedLocales: const [Locale('zh', 'TW'), Locale('en', 'US')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       routerConfig: appRouter,
+      builder: (context, child) => _CosCircleWebFrame(child: child),
+    );
+  }
+}
+
+class _CosCircleWebFrame extends StatelessWidget {
+  const _CosCircleWebFrame({required this.child});
+
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = child ?? const SizedBox.shrink();
+    if (!kIsWeb) return content;
+
+    final size = MediaQuery.sizeOf(context);
+    if (size.width < 760) return content;
+
+    final scheme = Theme.of(context).colorScheme;
+    return ColoredBox(
+      color: scheme.surface,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              border: Border.symmetric(
+                vertical: BorderSide(color: scheme.outlineVariant),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: scheme.shadow.withValues(alpha: 0.16),
+                  blurRadius: 36,
+                  offset: const Offset(0, 14),
+                ),
+              ],
+            ),
+            child: content,
+          ),
+        ),
+      ),
     );
   }
 }

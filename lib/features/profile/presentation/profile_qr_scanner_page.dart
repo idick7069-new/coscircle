@@ -17,7 +17,7 @@ class _ProfileQrScannerPageState extends State<ProfileQrScannerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('掃描個人 QRCode')),
+      appBar: AppBar(title: const Text('交換個人名片')),
       body: Stack(
         children: [
           MobileScanner(
@@ -38,6 +38,8 @@ class _ProfileQrScannerPageState extends State<ProfileQrScannerPage> {
             title: '掃描個人名片',
             message: '對準 CosCircle 個人 QRCode，確認對方坑單、照片牆與交流資訊。',
             accentColor: Theme.of(context).colorScheme.secondary,
+            statusIcon: Icons.badge_outlined,
+            statusLabel: '名片交換模式',
           ),
         ],
       ),

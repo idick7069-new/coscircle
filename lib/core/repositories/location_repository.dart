@@ -17,7 +17,10 @@ abstract class LocationRepository {
     required String eventId,
     required double latitude,
     required double longitude,
+    required String visibility,
+    required int expiresInMinutes,
   });
+  Future<void> stopSharingLocation(String eventId);
   Future<void> createMeetup({
     required String eventId,
     required String circleId,
@@ -87,11 +90,23 @@ class ApiLocationRepository implements LocationRepository {
     required String eventId,
     required double latitude,
     required double longitude,
+    required String visibility,
+    required int expiresInMinutes,
   }) async {
     await _apiClient.put(
       '/events/$eventId/location',
-      data: {'latitude': latitude, 'longitude': longitude},
+      data: {
+        'latitude': latitude,
+        'longitude': longitude,
+        'visibility': visibility,
+        'expiresInMinutes': expiresInMinutes,
+      },
     );
+  }
+
+  @override
+  Future<void> stopSharingLocation(String eventId) async {
+    await _apiClient.delete('/events/$eventId/location');
   }
 
   @override

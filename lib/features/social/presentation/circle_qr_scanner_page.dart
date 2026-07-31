@@ -21,7 +21,7 @@ class _CircleQrScannerPageState extends ConsumerState<CircleQrScannerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('掃描小圈圈 QRCode')),
+      appBar: AppBar(title: const Text('加入小圈圈')),
       body: Stack(
         children: [
           MobileScanner(
@@ -56,6 +56,8 @@ class _CircleQrScannerPageState extends ConsumerState<CircleQrScannerPage> {
             title: '掃描小圈圈邀請',
             message: '對準朋友的小圈圈 QRCode，加入後就能一起約場與看集合訊號。',
             accentColor: Theme.of(context).colorScheme.primary,
+            statusIcon: Icons.diversity_3_outlined,
+            statusLabel: '小圈圈邀請模式',
           ),
         ],
       ),

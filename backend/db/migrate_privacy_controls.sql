@@ -28,6 +28,18 @@ CALL add_column_if_missing(
   'ALTER TABLE users ADD COLUMN booking_visibility ENUM(''public'',''circle'') NOT NULL DEFAULT ''public'' AFTER other_photo_urls_json'
 )//
 
+CALL add_column_if_missing(
+  'shared_locations',
+  'visibility',
+  'ALTER TABLE shared_locations ADD COLUMN visibility ENUM(''public'',''followed'',''circle'') NOT NULL DEFAULT ''circle'' AFTER longitude'
+)//
+
+CALL add_column_if_missing(
+  'shared_locations',
+  'expires_at',
+  'ALTER TABLE shared_locations ADD COLUMN expires_at TIMESTAMP NULL AFTER shared_at'
+)//
+
 CREATE TABLE IF NOT EXISTS user_blocks (
   blocker_user_id BIGINT UNSIGNED NOT NULL,
   blocked_user_id BIGINT UNSIGNED NOT NULL,

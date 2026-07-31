@@ -334,12 +334,16 @@ class CosScannerOverlay extends StatefulWidget {
     required this.title,
     required this.message,
     this.accentColor,
+    this.statusIcon,
+    this.statusLabel,
   });
 
   final IconData icon;
   final String title;
   final String message;
   final Color? accentColor;
+  final IconData? statusIcon;
+  final String? statusLabel;
 
   @override
   State<CosScannerOverlay> createState() => _CosScannerOverlayState();
@@ -379,6 +383,7 @@ class _CosScannerOverlayState extends State<CosScannerOverlay>
           final scanSize = (width - 72).clamp(220.0, 340.0);
           final top = (height * 0.18).clamp(84.0, 154.0);
           final bottomCardWidth = (width - 48).clamp(0.0, 440.0);
+          final statusLabel = widget.statusLabel;
           return Stack(
             children: [
               Positioned.fill(
@@ -397,6 +402,50 @@ class _CosScannerOverlayState extends State<CosScannerOverlay>
                   ),
                 ),
               ),
+              if (statusLabel != null)
+                Positioned(
+                  left: 24,
+                  right: 24,
+                  top: 18,
+                  child: Center(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerLowest.withValues(
+                          alpha: 0.88,
+                        ),
+                        borderRadius: BorderRadius.circular(CosUi.radiusLg),
+                        border: Border.all(
+                          color: accent.withValues(alpha: 0.28),
+                        ),
+                        boxShadow: [CosUi.softShadow(Colors.black)],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 9,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              widget.statusIcon ?? Icons.center_focus_strong,
+                              color: accent,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              statusLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.labelLarge
+                                  ?.copyWith(fontWeight: FontWeight.w900),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               Positioned(
                 left: (width - scanSize) / 2,
                 top: top,

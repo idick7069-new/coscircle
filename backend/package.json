@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node src/server.js",
+    "smoke:privacy": "node scripts/privacy-smoke.js",
     "scrape:events": "node scripts/scrape-events.js",
     "clean:doujin-events": "node scripts/clean-doujin-events.js"
   },

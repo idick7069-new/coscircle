@@ -20,6 +20,7 @@ import '../../../core/models/recognition_request.dart';
 import '../../../core/models/shared_location.dart';
 import '../../../core/providers/event_providers.dart';
 import '../../../core/repositories/location_repository.dart';
+import '../../../core/repositories/profile_repository.dart';
 import '../../../core/repositories/social_repository.dart';
 import '../../../core/services/local_notification_service.dart';
 import '../../../core/utils/event_day_display.dart';
@@ -52,6 +53,16 @@ final currentEventCirclesProvider =
     });
 
 enum LocationFilter { all, followed, circle }
+
+class _LocationShareSettings {
+  const _LocationShareSettings({
+    required this.visibility,
+    required this.expiresInMinutes,
+  });
+
+  final String visibility;
+  final int expiresInMinutes;
+}
 
 class CurrentEventPage extends ConsumerStatefulWidget {
   const CurrentEventPage({
@@ -150,6 +161,9 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
             final dayLocations = items
                 .where((item) => item.dayIndex == dayIndex)
                 .toList();
+            final mySharedLocation = dayLocations
+                .where((item) => item.isMe)
+                .firstOrNull;
             _warmMarkerIcons(dayLocations);
             final meetupItems =
                 meetups.whenOrNull(data: (items) => items) ??
@@ -273,12 +287,19 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                       totalCount: dayLocations.length,
                       activeMeetup: activeMeetup,
                       isSharing: _isSharing,
+                      mySharedLocation: mySharedLocation,
                       onMeetup: circleItems.isEmpty
                           ? null
                           : () => _showMeetupSheet(eventId, circleItems),
                       onShareLocation: _isSharing
                           ? null
                           : () => _shareLocation(eventId),
+                      onStopSharing: mySharedLocation == null || _isSharing
+                          ? null
+                          : () => _stopSharingLocation(eventId),
+                      onStealthMode: _isSharing
+                          ? null
+                          : () => _enableStealthMode(eventId),
                     ),
                   ),
               ],
@@ -1280,8 +1301,8 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
   }
 
   Future<void> _shareLocation(String eventId) async {
-    final confirmed = await _confirmLocationSharing();
-    if (confirmed != true) return;
+    final settings = await _showLocationSharingSheet();
+    if (settings == null) return;
     setState(() => _isSharing = true);
     try {
       final position = await _currentPosition();
@@ -1291,13 +1312,15 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
             eventId: eventId,
             latitude: position.latitude,
             longitude: position.longitude,
+            visibility: settings.visibility,
+            expiresInMinutes: settings.expiresInMinutes,
           );
       ref.invalidate(sharedLocationsProvider(eventId));
       if (!mounted) return;
       setState(() => _myLocationEnabled = true);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('已分享最新位置')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已分享位置，${settings.expiresInMinutes} 分鐘後自動停止')),
+      );
     } catch (error) {
       if (!mounted) return;
       final message = userFacingError(error);
@@ -1320,22 +1343,198 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
     }
   }
 
-  Future<bool?> _confirmLocationSharing() {
-    if (_hasConfirmedLocationSharing) return Future.value(true);
-    return showDialog<bool>(
+  Future<void> _stopSharingLocation(String eventId) async {
+    try {
+      await ref.read(locationRepositoryProvider).stopSharingLocation(eventId);
+      ref.invalidate(sharedLocationsProvider(eventId));
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已停止分享位置')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('停止分享失敗：${userFacingError(error)}')),
+      );
+    }
+  }
+
+  Future<void> _enableStealthMode(String eventId) async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => _RadarConfirmDialog(
-        icon: Icons.share_location,
-        title: '分享現場位置',
-        message: '你的座標只會提供給同活動中與你有關係的人查看，例如你自己、已關注對象或同小圈圈成員。位置只會在你主動按下分享時更新。',
-        cancelLabel: '先不要',
-        confirmLabel: '分享位置',
-        confirmIcon: Icons.share_location,
-        onConfirm: () {
-          _hasConfirmedLocationSharing = true;
-          Navigator.pop(context, true);
-        },
+        icon: Icons.visibility_off_outlined,
+        title: '啟動緊急隱身',
+        message: '會立即停止分享目前活動的位置，並把你的活動預訂可見範圍改成小圈圈。你之後可以在個人頁改回公開。',
+        cancelLabel: '取消',
+        confirmLabel: '啟動',
+        confirmIcon: Icons.visibility_off_outlined,
       ),
+    );
+    if (confirmed != true) return;
+    setState(() => _isSharing = true);
+    try {
+      await ref.read(locationRepositoryProvider).stopSharingLocation(eventId);
+      final profile = await ref
+          .read(profileRepositoryProvider)
+          .currentProfile();
+      if (profile != null && profile.bookingVisibility != 'circle') {
+        await ref
+            .read(profileRepositoryProvider)
+            .saveProfile(profile.copyWith(bookingVisibility: 'circle'));
+      }
+      ref.invalidate(sharedLocationsProvider(eventId));
+      ref.invalidate(eventsProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已啟動緊急隱身')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('啟動隱身失敗：${userFacingError(error)}')),
+      );
+    } finally {
+      if (mounted) setState(() => _isSharing = false);
+    }
+  }
+
+  Future<_LocationShareSettings?> _showLocationSharingSheet() async {
+    if (!_hasConfirmedLocationSharing) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => _RadarConfirmDialog(
+          icon: Icons.verified_user_outlined,
+          title: '先確認隱私設定',
+          message: '你可以選擇誰看得到位置，也可以設定自動停止時間。位置只保留最新一筆，不會顯示移動路線。',
+          cancelLabel: '先不要',
+          confirmLabel: '設定分享',
+          confirmIcon: Icons.tune,
+          onConfirm: () {
+            _hasConfirmedLocationSharing = true;
+            Navigator.pop(context, true);
+          },
+        ),
+      );
+      if (confirmed != true) return null;
+      if (!mounted) return null;
+    }
+
+    var visibility = 'circle';
+    var expiresInMinutes = 30;
+    return showModalBottomSheet<_LocationShareSettings>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final scheme = Theme.of(context).colorScheme;
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: CosGradientPanel(
+                  icon: Icons.share_location,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const CosSectionHeader(
+                        title: '分享位置',
+                        subtitle: '選擇看得到你的人，以及多久後自動停止分享',
+                        icon: Icons.share_location,
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        '可見範圍',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(
+                            value: 'circle',
+                            label: Text('小圈圈'),
+                            icon: Icon(Icons.groups_2_outlined),
+                          ),
+                          ButtonSegment(
+                            value: 'followed',
+                            label: Text('關注者'),
+                            icon: Icon(Icons.favorite_border),
+                          ),
+                          ButtonSegment(
+                            value: 'public',
+                            label: Text('活動參加者'),
+                            icon: Icon(Icons.event_available_outlined),
+                          ),
+                        ],
+                        selected: {visibility},
+                        onSelectionChanged: (value) =>
+                            setSheetState(() => visibility = value.first),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        '自動停止',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final minutes in const [15, 30, 60])
+                            ChoiceChip(
+                              label: Text('$minutes 分鐘'),
+                              selected: expiresInMinutes == minutes,
+                              onSelected: (_) => setSheetState(
+                                () => expiresInMinutes = minutes,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      CosInfoTile(
+                        icon: Icons.privacy_tip_outlined,
+                        label: '安全提醒',
+                        value: '你可以隨時停止分享；封鎖的人看不到你的資料、預訂與位置。',
+                        color: scheme.tertiary,
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('取消'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: () => Navigator.pop(
+                                context,
+                                _LocationShareSettings(
+                                  visibility: visibility,
+                                  expiresInMinutes: expiresInMinutes,
+                                ),
+                              ),
+                              icon: const Icon(Icons.share_location),
+                              label: const Text('分享'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1596,6 +1795,15 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton.icon(
+                      onPressed: () => _confirmBlockUser(location, eventId),
+                      icon: const Icon(Icons.block_outlined),
+                      label: const Text('封鎖這位使用者'),
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -1603,6 +1811,38 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
         );
       },
     );
+  }
+
+  Future<void> _confirmBlockUser(
+    SharedLocation location,
+    String eventId,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => _RadarConfirmDialog(
+        icon: Icons.block_outlined,
+        title: '封鎖 ${location.nickname}',
+        message: '封鎖後，對方將看不到你的個人資料、活動預訂與位置；你也不會再看到對方的現場位置。',
+        cancelLabel: '取消',
+        confirmLabel: '封鎖',
+        confirmIcon: Icons.block_outlined,
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(profileRepositoryProvider).blockUser(location.userId);
+      ref.invalidate(sharedLocationsProvider(eventId));
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('已封鎖 ${location.nickname}')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('封鎖失敗：${userFacingError(error)}')));
+    }
   }
 
   String _elapsedText(SharedLocation location, {DateTime? now}) {
@@ -2339,8 +2579,11 @@ class _MapActionDock extends StatelessWidget {
     required this.totalCount,
     required this.activeMeetup,
     required this.isSharing,
+    required this.mySharedLocation,
     required this.onMeetup,
     required this.onShareLocation,
+    required this.onStopSharing,
+    required this.onStealthMode,
   });
 
   final List<CircleGroup> circleItems;
@@ -2348,8 +2591,11 @@ class _MapActionDock extends StatelessWidget {
   final int totalCount;
   final MeetupPoint? activeMeetup;
   final bool isSharing;
+  final SharedLocation? mySharedLocation;
   final VoidCallback? onMeetup;
   final VoidCallback? onShareLocation;
+  final VoidCallback? onStopSharing;
+  final VoidCallback? onStealthMode;
 
   @override
   Widget build(BuildContext context) {
@@ -2357,6 +2603,16 @@ class _MapActionDock extends StatelessWidget {
     final meetupLabel = activeMeetup == null
         ? '尚未設定'
         : activeMeetup!.circleName;
+    final sharingLocation = mySharedLocation;
+    final sharingLabel = sharingLocation == null
+        ? '未分享'
+        : _shareVisibilityLabel(sharingLocation.visibility);
+    final expiryMinutes = sharingLocation?.minutesUntilExpiry(DateTime.now());
+    final sharingSubtitle = sharingLocation == null
+        ? '目前沒有公開你的現場位置。'
+        : expiryMinutes == null
+        ? '位置目前分享中，可隨時停止。'
+        : '位置分享中，約 $expiryMinutes 分鐘後自動停止。';
     return CosReveal(
       delay: const Duration(milliseconds: 110),
       offset: const Offset(0, 18),
@@ -2386,7 +2642,7 @@ class _MapActionDock extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '分享位置、放置集合點，讓熟人更快找到你。',
+                        sharingSubtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -2398,8 +2654,10 @@ class _MapActionDock extends StatelessWidget {
                   ),
                 ),
                 CosBadge(
-                  label: '${circleItems.length} 個小圈圈',
-                  icon: Icons.groups_2_outlined,
+                  label: sharingLabel,
+                  icon: sharingLocation == null
+                      ? Icons.visibility_off_outlined
+                      : Icons.verified_user_outlined,
                   color: scheme.tertiary,
                 ),
               ],
@@ -2421,6 +2679,12 @@ class _MapActionDock extends StatelessWidget {
                     value: meetupLabel,
                     color: scheme.secondary,
                   ),
+                  CosMetricTile(
+                    icon: Icons.privacy_tip_outlined,
+                    label: '位置可見',
+                    value: sharingLabel,
+                    color: scheme.tertiary,
+                  ),
                 ];
                 final actionButtons = [
                   FilledButton.icon(
@@ -2434,6 +2698,17 @@ class _MapActionDock extends StatelessWidget {
                         ? CosLoadingPulse(color: scheme.primary, size: 20)
                         : const Icon(Icons.share_location),
                     label: Text(isSharing ? '定位中' : '分享位置'),
+                  ),
+                  if (sharingLocation != null)
+                    TextButton.icon(
+                      onPressed: onStopSharing,
+                      icon: const Icon(Icons.visibility_off_outlined),
+                      label: const Text('停止分享'),
+                    ),
+                  TextButton.icon(
+                    onPressed: onStealthMode,
+                    icon: const Icon(Icons.shield_outlined),
+                    label: const Text('緊急隱身'),
                   ),
                 ];
 
@@ -2506,4 +2781,13 @@ class _MapActionDock extends StatelessWidget {
       ),
     );
   }
+}
+
+String _shareVisibilityLabel(String visibility) {
+  return switch (visibility) {
+    'public' => '活動參加者',
+    'followed' => '關注者',
+    'circle' => '小圈圈',
+    _ => '小圈圈',
+  };
 }

@@ -1,5 +1,3 @@
-import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -55,14 +53,10 @@ class AuthRepository {
     try {
       await _apiClient.get('/me');
       return token;
-    } on DioException catch (error) {
-      final statusCode = error.response?.statusCode;
-      if (statusCode != 401 && statusCode != 403) return token;
+    } catch (_) {
       await prefs.remove(_tokenKey);
       _apiClient.setAuthToken(null);
       return null;
-    } catch (_) {
-      return token;
     }
   }
 
@@ -70,7 +64,6 @@ class AuthRepository {
     required String email,
     required String password,
   }) async {
-    _logAuthAttempt('login', email);
     final session = await _authenticate(
       '/auth/login',
       data: {'email': email, 'password': password},
@@ -84,7 +77,6 @@ class AuthRepository {
     required String email,
     required String password,
   }) async {
-    _logAuthAttempt('register', email);
     final session = await _authenticate(
       '/auth/register',
       data: {'nickname': nickname, 'email': email, 'password': password},
@@ -119,54 +111,13 @@ class AuthRepository {
     String path, {
     required Map<String, dynamic> data,
   }) async {
-    try {
-      final response = await _apiClient.post(path, data: data);
-      if (kDebugMode) {
-        debugPrint(
-          '[Auth] $path success status=${response.statusCode} '
-          'email=${_safeEmail(data['email'])}',
-        );
-      }
-      return AuthSession.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (error, stackTrace) {
-      final response = error.response;
-      if (kDebugMode) {
-        debugPrint(
-          '[Auth] $path failed '
-          'email=${_safeEmail(data['email'])} '
-          'type=${error.type} '
-          'status=${response?.statusCode} '
-          'message=${error.message} '
-          'body=${response?.data}',
-        );
-        debugPrintStack(stackTrace: stackTrace, label: '[Auth] DioException');
-      }
-      rethrow;
-    } catch (error, stackTrace) {
-      if (kDebugMode) {
-        debugPrint(
-          '[Auth] $path unexpected error '
-          'email=${_safeEmail(data['email'])} error=$error',
-        );
-        debugPrintStack(stackTrace: stackTrace, label: '[Auth] Unexpected');
-      }
-      rethrow;
-    }
+    final response = await _apiClient.post(path, data: data);
+    return AuthSession.fromJson(response.data as Map<String, dynamic>);
   }
 
   Future<void> _saveToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_tokenKey, token);
     _apiClient.setAuthToken(token);
-  }
-
-  void _logAuthAttempt(String action, String email) {
-    if (kDebugMode) {
-      debugPrint('[Auth] $action attempt email=${_safeEmail(email)}');
-    }
-  }
-
-  String _safeEmail(Object? value) {
-    return value?.toString().trim().toLowerCase() ?? '';
   }
 }

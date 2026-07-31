@@ -33,6 +33,9 @@ ZBPACK_DOCKERFILE_NAME=web
 Run `backend/db/schema.sql` in the MySQL service command console or with a MySQL
 client connected to the Zeabur database.
 
+For an existing database, apply the migrations listed in
+`docs/deployment/production-checklist.md` before deploying a new app build.
+
 Optional initial event seed:
 
 ```bash
@@ -57,6 +60,8 @@ EVENT_SCRAPER_ENABLED=true
 EVENT_SCRAPER_TIME_ZONE=Asia/Taipei
 CORS_ORIGINS=https://<web-domain>
 ```
+
+Use `backend/.env.production.example` as the full environment template.
 
 Generate a Zeabur domain for the `api` service, then verify:
 
@@ -86,4 +91,3 @@ service `CORS_ORIGINS` to the final web origin and redeploy the API service.
 5. Deploy `web` with `API_BASE_URL=https://<api-domain>/api`.
 6. Generate the web domain.
 7. Set `api` `CORS_ORIGINS=https://<web-domain>` and redeploy `api`.
-

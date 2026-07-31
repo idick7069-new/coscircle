@@ -1584,7 +1584,9 @@ app.get('/api/events/:eventId/locations', async (req, res, next) => {
               event_bookings.presence_status AS presenceStatus,
               shared_locations.latitude,
               shared_locations.longitude,
+              shared_locations.visibility,
               DATE_FORMAT(shared_locations.shared_at, '%Y-%m-%dT%H:%i:%s') AS sharedAt,
+              DATE_FORMAT(shared_locations.expires_at, '%Y-%m-%dT%H:%i:%s') AS expiresAt,
               CASE WHEN shared_locations.user_id = ? THEN TRUE ELSE FALSE END AS isMe,
               CASE WHEN follows.followed_user_id IS NULL THEN FALSE ELSE TRUE END AS isFollowed,
               CASE WHEN circle_members.user_id IS NULL THEN FALSE ELSE TRUE END AS isCircleMember
@@ -1605,6 +1607,12 @@ app.get('/api/events/:eventId/locations', async (req, res, next) => {
          LEFT JOIN user_blocks AS their_blocks
            ON their_blocks.blocker_user_id = shared_locations.user_id
           AND their_blocks.blocked_user_id = ?
+         LEFT JOIN (
+           SELECT DISTINCT event_id, user_id
+             FROM event_bookings
+            WHERE user_id = ?
+         ) AS viewer_bookings
+           ON viewer_bookings.event_id = shared_locations.event_id
          LEFT JOIN circle_members
            ON circle_members.user_id = shared_locations.user_id
           AND circle_members.circle_id IN (
@@ -1614,21 +1622,33 @@ app.get('/api/events/:eventId/locations', async (req, res, next) => {
           )
         WHERE shared_locations.event_id = ?
           AND (
+            shared_locations.expires_at IS NULL
+            OR shared_locations.expires_at > CURRENT_TIMESTAMP
+          )
+          AND (
             shared_locations.user_id = ?
             OR (
               my_blocks.blocked_user_id IS NULL
               AND their_blocks.blocker_user_id IS NULL
               AND (
-                circle_members.user_id IS NOT NULL
+                (
+                  shared_locations.visibility = 'circle'
+                  AND circle_members.user_id IS NOT NULL
+                )
                 OR (
-                  users.booking_visibility = 'public'
+                  shared_locations.visibility = 'followed'
                   AND follows.followed_user_id IS NOT NULL
+                )
+                OR (
+                  shared_locations.visibility = 'public'
+                  AND viewer_bookings.user_id IS NOT NULL
                 )
               )
             )
           )
         ORDER BY shared_locations.shared_at DESC`,
       [
+        req.userId,
         req.userId,
         req.userId,
         req.userId,
@@ -1649,6 +1669,8 @@ app.put('/api/events/:eventId/location', async (req, res, next) => {
     const { latitude, longitude } = req.body;
     const lat = Number(latitude);
     const lng = Number(longitude);
+    const visibility = normalizeLocationVisibility(req.body.visibility);
+    const expiresInMinutes = normalizeLocationExpiry(req.body.expiresInMinutes);
     if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
       res.status(400).json({ error: 'invalid_latitude' });
       return;
@@ -1658,12 +1680,30 @@ app.put('/api/events/:eventId/location', async (req, res, next) => {
       return;
     }
     await pool.execute(
-      `INSERT INTO shared_locations (event_id, user_id, latitude, longitude, shared_at)
-       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `INSERT INTO shared_locations (
+         event_id, user_id, latitude, longitude, visibility, shared_at, expires_at
+       )
+       VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL ? MINUTE))
        ON DUPLICATE KEY UPDATE latitude = VALUES(latitude),
          longitude = VALUES(longitude),
-         shared_at = CURRENT_TIMESTAMP`,
-      [req.params.eventId, req.userId, lat, lng]
+         visibility = VALUES(visibility),
+         shared_at = CURRENT_TIMESTAMP,
+         expires_at = VALUES(expires_at)`,
+      [req.params.eventId, req.userId, lat, lng, visibility, expiresInMinutes]
+    );
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete('/api/events/:eventId/location', async (req, res, next) => {
+  try {
+    await pool.execute(
+      `DELETE FROM shared_locations
+        WHERE event_id = ?
+          AND user_id = ?`,
+      [req.params.eventId, req.userId],
     );
     res.status(204).end();
   } catch (error) {
@@ -1989,6 +2029,16 @@ async function ensureCollaborationTables() {
     columnName: 'booking_visibility',
     definition: "ENUM('public','circle') NOT NULL DEFAULT 'public'",
   });
+  await ensureColumn({
+    tableName: 'shared_locations',
+    columnName: 'visibility',
+    definition: "ENUM('public','followed','circle') NOT NULL DEFAULT 'circle'",
+  });
+  await ensureColumn({
+    tableName: 'shared_locations',
+    columnName: 'expires_at',
+    definition: 'TIMESTAMP NULL',
+  });
   await pool.execute(
     `CREATE TABLE IF NOT EXISTS admin_audit_logs (
       id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
@@ -2211,6 +2261,16 @@ function normalizeAdminEventPayload(body) {
 
 function normalizeBookingVisibility(value) {
   return value === 'circle' ? 'circle' : 'public';
+}
+
+function normalizeLocationVisibility(value) {
+  return ['public', 'followed', 'circle'].includes(value) ? value : 'circle';
+}
+
+function normalizeLocationExpiry(value) {
+  const minutes = Number(value);
+  if ([15, 30, 60].includes(minutes)) return minutes;
+  return 30;
 }
 
 function normalizeDateTimeForSql(value) {

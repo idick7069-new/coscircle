@@ -13,6 +13,10 @@ val keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
 }
+val googleMapsApiKey = project.findProperty("GOOGLE_MAPS_API_KEY") as String?
+val isReleaseTask = gradle.startParameter.taskNames.any {
+    it.contains("Release", ignoreCase = true)
+}
 
 android {
     namespace = "com.coscircle.coscircle"
@@ -36,8 +40,7 @@ android {
         versionName = flutter.versionName
         manifestPlaceholders["usesCleartextTraffic"] = "true"
         manifestPlaceholders["googleMapsApiKey"] =
-            project.findProperty("GOOGLE_MAPS_API_KEY") as String?
-                ?: "AIzaSyBDv2hOA5avNalrAnwDTpwRUKsdhPVdmI4"
+            googleMapsApiKey ?: "AIzaSyBDv2hOA5avNalrAnwDTpwRUKsdhPVdmI4"
     }
 
     signingConfigs {
@@ -56,7 +59,13 @@ android {
             manifestPlaceholders["usesCleartextTraffic"] = "true"
         }
         release {
+            if (isReleaseTask && googleMapsApiKey.isNullOrBlank()) {
+                throw GradleException(
+                    "Release builds require -PGOOGLE_MAPS_API_KEY=your_google_maps_key"
+                )
+            }
             manifestPlaceholders["usesCleartextTraffic"] = "false"
+            manifestPlaceholders["googleMapsApiKey"] = googleMapsApiKey ?: ""
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
             }

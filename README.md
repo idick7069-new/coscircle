@@ -55,6 +55,9 @@ flutter build apk --release \
   -PGOOGLE_MAPS_API_KEY=your_google_maps_key
 ```
 
+完整上線前檢查請參考 `docs/deployment/production-checklist.md`。
+GCP 免費額度 VM 部署請參考 `docs/deployment/gcp-free-tier-vm.md`。
+
 ## 後端啟動
 
 ```sh
@@ -64,7 +67,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Production 請設定：
+Production 請以 `backend/.env.production.example` 為範本，並設定：
 
 - `NODE_ENV=production`：不會自動建立開發 admin。
 - `CORS_ORIGINS=https://your-admin.example.com,https://your-web.example.com`：限制瀏覽器來源。
@@ -77,16 +80,16 @@ mysql -u coscircle -p coscircle < db/schema.sql
 node scripts/scrape-events.js --import
 ```
 
-既有資料庫若已建立過 `events` 表，先補活動來源、原始網址與圖片欄位：
+既有資料庫請依實際狀態補上尚未執行的 migration。隱私與位置保護功能需要：
 
 ```sh
-mysql -u coscircle -p coscircle < db/migrate_event_media.sql
+mysql -u coscircle -p coscircle < db/migrate_privacy_controls.sql
 ```
 
-若要啟用作品搜尋、坑單與預訂作品欄位，再執行：
+完整 migration 清單與驗證 SQL 請看：
 
 ```sh
-mysql -u coscircle -p coscircle < db/migrate_works.sql
+docs/deployment/production-checklist.md
 ```
 
 同人誌中心爬蟲會在 API server 執行期間，每天中午 12:00（預設 `Asia/Taipei`）自動匯入一次。可用環境變數調整：
