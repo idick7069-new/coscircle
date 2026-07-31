@@ -5,14 +5,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_client.dart';
+import '../config/app_environment.dart';
 import '../models/booking_visibility.dart';
 import '../models/profile.dart';
 
 final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
-  return ApiProfileRepository(
-    apiClient: ref.watch(apiClientProvider),
-    fallback: InMemoryProfileRepository(),
-  );
+  if (appDemoMode) return InMemoryProfileRepository();
+  return ApiProfileRepository(apiClient: ref.watch(apiClientProvider));
 });
 
 abstract class ProfileRepository {
@@ -33,37 +32,24 @@ abstract class ProfileRepository {
 }
 
 class ApiProfileRepository implements ProfileRepository {
-  ApiProfileRepository({
-    required ApiClient apiClient,
-    required ProfileRepository fallback,
-  }) : _apiClient = apiClient,
-       _fallback = fallback;
+  ApiProfileRepository({required ApiClient apiClient}) : _apiClient = apiClient;
 
   final ApiClient _apiClient;
-  final ProfileRepository _fallback;
 
   @override
   Future<UserProfile?> currentProfile() async {
-    try {
-      final response = await _apiClient.get('/me');
-      final data = response.data;
-      if (data == null) return null;
-      return UserProfile.fromJson(data as Map<String, dynamic>);
-    } catch (_) {
-      return _fallback.currentProfile();
-    }
+    final response = await _apiClient.get('/me');
+    final data = response.data;
+    if (data == null) return null;
+    return UserProfile.fromJson(data as Map<String, dynamic>);
   }
 
   @override
   Future<UserProfile?> fetchProfile(String publicCode) async {
-    try {
-      final response = await _apiClient.get('/profiles/$publicCode');
-      final data = response.data;
-      if (data == null) return null;
-      return UserProfile.fromJson(data as Map<String, dynamic>);
-    } catch (_) {
-      return _fallback.fetchProfile(publicCode);
-    }
+    final response = await _apiClient.get('/profiles/$publicCode');
+    final data = response.data;
+    if (data == null) return null;
+    return UserProfile.fromJson(data as Map<String, dynamic>);
   }
 
   @override
@@ -78,18 +64,13 @@ class ApiProfileRepository implements ProfileRepository {
 
   @override
   Future<List<BookingFollowerGroup>> fetchBookingFollowers() async {
-    try {
-      final response = await _apiClient.get('/me/booking-followers');
-      final rows = response.data as List<dynamic>;
-      return rows
-          .map(
-            (row) => BookingFollowerGroup.fromJson(row as Map<String, dynamic>),
-          )
-          .toList();
-    } catch (_) {
-      if (kDebugMode) return _fallback.fetchBookingFollowers();
-      rethrow;
-    }
+    final response = await _apiClient.get('/me/booking-followers');
+    final rows = response.data as List<dynamic>;
+    return rows
+        .map(
+          (row) => BookingFollowerGroup.fromJson(row as Map<String, dynamic>),
+        )
+        .toList();
   }
 
   @override
@@ -99,16 +80,11 @@ class ApiProfileRepository implements ProfileRepository {
 
   @override
   Future<List<BlockedUser>> fetchBlockedUsers() async {
-    try {
-      final response = await _apiClient.get('/blocked-users');
-      final rows = response.data as List<dynamic>;
-      return rows
-          .map((row) => BlockedUser.fromJson(row as Map<String, dynamic>))
-          .toList();
-    } catch (_) {
-      if (kDebugMode) return _fallback.fetchBlockedUsers();
-      rethrow;
-    }
+    final response = await _apiClient.get('/blocked-users');
+    final rows = response.data as List<dynamic>;
+    return rows
+        .map((row) => BlockedUser.fromJson(row as Map<String, dynamic>))
+        .toList();
   }
 
   @override
@@ -138,13 +114,11 @@ class ApiProfileRepository implements ProfileRepository {
           '[Profile] PUT /me failed status=${error.response?.statusCode} '
           'body=${error.response?.data} message=${error.message}',
         );
-        return _fallback.saveProfile(profile);
       }
       rethrow;
     } catch (error) {
       if (kDebugMode) {
         debugPrint('[Profile] PUT /me unexpected error=$error');
-        return _fallback.saveProfile(profile);
       }
       rethrow;
     }

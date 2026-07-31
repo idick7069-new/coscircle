@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:go_router/go_router.dart';
 
+import '../core/config/app_environment.dart';
 import '../core/router/app_router.dart';
 import '../core/providers/theme_mode_provider.dart';
 import '../core/theme/app_theme.dart';
@@ -30,7 +32,25 @@ class CosCircleApp extends ConsumerWidget {
       supportedLocales: const [Locale('zh', 'TW'), Locale('en', 'US')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       routerConfig: appRouter,
-      builder: (context, child) => _CosCircleWebFrame(child: child),
+      builder: (context, child) =>
+          _CosCircleDemoBanner(child: _CosCircleWebFrame(child: child)),
+    );
+  }
+}
+
+class _CosCircleDemoBanner extends StatelessWidget {
+  const _CosCircleDemoBanner({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!appDemoMode) return child;
+    return Banner(
+      message: 'DEMO',
+      location: BannerLocation.topEnd,
+      color: Theme.of(context).colorScheme.error,
+      child: child,
     );
   }
 }
@@ -44,6 +64,7 @@ class _CosCircleWebFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     final content = child ?? const SizedBox.shrink();
     if (!kIsWeb) return content;
+    if (_isAdminRoute(context)) return content;
 
     final size = MediaQuery.sizeOf(context);
     if (size.width < 760) return content;
@@ -73,5 +94,13 @@ class _CosCircleWebFrame extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  bool _isAdminRoute(BuildContext context) {
+    try {
+      return GoRouterState.of(context).uri.path.startsWith('/admin');
+    } catch (_) {
+      return false;
+    }
   }
 }

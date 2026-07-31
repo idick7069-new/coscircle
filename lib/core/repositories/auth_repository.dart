@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/api_client.dart';
+import '../config/app_environment.dart';
 import '../models/profile.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
@@ -50,6 +51,7 @@ class AuthRepository {
     final token = prefs.getString(_tokenKey);
     if (token == null || token.isEmpty) return null;
     _apiClient.setAuthToken(token);
+    if (appDemoMode && token == _demoToken) return token;
     try {
       await _apiClient.get('/me');
       return token;
@@ -64,6 +66,11 @@ class AuthRepository {
     required String email,
     required String password,
   }) async {
+    if (appDemoMode) {
+      final session = _demoSession(isNewUser: false);
+      await _saveToken(session.token);
+      return session;
+    }
     final session = await _authenticate(
       '/auth/login',
       data: {'email': email, 'password': password},
@@ -77,6 +84,11 @@ class AuthRepository {
     required String email,
     required String password,
   }) async {
+    if (appDemoMode) {
+      final session = _demoSession(isNewUser: true);
+      await _saveToken(session.token);
+      return session;
+    }
     final session = await _authenticate(
       '/auth/register',
       data: {'nickname': nickname, 'email': email, 'password': password},
@@ -89,6 +101,11 @@ class AuthRepository {
     required SocialLoginProvider provider,
     required String accessToken,
   }) async {
+    if (appDemoMode) {
+      final session = _demoSession(isNewUser: false);
+      await _saveToken(session.token);
+      return session;
+    }
     final session = await _authenticate(
       '/auth/social',
       data: {'provider': provider.apiValue, 'accessToken': accessToken},
@@ -99,7 +116,9 @@ class AuthRepository {
 
   Future<void> logout() async {
     try {
-      await _apiClient.post('/auth/logout');
+      if (!appDemoMode) {
+        await _apiClient.post('/auth/logout');
+      }
     } finally {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_tokenKey);
@@ -119,5 +138,23 @@ class AuthRepository {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_tokenKey, token);
     _apiClient.setAuthToken(token);
+  }
+
+  static const _demoToken = 'coscircle-demo-token';
+
+  AuthSession _demoSession({required bool isNewUser}) {
+    return AuthSession(
+      token: _demoToken,
+      isNewUser: isNewUser,
+      user: const UserProfile(
+        id: 'demo',
+        publicCode: 'DEMO001',
+        nickname: 'Demo 管理員',
+        isAdmin: true,
+        bio: 'CosCircle Demo Mode',
+        regions: ['北部'],
+        travelRegions: ['北部'],
+      ),
+    );
   }
 }

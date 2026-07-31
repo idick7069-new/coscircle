@@ -298,6 +298,47 @@ app.get('/api/me', async (req, res, next) => {
   }
 });
 
+app.post('/api/me/push-tokens', async (req, res, next) => {
+  try {
+    const token = String(req.body.token ?? '').trim();
+    const platform = normalizePushPlatform(req.body.platform);
+    if (!platform || token.length < 24 || token.length > 512) {
+      res.status(400).json({ error: 'invalid_push_token' });
+      return;
+    }
+    await pool.execute(
+      `INSERT INTO device_push_tokens (user_id, platform, token)
+       VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE user_id = VALUES(user_id),
+         platform = VALUES(platform),
+         updated_at = CURRENT_TIMESTAMP`,
+      [req.userId, platform, token],
+    );
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete('/api/me/push-tokens', async (req, res, next) => {
+  try {
+    const token = String(req.body.token ?? '').trim();
+    if (!token) {
+      res.status(400).json({ error: 'invalid_push_token' });
+      return;
+    }
+    await pool.execute(
+      `DELETE FROM device_push_tokens
+        WHERE user_id = ?
+          AND token = ?`,
+      [req.userId, token],
+    );
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.put('/api/me', async (req, res, next) => {
   const connection = await pool.getConnection();
   try {
@@ -569,6 +610,9 @@ app.use('/api/admin', requireAdmin);
 app.get('/api/admin/stats', async (_req, res, next) => {
   try {
     const [[users]] = await pool.query('SELECT COUNT(*) AS count FROM users');
+    const [[suspendedUsers]] = await pool.query(
+      "SELECT COUNT(*) AS count FROM users WHERE account_status = 'suspended'",
+    );
     const [[events]] = await pool.query('SELECT COUNT(*) AS count FROM events');
     const [[approvedEvents]] = await pool.query(
       "SELECT COUNT(*) AS count FROM events WHERE status = 'approved'",
@@ -579,6 +623,7 @@ app.get('/api/admin/stats', async (_req, res, next) => {
     const [[submissions]] = await pool.query('SELECT COUNT(*) AS count FROM event_submissions');
     res.json({
       users: users.count,
+      suspendedUsers: suspendedUsers.count,
       events: events.count,
       approvedEvents: approvedEvents.count,
       bookings: bookings.count,
@@ -614,6 +659,7 @@ app.get('/api/admin/users', async (req, res, next) => {
   try {
     const [rows] = await pool.execute(
       `SELECT id, email, nickname, is_admin AS isAdmin,
+              account_status AS accountStatus,
               CASE WHEN id = ? THEN TRUE ELSE FALSE END AS isMe,
               DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s') AS createdAt
          FROM users
@@ -628,6 +674,26 @@ app.get('/api/admin/users', async (req, res, next) => {
 
 app.post('/api/admin/sync-doujin-events', syncDoujinEvents);
 app.post('/api/admin/events/sync-doujin', syncDoujinEvents);
+
+app.get('/api/admin/sync-status', async (_req, res, next) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT source_key AS sourceKey,
+              source_url AS sourceUrl,
+              status,
+              imported_count AS importedCount,
+              error_code AS errorCode,
+              error_message AS errorMessage,
+              DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s') AS createdAt
+         FROM source_sync_runs
+        ORDER BY created_at DESC
+        LIMIT 20`,
+    );
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
 
 app.post('/api/admin/events', async (req, res, next) => {
   try {
@@ -720,8 +786,28 @@ app.put('/api/admin/events/:eventId', async (req, res, next) => {
 async function syncDoujinEvents(_req, res, next) {
   try {
     const events = await importEvents(pool);
+    await recordSourceSyncRun({
+      sourceKey: 'doujin-events',
+      sourceUrl: 'https://www.doujin.com.tw/events/alist',
+      status: 'success',
+      importedCount: events.length,
+    });
     res.json({ imported: true, count: events.length });
   } catch (error) {
+    try {
+      await recordSourceSyncRun({
+        sourceKey: 'doujin-events',
+        sourceUrl: 'https://www.doujin.com.tw/events/alist',
+        status: 'failure',
+        errorCode:
+          error?.response?.status?.toString() ??
+          error?.code?.toString() ??
+          'sync_failed',
+        errorMessage: summarizeError(error),
+      });
+    } catch (recordError) {
+      console.error('[event-scraper] failed to record sync status', recordError);
+    }
     next(error);
   }
 }
@@ -769,6 +855,73 @@ app.put('/api/admin/events/:eventId/dates', async (req, res, next) => {
       startDate,
       endDate,
     });
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put('/api/admin/users/:userId/status', async (req, res, next) => {
+  try {
+    const userId = Number(req.params.userId);
+    if (!Number.isInteger(userId)) {
+      res.status(400).json({ error: 'invalid_user_id' });
+      return;
+    }
+    const status = String(req.body.status ?? '').trim();
+    if (!['active', 'suspended'].includes(status)) {
+      res.status(400).json({ error: 'invalid_account_status' });
+      return;
+    }
+    if (userId === Number(req.userId) && status === 'suspended') {
+      res.status(400).json({ error: 'cannot_suspend_self' });
+      return;
+    }
+    const [result] = await pool.execute(
+      `UPDATE users
+          SET account_status = ?,
+              session_token = CASE WHEN ? = 'suspended' THEN NULL ELSE session_token END
+        WHERE id = ?`,
+      [status, status, userId],
+    );
+    if (result.affectedRows === 0) {
+      res.status(404).json({ error: 'user_not_found' });
+      return;
+    }
+    await recordAdminAction(req, `user.${status}`, userId);
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put('/api/admin/users/:userId/admin', async (req, res, next) => {
+  try {
+    const userId = Number(req.params.userId);
+    if (!Number.isInteger(userId)) {
+      res.status(400).json({ error: 'invalid_user_id' });
+      return;
+    }
+    const isAdmin = req.body.isAdmin === true || req.body.isAdmin === 1;
+    if (userId === Number(req.userId) && !isAdmin) {
+      res.status(400).json({ error: 'cannot_revoke_self_admin' });
+      return;
+    }
+    const [result] = await pool.execute(
+      `UPDATE users
+          SET is_admin = ?
+        WHERE id = ?`,
+      [isAdmin, userId],
+    );
+    if (result.affectedRows === 0) {
+      res.status(404).json({ error: 'user_not_found' });
+      return;
+    }
+    await recordAdminAction(
+      req,
+      isAdmin ? 'user.grant_admin' : 'user.revoke_admin',
+      userId,
+    );
     res.status(204).end();
   } catch (error) {
     next(error);
@@ -1399,12 +1552,20 @@ app.get('/api/events/:eventId/participants', async (req, res, next) => {
           AND their_blocks.blocked_user_id = ?
          LEFT JOIN works
            ON works.id = event_bookings.work_id
+         LEFT JOIN (
+           SELECT DISTINCT event_id, user_id, day_index
+             FROM event_bookings
+            WHERE user_id = ?
+         ) AS viewer_bookings
+           ON viewer_bookings.event_id = event_bookings.event_id
+          AND viewer_bookings.day_index = event_bookings.day_index
         WHERE event_bookings.event_id = ?
           AND (
             users.id = ?
             OR (
               my_blocks.blocked_user_id IS NULL
               AND their_blocks.blocker_user_id IS NULL
+              AND viewer_bookings.user_id IS NOT NULL
               AND (
                 users.booking_visibility = 'public'
                 OR EXISTS (
@@ -1421,6 +1582,7 @@ app.get('/api/events/:eventId/participants', async (req, res, next) => {
           )
         ORDER BY event_bookings.day_index ASC, event_bookings.updated_at DESC`,
       [
+        req.userId,
         req.userId,
         req.userId,
         req.userId,
@@ -1574,7 +1736,7 @@ app.get('/api/events/:eventId/locations', async (req, res, next) => {
               users.nickname,
               users.avatar_url AS avatarUrl,
               event_bookings.role,
-              event_bookings.day_index AS dayIndex,
+              shared_locations.day_index AS dayIndex,
               works.id AS workId,
               works.name AS workName,
               event_bookings.character_name AS characterName,
@@ -1596,6 +1758,7 @@ app.get('/api/events/:eventId/locations', async (req, res, next) => {
          LEFT JOIN event_bookings
            ON event_bookings.event_id = shared_locations.event_id
           AND event_bookings.user_id = shared_locations.user_id
+          AND event_bookings.day_index = shared_locations.day_index
          LEFT JOIN works
            ON works.id = event_bookings.work_id
          LEFT JOIN follows
@@ -1608,11 +1771,12 @@ app.get('/api/events/:eventId/locations', async (req, res, next) => {
            ON their_blocks.blocker_user_id = shared_locations.user_id
           AND their_blocks.blocked_user_id = ?
          LEFT JOIN (
-           SELECT DISTINCT event_id, user_id
+           SELECT DISTINCT event_id, user_id, day_index
              FROM event_bookings
             WHERE user_id = ?
          ) AS viewer_bookings
            ON viewer_bookings.event_id = shared_locations.event_id
+          AND viewer_bookings.day_index = shared_locations.day_index
          LEFT JOIN circle_members
            ON circle_members.user_id = shared_locations.user_id
           AND circle_members.circle_id IN (
@@ -1671,6 +1835,15 @@ app.put('/api/events/:eventId/location', async (req, res, next) => {
     const lng = Number(longitude);
     const visibility = normalizeLocationVisibility(req.body.visibility);
     const expiresInMinutes = normalizeLocationExpiry(req.body.expiresInMinutes);
+    const dayIndex = await resolveEventDayIndex(
+      req.params.eventId,
+      req.userId,
+      req.body.dayIndex,
+    );
+    if (dayIndex == null) {
+      res.status(403).json({ error: 'event_booking_required' });
+      return;
+    }
     if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
       res.status(400).json({ error: 'invalid_latitude' });
       return;
@@ -1681,15 +1854,24 @@ app.put('/api/events/:eventId/location', async (req, res, next) => {
     }
     await pool.execute(
       `INSERT INTO shared_locations (
-         event_id, user_id, latitude, longitude, visibility, shared_at, expires_at
+         event_id, day_index, user_id, latitude, longitude, visibility, shared_at, expires_at
        )
-       VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL ? MINUTE))
+       VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL ? MINUTE))
        ON DUPLICATE KEY UPDATE latitude = VALUES(latitude),
+         day_index = VALUES(day_index),
          longitude = VALUES(longitude),
          visibility = VALUES(visibility),
          shared_at = CURRENT_TIMESTAMP,
          expires_at = VALUES(expires_at)`,
-      [req.params.eventId, req.userId, lat, lng, visibility, expiresInMinutes]
+      [
+        req.params.eventId,
+        dayIndex,
+        req.userId,
+        lat,
+        lng,
+        visibility,
+        expiresInMinutes,
+      ],
     );
     res.status(204).end();
   } catch (error) {
@@ -1859,13 +2041,20 @@ app.get('/api/events/:eventId/recognitions', async (req, res, next) => {
     const [rows] = await pool.execute(
       `SELECT event_recognition_requests.id,
               event_recognition_requests.event_id AS eventId,
+              event_recognition_requests.day_index AS dayIndex,
               event_recognition_requests.requester_user_id AS requesterUserId,
               requester.nickname AS requesterNickname,
               event_recognition_requests.target_user_id AS targetUserId,
               target.nickname AS targetNickname,
-              event_recognition_requests.status,
+              CASE
+                WHEN event_recognition_requests.status = 'pending'
+                 AND event_recognition_requests.expires_at <= CURRENT_TIMESTAMP
+                THEN 'expired'
+                ELSE event_recognition_requests.status
+              END AS status,
               event_recognition_requests.response_message AS responseMessage,
               DATE_FORMAT(event_recognition_requests.created_at, '%Y-%m-%dT%H:%i:%s') AS createdAt,
+              DATE_FORMAT(event_recognition_requests.expires_at, '%Y-%m-%dT%H:%i:%s') AS expiresAt,
               DATE_FORMAT(event_recognition_requests.responded_at, '%Y-%m-%dT%H:%i:%s') AS respondedAt,
               CASE WHEN event_recognition_requests.requester_user_id = ? THEN TRUE ELSE FALSE END AS isRequester,
               CASE WHEN event_recognition_requests.target_user_id = ? THEN TRUE ELSE FALSE END AS isTarget
@@ -1907,12 +2096,35 @@ app.post('/api/events/:eventId/recognitions', async (req, res, next) => {
       res.status(403).json({ error: 'user_unavailable' });
       return;
     }
+    const dayIndex = await resolveEventDayIndex(
+      req.params.eventId,
+      req.userId,
+      req.body.dayIndex,
+    );
+    if (dayIndex == null) {
+      res.status(403).json({ error: 'event_booking_required' });
+      return;
+    }
+    if (!(await userHasEventDayBooking(req.params.eventId, targetUserId, dayIndex))) {
+      res.status(403).json({ error: 'target_not_available_for_event_day' });
+      return;
+    }
+    const cooldown = await recognitionCooldownState({
+      eventId: req.params.eventId,
+      dayIndex,
+      requesterUserId: req.userId,
+      targetUserId,
+    });
+    if (!cooldown.ok) {
+      res.status(429).json({ error: cooldown.error });
+      return;
+    }
     const [result] = await pool.execute(
       `INSERT INTO event_recognition_requests (
-         event_id, requester_user_id, target_user_id, status
+         event_id, day_index, requester_user_id, target_user_id, status, expires_at
        )
-       VALUES (?, ?, ?, 'pending')`,
-      [req.params.eventId, req.userId, targetUserId],
+       VALUES (?, ?, ?, ?, 'pending', DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 5 MINUTE))`,
+      [req.params.eventId, dayIndex, req.userId, targetUserId],
     );
     res.status(201).json({ id: result.insertId });
   } catch (error) {
@@ -1923,11 +2135,11 @@ app.post('/api/events/:eventId/recognitions', async (req, res, next) => {
 app.post('/api/recognitions/:requestId/respond', async (req, res, next) => {
   try {
     const status = String(req.body.status ?? '');
-    if (!['come', 'busy'].includes(status)) {
+    if (!['accepted', 'declined'].includes(status)) {
       res.status(400).json({ error: 'invalid_recognition_status' });
       return;
     }
-    const responseMessage = status === 'come' ? '快來' : '當前不方便';
+    const responseMessage = status === 'accepted' ? '快來' : '當前不方便';
     const [result] = await pool.execute(
       `UPDATE event_recognition_requests
           SET status = ?,
@@ -1935,7 +2147,8 @@ app.post('/api/recognitions/:requestId/respond', async (req, res, next) => {
               responded_at = CURRENT_TIMESTAMP
         WHERE id = ?
           AND target_user_id = ?
-          AND status = 'pending'`,
+          AND status = 'pending'
+          AND expires_at > CURRENT_TIMESTAMP`,
       [status, responseMessage, req.params.requestId, req.userId],
     );
     if (result.affectedRows === 0) {
@@ -2030,9 +2243,19 @@ async function ensureCollaborationTables() {
     definition: "ENUM('public','circle') NOT NULL DEFAULT 'public'",
   });
   await ensureColumn({
+    tableName: 'users',
+    columnName: 'account_status',
+    definition: "ENUM('active','suspended') NOT NULL DEFAULT 'active'",
+  });
+  await ensureColumn({
     tableName: 'shared_locations',
     columnName: 'visibility',
     definition: "ENUM('public','followed','circle') NOT NULL DEFAULT 'circle'",
+  });
+  await ensureColumn({
+    tableName: 'shared_locations',
+    columnName: 'day_index',
+    definition: 'INT UNSIGNED NOT NULL DEFAULT 1',
   });
   await ensureColumn({
     tableName: 'shared_locations',
@@ -2052,6 +2275,33 @@ async function ensureCollaborationTables() {
       KEY idx_admin_audit_logs_action (action),
       KEY idx_admin_audit_logs_created (created_at),
       FOREIGN KEY (admin_user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+  );
+  await pool.execute(
+    `CREATE TABLE IF NOT EXISTS source_sync_runs (
+      id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+      source_key VARCHAR(80) NOT NULL,
+      source_url TEXT NOT NULL,
+      status ENUM('success','failure') NOT NULL,
+      imported_count INT UNSIGNED NOT NULL DEFAULT 0,
+      error_code VARCHAR(80) NULL,
+      error_message TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      KEY idx_source_sync_runs_source_created (source_key, created_at),
+      KEY idx_source_sync_runs_status_created (status, created_at)
+    )`,
+  );
+  await pool.execute(
+    `CREATE TABLE IF NOT EXISTS device_push_tokens (
+      id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+      user_id BIGINT UNSIGNED NOT NULL,
+      platform ENUM('android','ios','web') NOT NULL,
+      token VARCHAR(512) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_device_push_token (token),
+      KEY idx_device_push_tokens_user (user_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )`,
   );
   await pool.execute(
@@ -2076,11 +2326,13 @@ async function ensureCollaborationTables() {
     `CREATE TABLE IF NOT EXISTS event_recognition_requests (
       id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
       event_id BIGINT UNSIGNED NOT NULL,
+      day_index INT UNSIGNED NOT NULL DEFAULT 1,
       requester_user_id BIGINT UNSIGNED NOT NULL,
       target_user_id BIGINT UNSIGNED NOT NULL,
-      status ENUM('pending','come','busy') NOT NULL DEFAULT 'pending',
+      status ENUM('pending','accepted','declined','expired','cancelled') NOT NULL DEFAULT 'pending',
       response_message VARCHAR(80) NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      expires_at TIMESTAMP NULL,
       responded_at TIMESTAMP NULL,
       FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
       FOREIGN KEY (requester_user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -2090,6 +2342,16 @@ async function ensureCollaborationTables() {
       KEY idx_event_recognition_requester (requester_user_id)
     )`,
   );
+  await ensureColumn({
+    tableName: 'event_recognition_requests',
+    columnName: 'day_index',
+    definition: 'INT UNSIGNED NOT NULL DEFAULT 1',
+  });
+  await ensureColumn({
+    tableName: 'event_recognition_requests',
+    columnName: 'expires_at',
+    definition: 'TIMESTAMP NULL',
+  });
   await pool.execute(
     `CREATE TABLE IF NOT EXISTS user_blocks (
       blocker_user_id BIGINT UNSIGNED NOT NULL,
@@ -2135,6 +2397,40 @@ async function recordAdminAction(
       req.ip ?? null,
     ],
   );
+}
+
+async function recordSourceSyncRun({
+  sourceKey,
+  sourceUrl,
+  status,
+  importedCount = 0,
+  errorCode = null,
+  errorMessage = null,
+}) {
+  await pool.execute(
+    `INSERT INTO source_sync_runs
+      (source_key, source_url, status, imported_count, error_code, error_message)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      sourceKey,
+      sourceUrl,
+      status,
+      importedCount,
+      errorCode,
+      errorMessage == null ? null : String(errorMessage).slice(0, 2000),
+    ],
+  );
+}
+
+function summarizeError(error) {
+  const responseStatus = error?.response?.status;
+  const responseStatusText = error?.response?.statusText;
+  if (responseStatus != null) {
+    return [responseStatus, responseStatusText, error?.message]
+      .filter(Boolean)
+      .join(' ');
+  }
+  return error?.message?.toString() ?? error?.code?.toString() ?? 'unknown_error';
 }
 
 function normalizeEmail(value) {
@@ -2267,6 +2563,11 @@ function normalizeLocationVisibility(value) {
   return ['public', 'followed', 'circle'].includes(value) ? value : 'circle';
 }
 
+function normalizePushPlatform(value) {
+  const platform = String(value ?? '').trim().toLowerCase();
+  return ['android', 'ios', 'web'].includes(platform) ? platform : null;
+}
+
 function normalizeLocationExpiry(value) {
   const minutes = Number(value);
   if ([15, 30, 60].includes(minutes)) return minutes;
@@ -2291,7 +2592,7 @@ async function resolveUserId(req) {
   const token = bearerToken(req);
   if (!token) return null;
   const [rows] = await pool.execute(
-    'SELECT id FROM users WHERE session_token = ? LIMIT 1',
+    "SELECT id FROM users WHERE session_token = ? AND account_status = 'active' LIMIT 1",
     [token],
   );
   return rows[0]?.id ?? null;
@@ -2309,10 +2610,85 @@ async function hasBlockingRelation(leftUserId, rightUserId) {
   return rows.length > 0;
 }
 
+async function userHasEventDayBooking(eventId, userId, dayIndex) {
+  const [rows] = await pool.execute(
+    `SELECT id
+       FROM event_bookings
+      WHERE event_id = ?
+        AND user_id = ?
+        AND day_index = ?
+      LIMIT 1`,
+    [eventId, userId, dayIndex],
+  );
+  return rows.length > 0;
+}
+
+async function recognitionCooldownState({
+  eventId,
+  dayIndex,
+  requesterUserId,
+  targetUserId,
+}) {
+  const [rows] = await pool.execute(
+    `SELECT status,
+            expires_at > CURRENT_TIMESTAMP AS isPendingActive,
+            created_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 1 HOUR) AS isWithinHour,
+            COALESCE(responded_at, created_at) >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 15 MINUTE) AS isRecentResponse
+       FROM event_recognition_requests
+      WHERE event_id = ?
+        AND day_index = ?
+        AND requester_user_id = ?
+        AND target_user_id = ?
+        AND created_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 1 HOUR)
+      ORDER BY created_at DESC`,
+    [eventId, dayIndex, requesterUserId, targetUserId],
+  );
+  if (rows.some((row) => row.status === 'pending' && row.isPendingActive)) {
+    return { ok: false, error: 'recognition_pending_exists' };
+  }
+  if (
+    rows.some(
+      (row) => row.status === 'declined' && row.isRecentResponse,
+    )
+  ) {
+    return { ok: false, error: 'recognition_declined_cooldown' };
+  }
+  if (rows.filter((row) => row.isWithinHour).length >= 3) {
+    return { ok: false, error: 'recognition_hourly_limit' };
+  }
+  return { ok: true };
+}
+
+async function resolveEventDayIndex(eventId, userId, requestedDayIndex = null) {
+  const parsed = Number(requestedDayIndex);
+  if (Number.isInteger(parsed) && parsed > 0) {
+    const [rows] = await pool.execute(
+      `SELECT day_index AS dayIndex
+         FROM event_bookings
+        WHERE event_id = ?
+          AND user_id = ?
+          AND day_index = ?
+        LIMIT 1`,
+      [eventId, userId, parsed],
+    );
+    return rows[0]?.dayIndex ?? null;
+  }
+  const [rows] = await pool.execute(
+    `SELECT day_index AS dayIndex
+       FROM event_bookings
+      WHERE event_id = ?
+        AND user_id = ?
+      ORDER BY day_index ASC
+      LIMIT 1`,
+    [eventId, userId],
+  );
+  return rows[0]?.dayIndex ?? null;
+}
+
 async function requireAdmin(req, res, next) {
   try {
     const [rows] = await pool.execute(
-      'SELECT is_admin AS isAdmin FROM users WHERE id = ? LIMIT 1',
+      "SELECT is_admin AS isAdmin FROM users WHERE id = ? AND account_status = 'active' LIMIT 1",
       [req.userId],
     );
     if (!rows[0]?.isAdmin) {

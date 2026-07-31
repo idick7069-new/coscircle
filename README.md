@@ -30,6 +30,14 @@ Android Emulator 連本機後端時可改用：
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8080/api
 ```
 
+若要使用內建假資料展示，必須明確開啟 demo mode：
+
+```sh
+flutter run --dart-define=DEMO_MODE=true
+```
+
+一般 debug build 不會在 API 失敗時自動改用假資料；連線錯誤會直接顯示在畫面上，避免把 demo data 誤認為正式資料。
+
 Google Map 需要在 Android / iOS 原生設定 API key 後才能正常顯示地圖。
 
 正式版建置時必須指定 HTTPS API：
@@ -84,6 +92,7 @@ node scripts/scrape-events.js --import
 
 ```sh
 mysql -u coscircle -p coscircle < db/migrate_privacy_controls.sql
+mysql -u coscircle -p coscircle < db/migrate_beta_roadmap.sql
 ```
 
 完整 migration 清單與驗證 SQL 請看：
@@ -103,3 +112,5 @@ docs/deployment/production-checklist.md
 cd backend
 npm run scrape:events -- --import
 ```
+
+Web Admin 入口為 `/admin`，可管理活動、投稿審核、使用者停權/復權、admin 權限與爬蟲同步狀態。Android 即時通知的資料層支架已提供 `POST /api/me/push-tokens`，正式 closed beta 前仍需接上 Firebase credentials 與認親推播發送驗證。

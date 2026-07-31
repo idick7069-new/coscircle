@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/models/admin_stats.dart';
+import '../../../core/models/admin_sync_run.dart';
 import '../../../core/models/admin_user.dart';
 import '../../../core/models/event.dart';
 import '../../../core/models/event_submission.dart';
@@ -27,6 +28,12 @@ final adminSubmissionsProvider =
       return ref.watch(adminRepositoryProvider).fetchSubmissions();
     });
 
+final adminSyncRunsProvider = FutureProvider.autoDispose<List<AdminSyncRun>>((
+  ref,
+) {
+  return ref.watch(adminRepositoryProvider).fetchSyncStatus();
+});
+
 class AdminDashboardPage extends ConsumerWidget {
   const AdminDashboardPage({super.key});
 
@@ -36,6 +43,7 @@ class AdminDashboardPage extends ConsumerWidget {
     final events = ref.watch(adminEventsProvider);
     final users = ref.watch(adminUsersProvider);
     final submissions = ref.watch(adminSubmissionsProvider);
+    final syncRuns = ref.watch(adminSyncRunsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -82,6 +90,20 @@ class AdminDashboardPage extends ConsumerWidget {
               ),
               const SizedBox(height: 20),
               Text(
+                '資料來源同步',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              syncRuns.when(
+                data: (items) => _SyncRunList(runs: items),
+                error: (error, stack) =>
+                    _ErrorPanel(message: '同步狀態載入失敗：${userFacingError(error)}'),
+                loading: () => const _LoadingPanel(message: '載入同步狀態...'),
+              ),
+              const SizedBox(height: 20),
+              Text(
                 '使用者管理',
                 style: Theme.of(
                   context,
@@ -91,6 +113,10 @@ class AdminDashboardPage extends ConsumerWidget {
               users.when(
                 data: (items) => _AdminUserList(
                   users: items,
+                  onStatusChanged: (user, status) =>
+                      _updateUserStatus(context, ref, user, status),
+                  onAdminChanged: (user, isAdmin) =>
+                      _updateUserAdmin(context, ref, user, isAdmin),
                   onDelete: (user) => _confirmDeleteUser(context, ref, user),
                 ),
                 error: (error, stack) =>
@@ -210,7 +236,46 @@ class AdminDashboardPage extends ConsumerWidget {
       ref.refresh(adminEventsProvider.future),
       ref.refresh(adminUsersProvider.future),
       ref.refresh(adminSubmissionsProvider.future),
+      ref.refresh(adminSyncRunsProvider.future),
     ]);
+  }
+
+  Future<void> _updateUserStatus(
+    BuildContext context,
+    WidgetRef ref,
+    AdminUser user,
+    String status,
+  ) async {
+    try {
+      await ref
+          .read(adminRepositoryProvider)
+          .updateUserStatus(userId: user.id, status: status);
+      await _refresh(ref);
+      if (!context.mounted) return;
+      _showAdminToast(context, status == 'suspended' ? '使用者已停權' : '使用者已恢復');
+    } catch (error) {
+      if (!context.mounted) return;
+      _showAdminToast(context, '更新帳號狀態失敗：$error');
+    }
+  }
+
+  Future<void> _updateUserAdmin(
+    BuildContext context,
+    WidgetRef ref,
+    AdminUser user,
+    bool isAdmin,
+  ) async {
+    try {
+      await ref
+          .read(adminRepositoryProvider)
+          .updateUserAdmin(userId: user.id, isAdmin: isAdmin);
+      await _refresh(ref);
+      if (!context.mounted) return;
+      _showAdminToast(context, isAdmin ? '已授權 Admin' : '已撤銷 Admin');
+    } catch (error) {
+      if (!context.mounted) return;
+      _showAdminToast(context, '更新 Admin 權限失敗：$error');
+    }
   }
 
   Future<void> _reviewSubmission(
@@ -734,6 +799,7 @@ class _StatsGrid extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final items = [
       ('使用者', stats.users, Icons.people_alt_outlined, scheme.primary),
+      ('停權', stats.suspendedUsers, Icons.person_off_outlined, scheme.error),
       ('活動', stats.events, Icons.event_outlined, scheme.secondary),
       ('已上架', stats.approvedEvents, Icons.verified_outlined, scheme.tertiary),
       ('預訂', stats.bookings, Icons.how_to_reg_outlined, scheme.primary),
@@ -837,9 +903,16 @@ class _AdminEventTile extends StatelessWidget {
 }
 
 class _AdminUserList extends StatelessWidget {
-  const _AdminUserList({required this.users, required this.onDelete});
+  const _AdminUserList({
+    required this.users,
+    required this.onStatusChanged,
+    required this.onAdminChanged,
+    required this.onDelete,
+  });
 
   final List<AdminUser> users;
+  final void Function(AdminUser user, String status) onStatusChanged;
+  final void Function(AdminUser user, bool isAdmin) onAdminChanged;
   final ValueChanged<AdminUser> onDelete;
 
   @override
@@ -889,6 +962,7 @@ class _AdminUserList extends StatelessWidget {
                           [
                             if (user.email.isNotEmpty) user.email,
                             if (user.isAdmin) 'Admin',
+                            if (user.isSuspended) '已停權',
                             if (user.isMe) '目前登入',
                           ].join(' · '),
                           maxLines: 1,
@@ -898,10 +972,106 @@ class _AdminUserList extends StatelessWidget {
                       ],
                     ),
                   ),
+                  IconButton(
+                    tooltip: user.isAdmin ? '撤銷 Admin' : '授權 Admin',
+                    onPressed: user.isMe
+                        ? null
+                        : () => onAdminChanged(user, !user.isAdmin),
+                    icon: Icon(
+                      user.isAdmin
+                          ? Icons.admin_panel_settings
+                          : Icons.admin_panel_settings_outlined,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: user.isSuspended ? '恢復帳號' : '停權帳號',
+                    onPressed: user.isMe
+                        ? null
+                        : () => onStatusChanged(
+                            user,
+                            user.isSuspended ? 'active' : 'suspended',
+                          ),
+                    icon: Icon(
+                      user.isSuspended
+                          ? Icons.person_add_alt_1_outlined
+                          : Icons.person_off_outlined,
+                    ),
+                  ),
                   IconButton.filledTonal(
-                    tooltip: '刪除使用者',
+                    tooltip: '刪除使用者（極端情況）',
                     onPressed: user.isMe ? null : () => onDelete(user),
                     icon: const Icon(Icons.delete_outline),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _SyncRunList extends StatelessWidget {
+  const _SyncRunList({required this.runs});
+
+  final List<AdminSyncRun> runs;
+
+  @override
+  Widget build(BuildContext context) {
+    if (runs.isEmpty) {
+      return const CosCard(
+        child: _AdminEmptyRow(
+          icon: Icons.sync_problem_outlined,
+          message: '尚未有同步紀錄',
+        ),
+      );
+    }
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      children: [
+        for (final run in runs.take(5))
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: CosCard(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CosIconBubble(
+                    icon: run.isSuccess
+                        ? Icons.cloud_done_outlined
+                        : Icons.cloud_off_outlined,
+                    color: run.isSuccess ? scheme.secondary : scheme.error,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          run.sourceKey.isEmpty ? '資料同步' : run.sourceKey,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          run.isSuccess
+                              ? '${run.createdAt} · 匯入 ${run.importedCount} 筆'
+                              : '${run.createdAt} · ${run.errorCode}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        if (!run.isSuccess && run.errorMessage.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            run.errorMessage,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                 ],
               ),

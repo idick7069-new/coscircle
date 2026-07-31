@@ -15,6 +15,7 @@ abstract class LocationRepository {
   Future<List<RecognitionRequest>> fetchRecognitions(String eventId);
   Future<void> shareLocation({
     required String eventId,
+    required int dayIndex,
     required double latitude,
     required double longitude,
     required String visibility,
@@ -44,6 +45,7 @@ abstract class LocationRepository {
   });
   Future<void> requestRecognition({
     required String eventId,
+    required int dayIndex,
     required String targetUserId,
   });
   Future<void> respondRecognition({
@@ -88,6 +90,7 @@ class ApiLocationRepository implements LocationRepository {
   @override
   Future<void> shareLocation({
     required String eventId,
+    required int dayIndex,
     required double latitude,
     required double longitude,
     required String visibility,
@@ -96,6 +99,7 @@ class ApiLocationRepository implements LocationRepository {
     await _apiClient.put(
       '/events/$eventId/location',
       data: {
+        'dayIndex': dayIndex,
         'latitude': latitude,
         'longitude': longitude,
         'visibility': visibility,
@@ -163,11 +167,12 @@ class ApiLocationRepository implements LocationRepository {
   @override
   Future<void> requestRecognition({
     required String eventId,
+    required int dayIndex,
     required String targetUserId,
   }) async {
     await _apiClient.post(
       '/events/$eventId/recognitions',
-      data: {'targetUserId': targetUserId},
+      data: {'targetUserId': targetUserId, 'dayIndex': dayIndex},
     );
   }
 

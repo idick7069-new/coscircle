@@ -252,11 +252,11 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                       request: noticeRecognition,
                       onCome: () => _respondRecognition(
                         noticeRecognition,
-                        RecognitionStatus.come,
+                        RecognitionStatus.accepted,
                       ),
                       onBusy: () => _respondRecognition(
                         noticeRecognition,
-                        RecognitionStatus.busy,
+                        RecognitionStatus.declined,
                       ),
                     ),
                   ),
@@ -293,7 +293,7 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                           : () => _showMeetupSheet(eventId, circleItems),
                       onShareLocation: _isSharing
                           ? null
-                          : () => _shareLocation(eventId),
+                          : () => _shareLocation(eventId, dayIndex),
                       onStopSharing: mySharedLocation == null || _isSharing
                           ? null
                           : () => _stopSharingLocation(eventId),
@@ -764,7 +764,7 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '已回覆：${status == RecognitionStatus.come ? '快來' : '當前不方便'}',
+            '已回覆：${status == RecognitionStatus.accepted ? '快來' : '當前不方便'}',
           ),
         ),
       );
@@ -783,7 +783,11 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
     try {
       await ref
           .read(locationRepositoryProvider)
-          .requestRecognition(eventId: eventId, targetUserId: location.userId);
+          .requestRecognition(
+            eventId: eventId,
+            dayIndex: location.dayIndex,
+            targetUserId: location.userId,
+          );
       ref.invalidate(recognitionRequestsProvider(eventId));
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -1300,7 +1304,7 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
     );
   }
 
-  Future<void> _shareLocation(String eventId) async {
+  Future<void> _shareLocation(String eventId, int dayIndex) async {
     final settings = await _showLocationSharingSheet();
     if (settings == null) return;
     setState(() => _isSharing = true);
@@ -1310,6 +1314,7 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
           .read(locationRepositoryProvider)
           .shareLocation(
             eventId: eventId,
+            dayIndex: dayIndex,
             latitude: position.latitude,
             longitude: position.longitude,
             visibility: settings.visibility,

@@ -1,6 +1,7 @@
 class AdminStats {
   const AdminStats({
     required this.users,
+    required this.suspendedUsers,
     required this.events,
     required this.approvedEvents,
     required this.bookings,
@@ -10,6 +11,7 @@ class AdminStats {
   });
 
   final int users;
+  final int suspendedUsers;
   final int events;
   final int approvedEvents;
   final int bookings;
@@ -20,6 +22,7 @@ class AdminStats {
   factory AdminStats.fromJson(Map<String, dynamic> json) {
     return AdminStats(
       users: _asInt(json['users']),
+      suspendedUsers: _asInt(json['suspendedUsers']),
       events: _asInt(json['events']),
       approvedEvents: _asInt(json['approvedEvents']),
       bookings: _asInt(json['bookings']),

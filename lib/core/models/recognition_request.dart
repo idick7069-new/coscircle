@@ -1,12 +1,16 @@
 enum RecognitionStatus {
   pending,
-  come,
-  busy;
+  accepted,
+  declined,
+  expired,
+  cancelled;
 
   static RecognitionStatus fromValue(String value) {
     return switch (value) {
-      'come' => RecognitionStatus.come,
-      'busy' => RecognitionStatus.busy,
+      'accepted' || 'come' => RecognitionStatus.accepted,
+      'declined' || 'busy' => RecognitionStatus.declined,
+      'expired' => RecognitionStatus.expired,
+      'cancelled' => RecognitionStatus.cancelled,
       _ => RecognitionStatus.pending,
     };
   }
@@ -14,8 +18,10 @@ enum RecognitionStatus {
   String get value {
     return switch (this) {
       RecognitionStatus.pending => 'pending',
-      RecognitionStatus.come => 'come',
-      RecognitionStatus.busy => 'busy',
+      RecognitionStatus.accepted => 'accepted',
+      RecognitionStatus.declined => 'declined',
+      RecognitionStatus.expired => 'expired',
+      RecognitionStatus.cancelled => 'cancelled',
     };
   }
 }

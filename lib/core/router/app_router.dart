@@ -1,5 +1,6 @@
 import 'package:go_router/go_router.dart';
 
+import '../../features/admin/presentation/admin_dashboard_page.dart';
 import '../../features/auth/presentation/login_page.dart';
 import '../../features/current_event/presentation/current_event_page.dart';
 import '../../features/events/presentation/event_detail_page.dart';
@@ -13,6 +14,10 @@ final appRouter = GoRouter(
   initialLocation: '/login',
   routes: [
     GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
+    GoRoute(
+      path: '/admin',
+      builder: (context, state) => const AdminDashboardPage(),
+    ),
     GoRoute(
       path: '/onboarding',
       builder: (context, state) => const OnboardingProfilePage(),

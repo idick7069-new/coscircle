@@ -7,6 +7,7 @@ CREATE TABLE users (
   password_hash TEXT NULL,
   session_token VARCHAR(191) NULL,
   is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+  account_status ENUM('active','suspended') NOT NULL DEFAULT 'active',
   nickname VARCHAR(80) NOT NULL,
   avatar_url TEXT NULL,
   facebook_url TEXT NULL,
@@ -128,6 +129,7 @@ CREATE TABLE circle_members (
 CREATE TABLE shared_locations (
   id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   event_id BIGINT UNSIGNED NOT NULL,
+  day_index INT UNSIGNED NOT NULL DEFAULT 1,
   user_id BIGINT UNSIGNED NOT NULL,
   latitude DECIMAL(10, 7) NOT NULL,
   longitude DECIMAL(10, 7) NOT NULL,
@@ -135,7 +137,7 @@ CREATE TABLE shared_locations (
   shared_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   expires_at TIMESTAMP NULL,
   UNIQUE KEY uniq_latest_location (event_id, user_id),
-  KEY idx_shared_locations_event_expiry (event_id, expires_at),
+  KEY idx_shared_locations_event_day_expiry (event_id, day_index, expires_at),
   FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
@@ -160,11 +162,13 @@ CREATE TABLE event_meeting_points (
 CREATE TABLE event_recognition_requests (
   id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   event_id BIGINT UNSIGNED NOT NULL,
+  day_index INT UNSIGNED NOT NULL DEFAULT 1,
   requester_user_id BIGINT UNSIGNED NOT NULL,
   target_user_id BIGINT UNSIGNED NOT NULL,
-  status ENUM('pending','come','busy') NOT NULL DEFAULT 'pending',
+  status ENUM('pending','accepted','declined','expired','cancelled') NOT NULL DEFAULT 'pending',
   response_message VARCHAR(80) NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  expires_at TIMESTAMP NULL,
   responded_at TIMESTAMP NULL,
   FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
   FOREIGN KEY (requester_user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -172,6 +176,31 @@ CREATE TABLE event_recognition_requests (
   KEY idx_event_recognition_event (event_id),
   KEY idx_event_recognition_target (target_user_id),
   KEY idx_event_recognition_requester (requester_user_id)
+);
+
+CREATE TABLE source_sync_runs (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  source_key VARCHAR(80) NOT NULL,
+  source_url TEXT NOT NULL,
+  status ENUM('success','failure') NOT NULL,
+  imported_count INT UNSIGNED NOT NULL DEFAULT 0,
+  error_code VARCHAR(80) NULL,
+  error_message TEXT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_source_sync_runs_source_created (source_key, created_at),
+  KEY idx_source_sync_runs_status_created (status, created_at)
+);
+
+CREATE TABLE device_push_tokens (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  platform ENUM('android','ios','web') NOT NULL,
+  token VARCHAR(512) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_device_push_token (token),
+  KEY idx_device_push_tokens_user (user_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE event_submissions (

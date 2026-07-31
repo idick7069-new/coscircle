@@ -1,16 +1,14 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_client.dart';
+import '../config/app_environment.dart';
 import '../models/booking.dart';
 import '../models/event.dart';
 import '../models/participant.dart';
 
 final eventRepositoryProvider = Provider<EventRepository>((ref) {
-  return ApiEventRepository(
-    apiClient: ref.watch(apiClientProvider),
-    fallback: InMemoryEventRepository(),
-  );
+  if (appDemoMode) return InMemoryEventRepository();
+  return ApiEventRepository(apiClient: ref.watch(apiClientProvider));
 });
 
 abstract class EventRepository {
@@ -24,41 +22,26 @@ abstract class EventRepository {
 }
 
 class ApiEventRepository implements EventRepository {
-  ApiEventRepository({
-    required ApiClient apiClient,
-    required EventRepository fallback,
-  }) : _apiClient = apiClient,
-       _fallback = fallback;
+  ApiEventRepository({required ApiClient apiClient}) : _apiClient = apiClient;
 
   final ApiClient _apiClient;
-  final EventRepository _fallback;
 
   @override
   Future<List<CosEvent>> fetchEvents() async {
-    try {
-      final response = await _apiClient.get('/events');
-      final rows = response.data as List<dynamic>;
-      return rows
-          .map((row) => CosEvent.fromJson(row as Map<String, dynamic>))
-          .toList();
-    } catch (_) {
-      if (kDebugMode) return _fallback.fetchEvents();
-      rethrow;
-    }
+    final response = await _apiClient.get('/events');
+    final rows = response.data as List<dynamic>;
+    return rows
+        .map((row) => CosEvent.fromJson(row as Map<String, dynamic>))
+        .toList();
   }
 
   @override
   Future<List<EventParticipant>> fetchParticipants(String eventId) async {
-    try {
-      final response = await _apiClient.get('/events/$eventId/participants');
-      final rows = response.data as List<dynamic>;
-      return rows
-          .map((row) => EventParticipant.fromJson(row as Map<String, dynamic>))
-          .toList();
-    } catch (_) {
-      if (kDebugMode) return _fallback.fetchParticipants(eventId);
-      rethrow;
-    }
+    final response = await _apiClient.get('/events/$eventId/participants');
+    final rows = response.data as List<dynamic>;
+    return rows
+        .map((row) => EventParticipant.fromJson(row as Map<String, dynamic>))
+        .toList();
   }
 
   @override
@@ -78,44 +61,28 @@ class ApiEventRepository implements EventRepository {
 
   @override
   Future<void> upsertBooking(EventBooking booking) async {
-    try {
-      await _apiClient.post(
-        '/events/${booking.eventId}/bookings',
-        data: {
-          'role': booking.role.name,
-          'dayIndex': booking.dayIndex,
-          'characterName': booking.characterName,
-          'workId': booking.workId,
-          'outfitImageUrl': booking.outfitImagePath,
-          'interactionTags': booking.interactionTags,
-          'availableTime': booking.availableTime,
-          'presenceStatus': booking.presenceStatus,
-          'message': booking.message,
-        },
-      );
-    } catch (_) {
-      if (kDebugMode) {
-        await _fallback.upsertBooking(booking);
-        return;
-      }
-      rethrow;
-    }
+    await _apiClient.post(
+      '/events/${booking.eventId}/bookings',
+      data: {
+        'role': booking.role.name,
+        'dayIndex': booking.dayIndex,
+        'characterName': booking.characterName,
+        'workId': booking.workId,
+        'outfitImageUrl': booking.outfitImagePath,
+        'interactionTags': booking.interactionTags,
+        'availableTime': booking.availableTime,
+        'presenceStatus': booking.presenceStatus,
+        'message': booking.message,
+      },
+    );
   }
 
   @override
   Future<void> removeBooking(String eventId, {int? dayIndex}) async {
-    try {
-      await _apiClient.delete(
-        '/events/$eventId/bookings/me',
-        query: dayIndex == null ? null : {'dayIndex': dayIndex},
-      );
-    } catch (_) {
-      if (kDebugMode) {
-        await _fallback.removeBooking(eventId, dayIndex: dayIndex);
-        return;
-      }
-      rethrow;
-    }
+    await _apiClient.delete(
+      '/events/$eventId/bookings/me',
+      query: dayIndex == null ? null : {'dayIndex': dayIndex},
+    );
   }
 }
 

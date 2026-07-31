@@ -5,6 +5,7 @@ class AdminUser {
     this.email = '',
     this.isAdmin = false,
     this.isMe = false,
+    this.accountStatus = 'active',
     this.createdAt = '',
   });
 
@@ -13,7 +14,10 @@ class AdminUser {
   final String email;
   final bool isAdmin;
   final bool isMe;
+  final String accountStatus;
   final String createdAt;
+
+  bool get isSuspended => accountStatus == 'suspended';
 
   factory AdminUser.fromJson(Map<String, dynamic> json) {
     return AdminUser(
@@ -22,6 +26,7 @@ class AdminUser {
       email: json['email']?.toString() ?? '',
       isAdmin: json['isAdmin'] == true || json['isAdmin'] == 1,
       isMe: json['isMe'] == true || json['isMe'] == 1,
+      accountStatus: json['accountStatus']?.toString() ?? 'active',
       createdAt: json['createdAt']?.toString() ?? '',
     );
   }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_client.dart';
 import '../models/admin_stats.dart';
+import '../models/admin_sync_run.dart';
 import '../models/admin_user.dart';
 import '../models/event.dart';
 import '../models/event_submission.dart';
@@ -57,6 +58,20 @@ class AdminRepository {
           .toList();
     } catch (error) {
       throw Exception('使用者資料載入失敗：${_describeError(error)}');
+    }
+  }
+
+  Future<List<AdminSyncRun>> fetchSyncStatus() async {
+    try {
+      final response = await _apiClient
+          .get('/admin/sync-status')
+          .timeout(_adminTimeout);
+      final rows = response.data as List<dynamic>;
+      return rows
+          .map((row) => AdminSyncRun.fromJson(row as Map<String, dynamic>))
+          .toList();
+    } catch (error) {
+      throw Exception('同步狀態載入失敗：${_describeError(error)}');
     }
   }
 
@@ -179,6 +194,26 @@ class AdminRepository {
 
   Future<void> deleteUser(String userId) async {
     await _apiClient.delete('/admin/users/$userId');
+  }
+
+  Future<void> updateUserStatus({
+    required String userId,
+    required String status,
+  }) async {
+    await _apiClient.put(
+      '/admin/users/$userId/status',
+      data: {'status': status},
+    );
+  }
+
+  Future<void> updateUserAdmin({
+    required String userId,
+    required bool isAdmin,
+  }) async {
+    await _apiClient.put(
+      '/admin/users/$userId/admin',
+      data: {'isAdmin': isAdmin},
+    );
   }
 
   Future<int> syncDoujinEvents() async {

@@ -37,6 +37,7 @@ mysql -h <host> -u <user> -p <database> < backend/db/migrate_event_booking_days.
 mysql -h <host> -u <user> -p <database> < backend/db/migrate_circle_description.sql
 mysql -h <host> -u <user> -p <database> < backend/db/migrate_event_address_and_manager.sql
 mysql -h <host> -u <user> -p <database> < backend/db/migrate_privacy_controls.sql
+mysql -h <host> -u <user> -p <database> < backend/db/migrate_beta_roadmap.sql
 ```
 
 After `migrate_user_admin.sql`, verify that only the intended account is admin.
@@ -111,6 +112,9 @@ Safety checks:
 - The installed APK can register, log in, list events, open the current-event
   map, share location with an expiry, stop sharing, block a user, and use
   emergency stealth mode.
+- Android push tokens can be registered through `POST /api/me/push-tokens`;
+  real FCM delivery credentials and recognition notification dispatch must be
+  verified before inviting closed beta testers.
 
 ## 5. Pre-release verification
 
@@ -150,6 +154,8 @@ Manual smoke checklist:
 - Open current-event map and confirm it does not expose location by default.
 - Share location with `circle` visibility and a short expiry.
 - Stop sharing and confirm the location disappears from the API.
+- Send a recognition request and confirm pending requests expire after 5
+  minutes and cannot be spammed past the cooldown limits.
 - Block another user and confirm that user disappears from location results.
 - Enable emergency stealth mode and confirm profile booking visibility is
   restricted to circles.
