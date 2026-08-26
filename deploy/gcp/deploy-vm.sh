@@ -4,6 +4,11 @@ set -euo pipefail
 VM_NAME="${VM_NAME:?Set VM_NAME, for example coscircle-free-vm.}"
 ZONE="${ZONE:?Set ZONE, for example us-west1-b.}"
 API_BASE_URL="${API_BASE_URL:?Set API_BASE_URL, for example http://EXTERNAL_IP/api or https://your-domain/api.}"
+APP_API_BASE_URL="${APP_API_BASE_URL:-${API_BASE_URL}}"
+ADMIN_API_BASE_URL="${ADMIN_API_BASE_URL:-${API_BASE_URL}}"
+WEB_SERVER_NAME="${WEB_SERVER_NAME:-_}"
+ADMIN_SERVER_NAME="${ADMIN_SERVER_NAME:-admin.coscircle.local}"
+ALLOW_INSECURE_API="${ALLOW_INSECURE_API:-false}"
 RUN_MIGRATIONS="${RUN_MIGRATIONS:-true}"
 
 RELEASE_ID="$(date +%Y%m%d%H%M%S)"
@@ -20,7 +25,8 @@ cd "${ROOT_DIR}"
 flutter build web \
   --release \
   --base-href=/app/ \
-  --dart-define=API_BASE_URL="${API_BASE_URL}"
+  --dart-define=API_BASE_URL="${APP_API_BASE_URL}" \
+  --dart-define=ALLOW_INSECURE_API="${ALLOW_INSECURE_API}"
 
 mkdir -p "${TMP_DIR}/api" "${TMP_DIR}/web"
 rsync -a \
@@ -33,13 +39,36 @@ rsync -a web/favicon.png web/icons "${TMP_DIR}/web/"
 mkdir -p "${TMP_DIR}/web/app"
 rsync -a build/web/ "${TMP_DIR}/web/app/"
 
+flutter build web \
+  --release \
+  --target=lib/admin_main.dart \
+  --base-href=/ \
+  --dart-define=API_BASE_URL="${ADMIN_API_BASE_URL}" \
+  --dart-define=ALLOW_INSECURE_API="${ALLOW_INSECURE_API}"
+mkdir -p "${TMP_DIR}/web/admin-root"
+rsync -a build/web/ "${TMP_DIR}/web/admin-root/"
+
+flutter build web \
+  --release \
+  --target=lib/admin_main.dart \
+  --base-href=/admin/ \
+  --dart-define=API_BASE_URL="${ADMIN_API_BASE_URL}" \
+  --dart-define=ALLOW_INSECURE_API="${ALLOW_INSECURE_API}"
+mkdir -p "${TMP_DIR}/web/admin"
+rsync -a build/web/ "${TMP_DIR}/web/admin/"
+
+sed \
+  -e "s/__WEB_SERVER_NAME__/${WEB_SERVER_NAME}/g" \
+  -e "s/__ADMIN_SERVER_NAME__/${ADMIN_SERVER_NAME}/g" \
+  deploy/gcp/nginx-coscircle.conf >"${TMP_DIR}/nginx-coscircle.conf"
+
 tar -C "${TMP_DIR}/api" -czf "${TMP_DIR}/coscircle-api-${RELEASE_ID}.tar.gz" .
 tar -C "${TMP_DIR}/web" -czf "${TMP_DIR}/coscircle-web-${RELEASE_ID}.tar.gz" .
 
 gcloud compute scp \
   "${TMP_DIR}/coscircle-api-${RELEASE_ID}.tar.gz" \
   "${TMP_DIR}/coscircle-web-${RELEASE_ID}.tar.gz" \
-  deploy/gcp/nginx-coscircle.conf \
+  "${TMP_DIR}/nginx-coscircle.conf" \
   "${VM_NAME}:/tmp/" \
   --zone "${ZONE}"
 

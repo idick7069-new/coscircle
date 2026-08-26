@@ -27,17 +27,17 @@ String userFacingError(Object error) {
 
 String _dioMessage(DioException error) {
   final statusCode = error.response?.statusCode;
+  final data = error.response?.data;
+  if (data is Map && data['error'] != null) {
+    return _apiCodeMessage(data['error'].toString());
+  }
+
   if (statusCode == 401) return '登入狀態已失效，請重新登入';
   if (statusCode == 403) return '沒有操作權限';
   if (statusCode == 404) return '找不到資料或後端 API 尚未更新';
   if (statusCode == 409) return '資料已存在，請換一個內容再試';
   if (statusCode != null && statusCode >= 500) {
     return '伺服器暫時發生問題，請稍後再試';
-  }
-
-  final data = error.response?.data;
-  if (data is Map && data['error'] != null) {
-    return _apiCodeMessage(data['error'].toString());
   }
 
   return switch (error.type) {
@@ -69,6 +69,14 @@ String _apiCodeMessage(String code) {
     'invalid_day_index' => '活動日期選擇不正確',
     'invalid_latitude' || 'invalid_longitude' => '位置座標不正確，請重新定位',
     'rate_limit_exceeded' => '操作太頻繁，請稍後再試',
+    'recognition_pending_exists' => '已送出認親通知，請等對方回覆或 5 分鐘後再試',
+    'recognition_declined_cooldown' => '對方剛表示不方便，請稍後再試',
+    'recognition_hourly_limit' => '認親通知太頻繁，請晚點再試',
+    'recognition_request_not_found' => '這則認親通知已過期或已被回覆',
+    'event_booking_required' => '請先加入這一天的活動再使用現場功能',
+    'target_not_available_for_event_day' => '對方沒有加入這一天的活動',
+    'cannot_recognize_self' => '不能對自己發認親通知',
+    'user_unavailable' => '目前無法對這位使用者操作',
     'cors_origin_not_allowed' => '目前來源不允許連線，請確認後端 CORS 設定',
     _ => code,
   };

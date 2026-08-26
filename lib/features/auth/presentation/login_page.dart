@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/repositories/auth_repository.dart';
 import '../../../core/repositories/profile_repository.dart';
 import '../../../core/services/oobe_service.dart';
+import '../../../core/services/push_notification_service.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/cos_ui.dart';
@@ -159,6 +160,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   Future<void> _goAfterRestoredAuth() async {
     final profile = await ref.read(profileRepositoryProvider).currentProfile();
     if (!mounted || profile == null) return;
+    await ref
+        .read(pushNotificationServiceProvider)
+        .initializeForAuthenticatedUser();
     final completed = await ref
         .read(oobeServiceProvider)
         .isCompleted(profile.id);
@@ -167,6 +171,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   }
 
   Future<void> _goAfterAuth(AuthSession session) async {
+    await ref
+        .read(pushNotificationServiceProvider)
+        .initializeForAuthenticatedUser();
     final oobe = ref.read(oobeServiceProvider);
     if (!session.isNewUser) {
       await oobe.markCompleted(session.user.id);

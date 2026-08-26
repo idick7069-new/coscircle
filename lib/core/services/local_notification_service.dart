@@ -50,4 +50,24 @@ class LocalNotificationService {
       ),
     );
   }
+
+  Future<void> showRecognitionRequest(String message) async {
+    await initialize();
+    await _requestPermissionIfNeeded();
+    await _plugin.show(
+      id: DateTime.now().millisecondsSinceEpoch.remainder(1000000),
+      title: '有人想認親',
+      body: message,
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'recognition_requests',
+          '認親通知',
+          channelDescription: '現場認親請求與回覆通知',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(),
+      ),
+    );
+  }
 }

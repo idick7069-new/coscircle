@@ -220,11 +220,28 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                               ref.invalidate(sharedLocationsProvider(eventId)),
                   ),
                 ),
-                if (activeMeetup != null && eventId != null)
+                if (noticeRecognition != null)
                   Positioned(
                     left: 16,
                     right: 16,
-                    top: noticeRecognition == null ? 158 : 252,
+                    top: 86,
+                    child: RecognitionNoticeCard(
+                      request: noticeRecognition,
+                      onCome: () => _respondRecognition(
+                        noticeRecognition,
+                        RecognitionStatus.accepted,
+                      ),
+                      onBusy: () => _respondRecognition(
+                        noticeRecognition,
+                        RecognitionStatus.declined,
+                      ),
+                    ),
+                  )
+                else if (activeMeetup != null && eventId != null)
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    top: 86,
                     child: MeetupNoticeCard(
                       meetup: activeMeetup,
                       onNavigate: () => _navigateTo(
@@ -241,23 +258,6 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                       onCancel: activeMeetup.isMine
                           ? () => _confirmDeleteMeetup(eventId, activeMeetup)
                           : null,
-                    ),
-                  ),
-                if (noticeRecognition != null)
-                  Positioned(
-                    left: 16,
-                    right: 16,
-                    top: 158,
-                    child: RecognitionNoticeCard(
-                      request: noticeRecognition,
-                      onCome: () => _respondRecognition(
-                        noticeRecognition,
-                        RecognitionStatus.accepted,
-                      ),
-                      onBusy: () => _respondRecognition(
-                        noticeRecognition,
-                        RecognitionStatus.declined,
-                      ),
                     ),
                   ),
                 if (isResolvingEvent)
@@ -770,9 +770,10 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
       );
     } catch (error) {
       if (!mounted) return;
+      final message = userFacingError(error);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('回覆失敗：$error')));
+      ).showSnackBar(SnackBar(content: Text('回覆失敗：$message')));
     }
   }
 
@@ -798,9 +799,10 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
       );
     } catch (error) {
       if (!mounted) return;
+      final message = userFacingError(error);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('認親通知失敗：$error')));
+      ).showSnackBar(SnackBar(content: Text('認親通知失敗：$message')));
     }
   }
 
@@ -2375,139 +2377,128 @@ class _EventMapHeader extends StatelessWidget {
       LocationFilter.followed => '關注',
       LocationFilter.circle => '小圈圈',
     };
-    final visibilityText = event == null
-        ? '從活動頁加入場次後會顯示現場資訊'
-        : '$visibleCount / $totalCount 位同好可見';
+    final eventTitle = event == null
+        ? '目前無當前活動'
+        : currentEventTitle(event!, dayIndex);
+    final countText = event == null
+        ? '加入場次後顯示現場'
+        : '$visibleCount / $totalCount 位可見';
 
     return CosReveal(
-      child: CosCard(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                CosIconBubble(
-                  icon: Icons.location_on_outlined,
-                  color: scheme.primary,
-                  size: 40,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(CosUi.radiusLg),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: scheme.surface.withValues(alpha: 0.86),
+              borderRadius: BorderRadius.circular(CosUi.radiusLg),
+              border: Border.all(
+                color: scheme.outlineVariant.withValues(alpha: 0.7),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        event == null
-                            ? '目前無當前活動'
-                            : currentEventTitle(event!, dayIndex),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w900),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        visibilityText,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w700,
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
+              child: Row(
+                children: [
+                  Icon(Icons.location_on_outlined, color: scheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          eventTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w900),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (switchTargets.length > 1)
-                  PopupMenuButton<CurrentEventTarget>(
-                    tooltip: '切換當前活動',
-                    icon: const Icon(Icons.swap_horiz),
-                    onSelected: onTargetChanged,
-                    itemBuilder: (context) => [
-                      for (final item in switchTargets)
-                        PopupMenuItem(
-                          value: CurrentEventTarget(
-                            eventId: item.event.id,
-                            dayIndex: item.dayIndex,
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                _sameTarget(item, selectedTarget)
-                                    ? Icons.radio_button_checked
-                                    : Icons.radio_button_unchecked,
-                                size: 18,
+                        const SizedBox(height: 1),
+                        Text(
+                          '$countText · $filterLabel · D$dayIndex',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w700,
                               ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  '${item.title} · ${DateFormat('MM/dd E', 'zh_TW').format(item.date)}',
-                                  overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (switchTargets.length > 1)
+                    _HeaderIconMenu<CurrentEventTarget>(
+                      tooltip: '切換當前活動',
+                      icon: Icons.swap_horiz,
+                      onSelected: onTargetChanged,
+                      itemBuilder: (context) => [
+                        for (final item in switchTargets)
+                          PopupMenuItem(
+                            value: CurrentEventTarget(
+                              eventId: item.event.id,
+                              dayIndex: item.dayIndex,
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _sameTarget(item, selectedTarget)
+                                      ? Icons.radio_button_checked
+                                      : Icons.radio_button_unchecked,
+                                  size: 18,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    '${item.title} · ${DateFormat('MM/dd E', 'zh_TW').format(item.date)}',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
+                      ],
+                    ),
+                  if (onRefresh != null)
+                    IconButton(
+                      tooltip: '重新整理',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: onRefresh,
+                      icon: const Icon(Icons.refresh),
+                    ),
+                  _HeaderIconMenu<LocationFilter>(
+                    tooltip: '篩選',
+                    icon: Icons.tune_outlined,
+                    initialValue: filter,
+                    onSelected: onFilterChanged,
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: LocationFilter.all,
+                        child: Text('全部'),
+                      ),
+                      PopupMenuItem(
+                        value: LocationFilter.followed,
+                        child: Text('僅顯示關注'),
+                      ),
+                      PopupMenuItem(
+                        value: LocationFilter.circle,
+                        child: Text('僅顯示小圈圈'),
+                      ),
                     ],
                   ),
-                if (onRefresh != null)
-                  IconButton(
-                    tooltip: '重新整理',
-                    onPressed: onRefresh,
-                    icon: const Icon(Icons.refresh),
-                  ),
-                PopupMenuButton<LocationFilter>(
-                  tooltip: '篩選',
-                  initialValue: filter,
-                  onSelected: onFilterChanged,
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: LocationFilter.all, child: Text('全部')),
-                    PopupMenuItem(
-                      value: LocationFilter.followed,
-                      child: Text('僅顯示關注'),
-                    ),
-                    PopupMenuItem(
-                      value: LocationFilter.circle,
-                      child: Text('僅顯示小圈圈'),
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _MapHeaderSignal(
-                    icon: Icons.people_alt_outlined,
-                    label: '現場同好',
-                    value: '$visibleCount',
-                    color: scheme.primary,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _MapHeaderSignal(
-                    icon: Icons.tune_outlined,
-                    label: '顯示',
-                    value: filterLabel,
-                    color: scheme.tertiary,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _MapHeaderSignal(
-                    icon: Icons.calendar_today_outlined,
-                    label: '活動日',
-                    value: 'D$dayIndex',
-                    color: scheme.secondary,
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -2518,66 +2509,34 @@ class _EventMapHeader extends StatelessWidget {
   }
 }
 
-class _MapHeaderSignal extends StatelessWidget {
-  const _MapHeaderSignal({
+class _HeaderIconMenu<T> extends StatelessWidget {
+  const _HeaderIconMenu({
+    required this.tooltip,
     required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
+    required this.itemBuilder,
+    required this.onSelected,
+    this.initialValue,
   });
 
+  final String tooltip;
   final IconData icon;
-  final String label;
-  final String value;
-  final Color color;
+  final T? initialValue;
+  final PopupMenuItemBuilder<T> itemBuilder;
+  final PopupMenuItemSelected<T> onSelected;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(CosUi.radiusMd),
-        border: Border.all(color: color.withValues(alpha: 0.18)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(width: 7),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+    return PopupMenuButton<T>(
+      tooltip: tooltip,
+      initialValue: initialValue,
+      icon: Icon(icon),
+      onSelected: onSelected,
+      itemBuilder: itemBuilder,
     );
   }
 }
 
-class _MapActionDock extends StatelessWidget {
+class _MapActionDock extends StatefulWidget {
   const _MapActionDock({
     required this.circleItems,
     required this.visibleCount,
@@ -2603,12 +2562,19 @@ class _MapActionDock extends StatelessWidget {
   final VoidCallback? onStealthMode;
 
   @override
+  State<_MapActionDock> createState() => _MapActionDockState();
+}
+
+class _MapActionDockState extends State<_MapActionDock> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final meetupLabel = activeMeetup == null
+    final meetupLabel = widget.activeMeetup == null
         ? '尚未設定'
-        : activeMeetup!.circleName;
-    final sharingLocation = mySharedLocation;
+        : widget.activeMeetup!.circleName;
+    final sharingLocation = widget.mySharedLocation;
     final sharingLabel = sharingLocation == null
         ? '未分享'
         : _shareVisibilityLabel(sharingLocation.visibility);
@@ -2621,169 +2587,270 @@ class _MapActionDock extends StatelessWidget {
     return CosReveal(
       delay: const Duration(milliseconds: 110),
       offset: const Offset(0, 18),
-      child: CosCard(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CosIconBubble(
-                  icon: Icons.radar_outlined,
-                  color: scheme.secondary,
-                  size: 36,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '現場雷達',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w900),
+      child: SafeArea(
+        top: false,
+        child: CosCard(
+          padding: const EdgeInsets.all(8),
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.bottomCenter,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: _expanded
+                    ? (MediaQuery.sizeOf(context).height * 0.42).clamp(
+                        220.0,
+                        360.0,
+                      )
+                    : 64,
+              ),
+              child: SingleChildScrollView(
+                physics: _expanded
+                    ? const BouncingScrollPhysics()
+                    : const NeverScrollableScrollPhysics(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _MapActionDockHeader(
+                      sharingLocation: sharingLocation,
+                      sharingLabel: sharingLabel,
+                      sharingSubtitle: sharingSubtitle,
+                      visibleCount: widget.visibleCount,
+                      totalCount: widget.totalCount,
+                      expanded: _expanded,
+                      isSharing: widget.isSharing,
+                      onPrimaryAction: sharingLocation == null
+                          ? widget.onShareLocation
+                          : widget.onStopSharing,
+                      onExpandedChanged: (value) =>
+                          setState(() => _expanded = value),
+                    ),
+                    if (_expanded) ...[
+                      const SizedBox(height: 12),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final compact = constraints.maxWidth < 380;
+                          final metricTiles = [
+                            CosMetricTile(
+                              icon: Icons.location_on_outlined,
+                              label: '現場同好',
+                              value:
+                                  '${widget.visibleCount} / ${widget.totalCount}',
+                              color: scheme.primary,
+                            ),
+                            CosMetricTile(
+                              icon: Icons.flag_outlined,
+                              label: '集合點',
+                              value: meetupLabel,
+                              color: scheme.secondary,
+                            ),
+                            CosMetricTile(
+                              icon: Icons.privacy_tip_outlined,
+                              label: '位置可見',
+                              value: sharingLabel,
+                              color: scheme.tertiary,
+                            ),
+                          ];
+                          final actionButtons = [
+                            FilledButton.icon(
+                              onPressed: widget.onMeetup,
+                              icon: const Icon(Icons.flag_outlined),
+                              label: const Text('集合點'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: widget.onShareLocation,
+                              icon: widget.isSharing
+                                  ? CosLoadingPulse(
+                                      color: scheme.primary,
+                                      size: 20,
+                                    )
+                                  : const Icon(Icons.share_location),
+                              label: Text(widget.isSharing ? '定位中' : '分享位置'),
+                            ),
+                            if (sharingLocation != null)
+                              TextButton.icon(
+                                onPressed: widget.onStopSharing,
+                                icon: const Icon(Icons.visibility_off_outlined),
+                                label: const Text('停止分享'),
+                              ),
+                            TextButton.icon(
+                              onPressed: widget.onStealthMode,
+                              icon: const Icon(Icons.shield_outlined),
+                              label: const Text('緊急隱身'),
+                            ),
+                          ];
+
+                          if (compact) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                SizedBox(
+                                  height: 72,
+                                  child: ListView.separated(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: metricTiles.length,
+                                    separatorBuilder: (_, _) =>
+                                        const SizedBox(width: 8),
+                                    itemBuilder: (context, index) => SizedBox(
+                                      width: 132,
+                                      child: metricTiles[index],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: actionButtons,
+                                ),
+                              ],
+                            );
+                          }
+
+                          return Column(
+                            children: [
+                              Row(
+                                children: [
+                                  for (
+                                    var index = 0;
+                                    index < metricTiles.length;
+                                    index++
+                                  ) ...[
+                                    if (index > 0) const SizedBox(width: 8),
+                                    Expanded(child: metricTiles[index]),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  for (
+                                    var index = 0;
+                                    index < actionButtons.length;
+                                    index++
+                                  ) ...[
+                                    if (index > 0) const SizedBox(width: 10),
+                                    Expanded(child: actionButtons[index]),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          );
+                        },
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 8),
                       Text(
-                        sharingSubtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        '長按地圖可先放置集合點草稿，再通知小圈圈。',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
-                  ),
-                ),
-                CosBadge(
-                  label: sharingLabel,
-                  icon: sharingLocation == null
-                      ? Icons.visibility_off_outlined
-                      : Icons.verified_user_outlined,
-                  color: scheme.tertiary,
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final compact = constraints.maxWidth < 380;
-                final metricTiles = [
-                  CosMetricTile(
-                    icon: Icons.location_on_outlined,
-                    label: '現場同好',
-                    value: '$visibleCount / $totalCount',
-                    color: scheme.primary,
-                  ),
-                  CosMetricTile(
-                    icon: Icons.flag_outlined,
-                    label: '集合點',
-                    value: meetupLabel,
-                    color: scheme.secondary,
-                  ),
-                  CosMetricTile(
-                    icon: Icons.privacy_tip_outlined,
-                    label: '位置可見',
-                    value: sharingLabel,
-                    color: scheme.tertiary,
-                  ),
-                ];
-                final actionButtons = [
-                  FilledButton.icon(
-                    onPressed: onMeetup,
-                    icon: const Icon(Icons.flag_outlined),
-                    label: const Text('集合點'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: onShareLocation,
-                    icon: isSharing
-                        ? CosLoadingPulse(color: scheme.primary, size: 20)
-                        : const Icon(Icons.share_location),
-                    label: Text(isSharing ? '定位中' : '分享位置'),
-                  ),
-                  if (sharingLocation != null)
-                    TextButton.icon(
-                      onPressed: onStopSharing,
-                      icon: const Icon(Icons.visibility_off_outlined),
-                      label: const Text('停止分享'),
-                    ),
-                  TextButton.icon(
-                    onPressed: onStealthMode,
-                    icon: const Icon(Icons.shield_outlined),
-                    label: const Text('緊急隱身'),
-                  ),
-                ];
-
-                if (compact) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (
-                        var index = 0;
-                        index < metricTiles.length;
-                        index++
-                      ) ...[
-                        if (index > 0) const SizedBox(height: 8),
-                        metricTiles[index],
-                      ],
-                      const SizedBox(height: 12),
-                      for (
-                        var index = 0;
-                        index < actionButtons.length;
-                        index++
-                      ) ...[
-                        if (index > 0) const SizedBox(height: 8),
-                        actionButtons[index],
-                      ],
-                    ],
-                  );
-                }
-
-                return Column(
-                  children: [
-                    Row(
-                      children: [
-                        for (
-                          var index = 0;
-                          index < metricTiles.length;
-                          index++
-                        ) ...[
-                          if (index > 0) const SizedBox(width: 8),
-                          Expanded(child: metricTiles[index]),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        for (
-                          var index = 0;
-                          index < actionButtons.length;
-                          index++
-                        ) ...[
-                          if (index > 0) const SizedBox(width: 10),
-                          Expanded(child: actionButtons[index]),
-                        ],
-                      ],
-                    ),
                   ],
-                );
-              },
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '長按地圖可先放置集合點草稿，再通知小圈圈。',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _MapActionDockHeader extends StatelessWidget {
+  const _MapActionDockHeader({
+    required this.sharingLocation,
+    required this.sharingLabel,
+    required this.sharingSubtitle,
+    required this.visibleCount,
+    required this.totalCount,
+    required this.expanded,
+    required this.isSharing,
+    required this.onPrimaryAction,
+    required this.onExpandedChanged,
+  });
+
+  final SharedLocation? sharingLocation;
+  final String sharingLabel;
+  final String sharingSubtitle;
+  final int visibleCount;
+  final int totalCount;
+  final bool expanded;
+  final bool isSharing;
+  final VoidCallback? onPrimaryAction;
+  final ValueChanged<bool> onExpandedChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        CosIconBubble(
+          icon: Icons.radar_outlined,
+          color: scheme.secondary,
+          size: 30,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(CosUi.radiusSm),
+            onTap: () => onExpandedChanged(!expanded),
+            child: Padding(
+              padding: EdgeInsets.zero,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '現場雷達',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Text(
+                    expanded
+                        ? sharingSubtitle
+                        : '$visibleCount / $totalCount 位同好 · $sharingLabel',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton.filledTonal(
+          tooltip: sharingLocation == null ? '分享位置' : '停止分享',
+          visualDensity: VisualDensity.compact,
+          constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+          onPressed: onPrimaryAction,
+          icon: isSharing
+              ? CosLoadingPulse(color: scheme.primary, size: 20)
+              : Icon(
+                  sharingLocation == null
+                      ? Icons.share_location
+                      : Icons.visibility_off_outlined,
+                ),
+        ),
+        IconButton(
+          tooltip: expanded ? '收合現場雷達' : '展開現場雷達',
+          visualDensity: VisualDensity.compact,
+          constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+          onPressed: () => onExpandedChanged(!expanded),
+          icon: AnimatedRotation(
+            turns: expanded ? 0.5 : 0,
+            duration: const Duration(milliseconds: 180),
+            child: const Icon(Icons.keyboard_arrow_up),
+          ),
+        ),
+      ],
     );
   }
 }

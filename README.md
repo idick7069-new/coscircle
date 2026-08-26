@@ -40,6 +40,10 @@ flutter run --dart-define=DEMO_MODE=true
 
 Google Map 需要在 Android / iOS 原生設定 API key 後才能正常顯示地圖。
 
+Firebase Cloud Messaging 已連到 Firebase project `coscircle`，Android package
+name 為 `com.coscircle.coscircle`。登入後 App 會自動取得 FCM token 並註冊到
+`POST /api/me/push-tokens`。
+
 正式版建置時必須指定 HTTPS API：
 
 ```sh
@@ -113,4 +117,31 @@ cd backend
 npm run scrape:events -- --import
 ```
 
-Web Admin 入口為 `/admin`，可管理活動、投稿審核、使用者停權/復權、admin 權限與爬蟲同步狀態。Android 即時通知的資料層支架已提供 `POST /api/me/push-tokens`，正式 closed beta 前仍需接上 Firebase credentials 與認親推播發送驗證。
+Web Admin 是獨立 Flutter Web 入口，不依附使用者 App bundle。正式建議：
+
+- `https://admin.coscircle.xxx`：管理後台。
+- `https://coscircle.xxx/app/`：使用者 Web App。
+
+尚未設定 admin DNS 的測試環境可先用 `http://EXTERNAL_IP/admin/`。後台可管理活動、投稿審核、使用者停權/復權、admin 權限與爬蟲同步狀態。Android 即時通知的資料層支架已提供 `POST /api/me/push-tokens`，正式 closed beta 前仍需接上 Firebase credentials 與認親推播發送驗證。
+
+本機開發可直接跑獨立 admin target：
+
+```sh
+flutter run -d chrome -t lib/admin_main.dart \
+  --dart-define=API_BASE_URL=http://127.0.0.1:8080/api
+```
+
+認親推播由後端 Firebase Admin SDK 發送。Production 請設定：
+
+```env
+FIREBASE_PROJECT_ID=coscircle
+FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
+```
+
+本機後端測試也可使用 Application Default Credentials：
+
+```sh
+gcloud auth application-default login
+```
+
+不要把 service account JSON commit 到 git。

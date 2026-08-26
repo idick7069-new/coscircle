@@ -9,13 +9,14 @@ final apiClientProvider = Provider<ApiClient>((ref) {
 });
 
 const _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
+const _allowInsecureApi = bool.fromEnvironment('ALLOW_INSECURE_API');
 
 String _validatedConfiguredBaseUrl() {
   if (!kReleaseMode) return _configuredBaseUrl;
   if (_configuredBaseUrl.isEmpty) {
     throw StateError('Release builds require API_BASE_URL.');
   }
-  if (!Uri.parse(_configuredBaseUrl).isScheme('https')) {
+  if (!_allowInsecureApi && !Uri.parse(_configuredBaseUrl).isScheme('https')) {
     throw StateError('Release API_BASE_URL must use HTTPS.');
   }
   return _configuredBaseUrl;
@@ -77,7 +78,7 @@ class ApiClient {
 }
 
 String _defaultBaseUrl() {
-  const devLanBaseUrl = 'http://192.168.5.198:8080/api';
+  const devLanBaseUrl = 'http://34.187.168.222/api';
   if (kIsWeb) return 'http://127.0.0.1:8080/api';
   if (Platform.isAndroid || Platform.isIOS) return devLanBaseUrl;
   return 'http://127.0.0.1:8080/api';

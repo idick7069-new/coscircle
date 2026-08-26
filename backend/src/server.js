@@ -8,6 +8,7 @@ import cors from 'cors';
 import express from 'express';
 import { importEvents } from '../scripts/scrape-events.js';
 import { createPool } from './db.js';
+import { sendRecognitionPush } from './push-service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadDir = path.resolve(__dirname, '..', 'uploads');
@@ -2126,7 +2127,13 @@ app.post('/api/events/:eventId/recognitions', async (req, res, next) => {
        VALUES (?, ?, ?, ?, 'pending', DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 5 MINUTE))`,
       [req.params.eventId, dayIndex, req.userId, targetUserId],
     );
-    res.status(201).json({ id: result.insertId });
+    const pushResult = await notifyRecognitionRequest({
+      requestId: result.insertId,
+      eventId: req.params.eventId,
+      requesterUserId: req.userId,
+      targetUserId,
+    });
+    res.status(201).json({ id: result.insertId, push: pushResult });
   } catch (error) {
     next(error);
   }
@@ -2657,6 +2664,55 @@ async function recognitionCooldownState({
     return { ok: false, error: 'recognition_hourly_limit' };
   }
   return { ok: true };
+}
+
+async function notifyRecognitionRequest({
+  requestId,
+  eventId,
+  requesterUserId,
+  targetUserId,
+}) {
+  try {
+    const [[requester]] = await pool.execute(
+      `SELECT nickname
+         FROM users
+        WHERE id = ?
+        LIMIT 1`,
+      [requesterUserId],
+    );
+    const [tokenRows] = await pool.execute(
+      `SELECT token
+         FROM device_push_tokens
+        WHERE user_id = ?`,
+      [targetUserId],
+    );
+    const tokens = tokenRows.map((row) => row.token);
+    const result = await sendRecognitionPush({
+      tokens,
+      requestId,
+      eventId,
+      requesterName: requester?.nickname,
+    });
+    if (result.invalidTokens.length > 0) {
+      const placeholders = result.invalidTokens.map(() => '?').join(',');
+      await pool.execute(
+        `DELETE FROM device_push_tokens
+          WHERE token IN (${placeholders})`,
+        result.invalidTokens,
+      );
+    }
+    return {
+      sent: result.successCount,
+      failed: result.failureCount,
+    };
+  } catch (error) {
+    console.warn('[push] recognition notification failed', {
+      requestId,
+      targetUserId,
+      message: error?.message,
+    });
+    return { sent: 0, failed: 0, error: 'push_send_failed' };
+  }
 }
 
 async function resolveEventDayIndex(eventId, userId, requestedDayIndex = null) {

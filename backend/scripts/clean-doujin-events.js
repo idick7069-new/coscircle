@@ -21,6 +21,7 @@ export async function cleanDoujinEvents(pool, { apply = false } = {}) {
             source_key AS sourceKey,
             source_type AS sourceType,
             source_name AS sourceName,
+            source_url AS sourceUrl,
             name,
             DATE_FORMAT(start_date, '%Y-%m-%d') AS startDate
        FROM events
@@ -34,7 +35,7 @@ export async function cleanDoujinEvents(pool, { apply = false } = {}) {
   for (const row of rows) {
     const cleanName = cleanDoujinEventName(row.name);
     if (!cleanName) continue;
-    const cleanSourceKey = doujinSourceKey(cleanName, row.startDate);
+    const cleanSourceKey = doujinSourceKey(cleanName, row.startDate, row.sourceUrl);
     const item = {
       id: Number(row.id),
       sourceKey: row.sourceKey,
@@ -129,8 +130,8 @@ async function moveEventRelations(connection, fromEventId, toEventId) {
 
   await connection.execute(
     `INSERT IGNORE INTO shared_locations
-      (event_id, user_id, latitude, longitude, shared_at)
-     SELECT ?, user_id, latitude, longitude, shared_at
+      (event_id, day_index, user_id, latitude, longitude, visibility, shared_at, expires_at)
+     SELECT ?, day_index, user_id, latitude, longitude, visibility, shared_at, expires_at
        FROM shared_locations
       WHERE event_id = ?`,
     [toEventId, fromEventId],

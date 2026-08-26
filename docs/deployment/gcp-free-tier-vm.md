@@ -21,7 +21,8 @@ Sources:
 - MySQL: installed on the same VM and bound to `127.0.0.1`.
 - API: Node.js 22 service managed by systemd.
 - Web: static official website at `/`, Flutter web app at `/app/`.
-- Nginx: serves `/`, serves `/app/`, and proxies `/api/` to `127.0.0.1:8080`.
+- Admin: independent Flutter web admin at `admin.coscircle.xxx`; IP/test fallback at `/admin/`.
+- Nginx: serves `/`, `/app/`, `/admin/`, admin subdomain, and proxies `/api/` to `127.0.0.1:8080`.
 - Uploads: stored in `/var/lib/coscircle/uploads`.
 
 This is the cheapest practical production setup, but it is not highly
@@ -84,7 +85,7 @@ deploy/gcp/bootstrap-remote.sh
 If using a domain, set:
 
 ```text
-CORS_ORIGINS=https://your-domain.example.com
+CORS_ORIGINS=https://coscircle.xxx,https://admin.coscircle.xxx
 ```
 
 ## 3. Deploy API and web
@@ -95,21 +96,37 @@ For initial HTTP deployment by external IP:
 VM_NAME=coscircle-free-vm \
 ZONE=us-west1-b \
 API_BASE_URL=http://EXTERNAL_IP/api \
+ALLOW_INSECURE_API=true \
 deploy/gcp/deploy-vm.sh
 ```
+
+After this deployment:
+
+- Official site: `http://EXTERNAL_IP/`
+- User Web App: `http://EXTERNAL_IP/app/`
+- Admin fallback for testing: `http://EXTERNAL_IP/admin/`
 
 For domain/HTTPS deployment:
 
 ```sh
 VM_NAME=coscircle-free-vm \
 ZONE=us-west1-b \
-API_BASE_URL=https://your-domain.example.com/api \
+WEB_SERVER_NAME=coscircle.xxx \
+ADMIN_SERVER_NAME=admin.coscircle.xxx \
+APP_API_BASE_URL=https://coscircle.xxx/api \
+ADMIN_API_BASE_URL=https://admin.coscircle.xxx/api \
+API_BASE_URL=https://coscircle.xxx/api \
 deploy/gcp/deploy-vm.sh
 ```
 
-The deploy script builds Flutter web locally, uploads the API and web release,
-imports `schema.sql` when the database is empty, restarts systemd, reloads
-Nginx, and checks `/api/health`.
+After DNS is configured:
+
+- Admin: `https://admin.coscircle.xxx`
+- User Web App: `https://coscircle.xxx/app/`
+
+The deploy script builds the user web app and the independent admin web entry
+locally, uploads the API and web release, imports `schema.sql` when the
+database is empty, restarts systemd, reloads Nginx, and checks `/api/health`.
 
 For an existing database that predates other features, apply the non-idempotent
 migrations manually in the order listed in `production-checklist.md` before
@@ -138,11 +155,15 @@ sudo certbot --nginx -d your-domain.example.com
 After HTTPS is active, redeploy web with:
 
 ```sh
-API_BASE_URL=https://your-domain.example.com/api
+WEB_SERVER_NAME=coscircle.xxx \
+ADMIN_SERVER_NAME=admin.coscircle.xxx \
+APP_API_BASE_URL=https://coscircle.xxx/api \
+ADMIN_API_BASE_URL=https://admin.coscircle.xxx/api \
+API_BASE_URL=https://coscircle.xxx/api
 ```
 
-Also update `/etc/coscircle/api.env` so `CORS_ORIGINS` uses the HTTPS origin,
-then restart the API:
+Also update `/etc/coscircle/api.env` so `CORS_ORIGINS` includes both HTTPS
+origins, then restart the API:
 
 ```sh
 sudo systemctl restart coscircle-api

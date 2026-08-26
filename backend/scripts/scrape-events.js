@@ -58,7 +58,7 @@ export async function scrapeEvents() {
     );
 
     events.push({
-      sourceKey: doujinSourceKey(name, startDate),
+      sourceKey: doujinSourceKey(name, startDate, eventUrl),
       sourceType: 1,
       sourceName: '同人誌中心',
       sourceUrl: eventUrl,
@@ -81,6 +81,10 @@ export async function scrapeEvents() {
 export async function importEvents(pool = createPool()) {
   const events = await scrapeEvents();
   for (const event of events) {
+    if (await updateExistingDoujinEventByUrl(pool, event)) {
+      continue;
+    }
+
     await pool.execute(
       `INSERT INTO events
         (source_key, source_type, source_name, source_url, image_url, category, name, start_date, end_date, venue, fee, organizer, description, status)
@@ -119,6 +123,62 @@ export async function importEvents(pool = createPool()) {
   }
   await rejectCancelledDoujinEventFamilies(pool);
   return events;
+}
+
+async function updateExistingDoujinEventByUrl(pool, event) {
+  if (!event.sourceUrl) return false;
+
+  const [rows] = await pool.execute(
+    `SELECT id
+       FROM events
+      WHERE source_url = ?
+        AND (source_key LIKE 'doujin-%'
+          OR source_type = 1
+          OR source_name = '同人誌中心')
+      ORDER BY (source_key = ?) DESC, updated_at DESC, id DESC
+      LIMIT 1`,
+    [event.sourceUrl, event.sourceKey],
+  );
+  const existingId = rows[0]?.id;
+  if (!existingId) return false;
+
+  await pool.execute(
+    `UPDATE events
+        SET source_key = ?,
+            source_type = ?,
+            source_name = ?,
+            source_url = ?,
+            image_url = ?,
+            category = ?,
+            name = ?,
+            start_date = ?,
+            end_date = ?,
+            venue = ?,
+            fee = ?,
+            organizer = ?,
+            description = ?,
+            status = ?
+      WHERE id = ?`,
+    [
+      event.sourceKey,
+      event.sourceType,
+      event.sourceName,
+      event.sourceUrl,
+      event.imageUrl,
+      event.category,
+      event.name,
+      event.startDate,
+      event.endDate,
+      event.venue,
+      event.fee,
+      event.organizer,
+      event.description,
+      event.status,
+      existingId,
+    ],
+  );
+
+  return true;
 }
 
 if (isCliEntry()) {
@@ -162,8 +222,24 @@ export function cleanDoujinEventName(value) {
   return name.trim();
 }
 
-export function doujinSourceKey(name, startDate) {
+export function doujinSourceKey(name, startDate, sourceUrl = '') {
+  const sourceEventId = doujinEventIdFromUrl(sourceUrl);
+  if (sourceEventId) return `doujin-${sourceEventId}`;
+
   return `doujin-${slugify(cleanDoujinEventName(name))}-${startDate}`;
+}
+
+export function doujinEventIdFromUrl(sourceUrl) {
+  if (!sourceUrl) return '';
+
+  try {
+    const url = new URL(sourceUrl, sourceOrigin);
+    const match = url.pathname.match(/\/events\/info\/(\d+)(?:\/)?$/);
+    return match?.[1] ?? '';
+  } catch {
+    const match = String(sourceUrl).match(/\/events\/info\/(\d+)(?:[/?#]|$)/);
+    return match?.[1] ?? '';
+  }
 }
 
 export function isDoujinEventCancelled(name) {

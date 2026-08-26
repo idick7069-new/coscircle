@@ -11,6 +11,7 @@ import '../../../core/repositories/auth_repository.dart';
 import '../../../core/repositories/profile_repository.dart';
 import '../../../core/repositories/submission_repository.dart';
 import '../../../core/services/oobe_service.dart';
+import '../../../core/services/push_notification_service.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/cos_ui.dart';
@@ -139,6 +140,7 @@ class SettingsPage extends ConsumerWidget {
               title: '登出',
               subtitle: '離開目前帳號',
               onTap: () async {
+                await ref.read(pushNotificationServiceProvider).dispose();
                 await ref.read(authRepositoryProvider).logout();
                 if (context.mounted) context.go('/login');
               },

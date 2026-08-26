@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "659745646640",
+    "project_id": "coscircle",
+    "storage_bucket": "coscircle.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:659745646640:android:56c84f99794238de8965f5",
+        "android_client_info": {
+          "package_name": "com.coscircle.coscircle"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCVzT0By8tZ30oJhZs46pd_Boghl6SBseA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

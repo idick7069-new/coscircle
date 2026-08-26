@@ -11,6 +11,8 @@ privacy, Android release safety, backend security, and repeatable validation.
 - Android signing keystore in `android/key.properties`.
 - Google Maps Android API key passed with `-PGOOGLE_MAPS_API_KEY=...`.
 - Browser origins allowed to call the API in `CORS_ORIGINS`.
+- Firebase project `coscircle`, Android app `com.coscircle.coscircle`, and
+  backend Firebase Admin credentials.
 
 Do not use the development LAN API, sample MySQL password, or a debug APK for
 external testers.
@@ -62,7 +64,7 @@ Required production settings:
 ```env
 NODE_ENV=production
 PORT=8080
-CORS_ORIGINS=https://your-admin.example.com,https://your-web.example.com
+CORS_ORIGINS=https://admin.coscircle.xxx,https://coscircle.xxx
 MYSQL_HOST=...
 MYSQL_PORT=3306
 MYSQL_USER=coscircle_app
@@ -70,6 +72,8 @@ MYSQL_PASSWORD=...
 MYSQL_DATABASE=coscircle
 EVENT_SCRAPER_ENABLED=true
 EVENT_SCRAPER_TIME_ZONE=Asia/Taipei
+FIREBASE_PROJECT_ID=coscircle
+FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
 ```
 
 Production behavior to verify:
@@ -80,6 +84,8 @@ Production behavior to verify:
   is backed by a volume/object storage before users upload images.
 - Logs are access-controlled because auth and operational errors may include
   account identifiers.
+- `FIREBASE_SERVICE_ACCOUNT_JSON` is stored in Secret Manager or the hosting
+  platform secret store, never in git.
 - MySQL backups are scheduled before the first public release.
 
 Health check:
@@ -104,6 +110,10 @@ flutter build apk --release \
   -PGOOGLE_MAPS_API_KEY=your_google_maps_key
 ```
 
+HTTP release builds are allowed only for internal IP testing when explicitly
+passing `--dart-define=ALLOW_INSECURE_API=true`. Do not use that flag for
+closed beta or production.
+
 Safety checks:
 
 - Building release without `-PGOOGLE_MAPS_API_KEY` must fail.
@@ -112,9 +122,8 @@ Safety checks:
 - The installed APK can register, log in, list events, open the current-event
   map, share location with an expiry, stop sharing, block a user, and use
   emergency stealth mode.
-- Android push tokens can be registered through `POST /api/me/push-tokens`;
-  real FCM delivery credentials and recognition notification dispatch must be
-  verified before inviting closed beta testers.
+- Android push tokens can be registered through `POST /api/me/push-tokens`, and
+  recognition notification dispatch works through Firebase Cloud Messaging.
 
 ## 5. Pre-release verification
 
