@@ -1,21 +1,162 @@
 import 'dotenv/config';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import { execFile } from 'child_process';
+import { accessSync } from 'fs';
 import { pathToFileURL } from 'url';
+import { promisify } from 'util';
 import { createPool } from '../src/db.js';
 
 const sourceUrl = 'https://www.doujin.com.tw/events/alist';
+const allEventsSourceUrl = 'https://www.doujin.com.tw/events/alist/all';
 const sourceOrigin = new URL(sourceUrl).origin;
+const cosmosOenEventUrl =
+  'https://cosmos.oen.tw/events/3DGSdlOZgTrm1idEZRYTbUp2f4y';
+const acostaTaiwanUrl = 'https://acosta.jp/area/over-sea/taiwan/';
+const acostaOrigin = new URL(acostaTaiwanUrl).origin;
+const execFileAsync = promisify(execFile);
+const browserFetchEnabled = process.env.EVENT_SCRAPER_BROWSER_FALLBACK === 'true';
+const defaultBrowserPaths = [
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/google-chrome',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser',
+];
 
-export async function scrapeEvents() {
-  const { data } = await axios.get(sourceUrl, {
+export async function fetchDoujinEventsHtml(url = allEventsSourceUrl) {
+  const { data } = await axios.get(url, {
     timeout: 20000,
     headers: {
-      'user-agent': 'CosCircle event importer (+https://example.local)',
+      'user-agent': 'CosCircleBot/1.0 (+https://coscircle.app)',
+      accept:
+        'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'accept-language': 'zh-TW,zh;q=0.9,en;q=0.6',
     },
   });
 
-  const $ = cheerio.load(data);
+  return data;
+}
+
+export async function scrapeEvents(url = allEventsSourceUrl) {
+  const doujinEvents = await scrapeDoujinEvents(url);
+  if (url !== allEventsSourceUrl) return doujinEvents;
+
+  const supplementalEvents = await scrapeSupplementalEvents();
+  return dedupeEventsByFingerprint([...doujinEvents, ...supplementalEvents]);
+}
+
+export async function scrapeDoujinEvents(url = allEventsSourceUrl) {
+  const html = await fetchDoujinEventsHtmlWithFallback(url);
+  return parseAndRequireEvents(html);
+}
+
+export async function scrapeSupplementalEvents() {
+  const results = await Promise.allSettled([
+    scrapeCosmosOenEvents(),
+    scrapeAcostaTaiwanEvents(),
+  ]);
+  const events = [];
+
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      events.push(...result.value);
+    } else {
+      console.warn('[event-scraper] supplemental source failed', summarizeHttpError(result.reason));
+    }
+  }
+
+  return events;
+}
+
+export async function fetchDoujinEventsHtmlWithFallback(url = allEventsSourceUrl) {
+  try {
+    const html = await fetchDoujinEventsHtml(url);
+    if (!isCloudflareChallengeHtml(html)) return html;
+    if (!browserFetchEnabled) throw new Error('doujin_source_cloudflare_challenge');
+    console.warn('[event-scraper] axios returned a Cloudflare challenge; trying browser fetch');
+  } catch (error) {
+    if (!browserFetchEnabled || !shouldTryBrowserFetch(error)) throw error;
+    console.warn(
+      `[event-scraper] axios failed (${summarizeHttpError(error)}); trying browser fetch`,
+    );
+  }
+
+  return fetchDoujinEventsHtmlWithBrowser(url);
+}
+
+export async function fetchDoujinEventsHtmlWithBrowser(
+  url = allEventsSourceUrl,
+  {
+    executablePath = process.env.EVENT_SCRAPER_CHROME_PATH,
+    timeoutMs = Number(process.env.EVENT_SCRAPER_BROWSER_TIMEOUT_MS ?? 45000),
+  } = {},
+) {
+  const chromePath = executablePath || findExistingBrowserPath();
+  if (!chromePath) {
+    throw new Error('EVENT_SCRAPER_CHROME_PATH is not set and no Chrome/Chromium binary was found.');
+  }
+
+  const { stdout } = await execFileAsync(
+    chromePath,
+    [
+      '--headless=new',
+      '--disable-gpu',
+      '--disable-dev-shm-usage',
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--no-sandbox',
+      '--window-size=1365,900',
+      '--virtual-time-budget=10000',
+      '--dump-dom',
+      url,
+    ],
+    {
+      timeout: timeoutMs,
+      maxBuffer: 20 * 1024 * 1024,
+      env: {
+        ...process.env,
+        HOME: process.env.EVENT_SCRAPER_BROWSER_HOME ?? '/tmp/coscircle-chrome',
+      },
+    },
+  );
+
+  if (isCloudflareChallengeHtml(stdout)) {
+    throw new Error('browser_fetch_cloudflare_challenge');
+  }
+  return stdout;
+}
+
+export function parseEventsFromHtml(html) {
+  const $ = cheerio.load(html);
+  const structuredEvents = parseEventsFromStructuredData($);
+  const htmlEvents = parseEventsFromVisibleHtml($);
+
+  if (structuredEvents.length === 0) return htmlEvents;
+  if (htmlEvents.length === 0) return structuredEvents;
+
+  return structuredEvents.map((event) => {
+    const htmlEvent =
+      htmlEvents.find((candidate) => candidate.sourceUrl === event.sourceUrl) ??
+      htmlEvents.find((candidate) => candidate.sourceKey === event.sourceKey);
+    if (!htmlEvent) return event;
+
+    return {
+      ...event,
+      category: htmlEvent.category || event.category,
+      fee: htmlEvent.fee || event.fee,
+      description: event.description || htmlEvent.description,
+      organizer: event.organizer || htmlEvent.organizer,
+      venue: event.venue || htmlEvent.venue,
+      imageUrl: event.imageUrl || htmlEvent.imageUrl,
+      status:
+        htmlEvent.status === 'rejected' || event.status === 'rejected'
+          ? 'rejected'
+          : 'approved',
+    };
+  });
+}
+
+function parseEventsFromVisibleHtml($) {
   const events = [];
 
   $('h3').each((_index, element) => {
@@ -78,17 +219,266 @@ export async function scrapeEvents() {
   return events;
 }
 
+function parseEventsFromStructuredData($) {
+  const events = [];
+
+  $('script[type="application/ld+json"]').each((_index, element) => {
+    const text = $(element).contents().text().trim();
+    if (!text) return;
+
+    try {
+      collectStructuredEvents(JSON.parse(text), events);
+    } catch {
+      // Ignore malformed structured data and let visible HTML parsing handle it.
+    }
+  });
+
+  const uniqueEvents = new Map();
+  for (const event of events) {
+    uniqueEvents.set(event.sourceUrl || event.sourceKey, event);
+  }
+
+  return [...uniqueEvents.values()];
+}
+
+function collectStructuredEvents(value, events) {
+  if (Array.isArray(value)) {
+    for (const item of value) collectStructuredEvents(item, events);
+    return;
+  }
+
+  if (!value || typeof value !== 'object') return;
+
+  if (isStructuredDoujinEvent(value)) {
+    const event = structuredEventToCosCircleEvent(value);
+    if (event) events.push(event);
+    return;
+  }
+
+  if (Array.isArray(value['@graph'])) {
+    collectStructuredEvents(value['@graph'], events);
+  }
+
+  collectStructuredEvents(value.mainEntity, events);
+  collectStructuredEvents(value.itemListElement, events);
+  collectStructuredEvents(value.item, events);
+}
+
+function isStructuredDoujinEvent(value) {
+  const type = value['@type'];
+  const types = Array.isArray(type) ? type : [type];
+  return types.some((item) => typeof item === 'string' && item.endsWith('Event'));
+}
+
+function structuredEventToCosCircleEvent(value) {
+  const name = cleanDoujinEventName(textValue(value.name));
+  const startDate = dateValue(value.startDate);
+  if (!name || !startDate) return null;
+
+  const sourceUrl = absoluteUrl(textValue(value.url));
+  const endDate = dateValue(value.endDate) || startDate;
+  const description = textValue(value.description || value.about);
+  const organizer = textValue(value.organizer?.name || value.organizer);
+  const location = value.location && typeof value.location === 'object'
+    ? value.location
+    : {};
+  const venue = textValue(location.name || value.location);
+  const imageUrl = imageValue(value.image);
+  const statusValue = textValue(value.eventStatus);
+  const status =
+    isDoujinEventCancelled(name) || statusValue.endsWith('/EventCancelled')
+      ? 'rejected'
+      : 'approved';
+
+  return {
+    sourceKey: doujinSourceKey(name, startDate, sourceUrl),
+    sourceType: 1,
+    sourceName: '同人誌中心',
+    sourceUrl,
+    imageUrl,
+    category: inferDoujinCategory([value.about, description, name].map(textValue).join(' ')),
+    name,
+    startDate,
+    endDate,
+    venue,
+    fee: '',
+    description,
+    organizer,
+    status,
+  };
+}
+
+async function scrapeCosmosOenEvents() {
+  const html = await fetchPublicHtml(cosmosOenEventUrl);
+  const event = parseCosmosOenEventFromHtml(html, cosmosOenEventUrl);
+  return event ? [event] : [];
+}
+
+export function parseCosmosOenEventFromHtml(html, eventUrl = cosmosOenEventUrl) {
+  const $ = cheerio.load(html);
+  const bodyText = normalize($('body').text());
+  const dateRange = parseCosmosDateRange(bodyText);
+  if (!dateRange) return null;
+
+  const venue = firstMatch(
+    bodyText,
+    /活動地點：\s*(.+?)(?:（|🎟️|售票與票種說明|$)/,
+  ) ?? firstMatch(bodyText, /\(UTC\+8\)\s*(.+?)(?:Copy link|活動資訊|$)/) ?? '';
+  const detailedAddress = firstMatch(bodyText, /（[^）]*?([臺台]北市[^）]+)）/) ?? '';
+  const fee = firstMatch(bodyText, /一般單日票：\s*(NT\$\s*\d+)/) ?? '';
+  const imageUrl = absoluteUrl(
+    $('meta[property="og:image"]').attr('content') ?? '',
+    eventUrl,
+  );
+
+  return {
+    sourceKey: 'cosmos-oen-entry-ticket-2026',
+    sourceType: 4,
+    sourceName: 'COSMOS 創作攝影展',
+    sourceUrl: eventUrl,
+    imageUrl,
+    category: '綜合',
+    name: 'COSMOS 創作攝影展',
+    startDate: dateRange.startDate,
+    endDate: dateRange.endDate,
+    venue: normalize(venue.replace(/國立台灣大學/g, '國立臺灣大學')),
+    detailedAddress,
+    fee,
+    organizer: 'COSMOS 創作攝影展',
+    description: firstMatch(bodyText, /〖COSMOS Cosplay 創作攝影展〗(.+?)🎟️/) ??
+      'COSMOS Cosplay 創作攝影展官方活動與售票說明。',
+    status: 'approved',
+  };
+}
+
+async function scrapeAcostaTaiwanEvents() {
+  const listHtml = await fetchPublicHtml(acostaTaiwanUrl);
+  const eventUrls = acostaTaiwanEventUrlsFromHtml(listHtml);
+  const events = [];
+
+  for (const eventUrl of eventUrls) {
+    try {
+      const eventHtml = await fetchPublicHtml(eventUrl);
+      const event = parseAcostaEventFromHtml(eventHtml, eventUrl);
+      if (event) events.push(event);
+    } catch (error) {
+      console.warn(`[event-scraper] acosta event failed: ${eventUrl} ${summarizeHttpError(error)}`);
+    }
+  }
+
+  return events;
+}
+
+export function acostaTaiwanEventUrlsFromHtml(html) {
+  const $ = cheerio.load(html);
+  const urls = new Set();
+
+  $('a[href]').each((_index, element) => {
+    const href = absoluteUrl($(element).attr('href'), acostaTaiwanUrl);
+    if (!href) return;
+    const url = new URL(href);
+    if (url.origin !== acostaOrigin) return;
+    if (!/^\/event\/(?:taipei|takao|taiwan|kaohsiung|[^/]*taipei|[^/]*takao)/i.test(url.pathname)) {
+      return;
+    }
+    urls.add(url.href);
+  });
+
+  return [...urls];
+}
+
+export function parseAcostaEventFromHtml(html, eventUrl) {
+  const $ = cheerio.load(html);
+  const bodyText = normalize($('body').text());
+  const rawTitle = normalize($('title').text()).replace(/\s+-\s+acosta![\s\S]*$/i, '');
+  const dateRange = parseAcostaTitleDateRange(rawTitle);
+  if (!dateRange) return null;
+
+  const locationName = firstMatch(rawTitle, /acosta![＠@](.+)$/) ?? '';
+  const venueBlock = firstMatch(bodyText, /会場\s+アクセス詳細\s+(.+?)\s+台湾/);
+  const venue = normalize(
+    (venueBlock ?? locationName)
+      .replace(/\s+[【〖][\s\S]*$/, '')
+      .replace(/[【〖][^】〗]+[】〗]/g, ''),
+  );
+  const address = firstMatch(
+    bodyText,
+    /会場\s+アクセス詳細\s+.+?\s+台湾\s*(.+?)\s+チケット情報/,
+  ) ?? '';
+  const timeRange = firstMatch(bodyText, /開催日時\s+\d{4}\s+\d{1,2}\.\d{1,2}\w+\s+(?:\d{1,2}\w+\s+)?(\d{1,2}:\d{2}～\d{1,2}:\d{2})/);
+  const fee = firstMatch(bodyText, /カメラ・一般\s+\d{1,2}:\d{2}~\s+前売り([0-9,]+\s*円)/) ??
+    firstMatch(bodyText, /コスプレ更衣室なし\s+\d{1,2}:\d{2}~\s+前売り([0-9,]+\s*円)/) ??
+    '';
+  const imageUrl = absoluteUrl(
+    $('meta[property="og:image"]').attr('content') ??
+      $('img[src*="taipei"], img[src*="takao"], img[src*="kaohsiung"]').first().attr('src') ??
+      $('img').first().attr('src') ??
+      '',
+    eventUrl,
+  );
+
+  return {
+    sourceKey: `acosta-${new URL(eventUrl).pathname.split('/').filter(Boolean).at(-1)}`,
+    sourceType: 5,
+    sourceName: 'acosta!',
+    sourceUrl: eventUrl,
+    imageUrl,
+    category: '綜合',
+    name: `acosta!@${locationName}`,
+    startDate: dateRange.startDate,
+    endDate: dateRange.endDate,
+    venue,
+    detailedAddress: address,
+    fee,
+    organizer: 'acosta!',
+    description: ['日本大型 Cosplay 活動品牌 acosta! 台灣場。', timeRange ? `活動時間：${timeRange}` : '']
+      .filter(Boolean)
+      .join(' '),
+    status: 'approved',
+  };
+}
+
 export async function importEvents(pool = createPool()) {
-  const events = await scrapeEvents();
+  const doujinEvents = await scrapeDoujinEvents();
+  const supplementalEvents = await scrapeSupplementalEvents();
+  const events = dedupeEventsByFingerprint([...doujinEvents, ...supplementalEvents]);
+  await upsertEvents(pool, doujinEvents, {
+    doujinEvents,
+    rejectMissingDoujin: true,
+  });
+  await upsertEvents(pool, supplementalEvents, {
+    doujinEvents: [],
+    rejectMissingDoujin: false,
+  });
+  return events;
+}
+
+export async function importEventsFromHtml(html, pool = createPool()) {
+  const events = parseAndRequireEvents(html);
+  await upsertEvents(pool, events, {
+    doujinEvents: events,
+    rejectMissingDoujin: true,
+  });
+  return events;
+}
+
+async function upsertEvents(
+  pool,
+  events,
+  { doujinEvents = events, rejectMissingDoujin = true } = {},
+) {
   for (const event of events) {
     if (await updateExistingDoujinEventByUrl(pool, event)) {
+      continue;
+    }
+    if (await updateExistingEventByFingerprint(pool, event)) {
       continue;
     }
 
     await pool.execute(
       `INSERT INTO events
-        (source_key, source_type, source_name, source_url, image_url, category, name, start_date, end_date, venue, fee, organizer, description, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (source_key, source_type, source_name, source_url, image_url, category, name, start_date, end_date, venue, detailed_address, fee, organizer, description, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
         source_type = VALUES(source_type),
         source_name = VALUES(source_name),
@@ -99,6 +489,7 @@ export async function importEvents(pool = createPool()) {
         start_date = VALUES(start_date),
         end_date = VALUES(end_date),
         venue = VALUES(venue),
+        detailed_address = VALUES(detailed_address),
         fee = VALUES(fee),
         organizer = VALUES(organizer),
         description = VALUES(description),
@@ -114,6 +505,7 @@ export async function importEvents(pool = createPool()) {
         event.startDate,
         event.endDate,
         event.venue,
+        event.detailedAddress ?? '',
         event.fee,
         event.organizer,
         event.description,
@@ -122,7 +514,30 @@ export async function importEvents(pool = createPool()) {
     );
   }
   await rejectCancelledDoujinEventFamilies(pool);
-  return events;
+  if (rejectMissingDoujin) {
+    await rejectMissingDoujinEvents(pool, doujinEvents);
+  }
+}
+
+export async function rejectMissingDoujinEvents(pool, events) {
+  const sourceUrls = events
+    .map((event) => event.sourceUrl)
+    .filter((url) => typeof url === 'string' && url.length > 0);
+  if (sourceUrls.length === 0) return;
+
+  const placeholders = sourceUrls.map(() => '?').join(', ');
+  await pool.execute(
+    `UPDATE events
+        SET status = 'rejected'
+      WHERE (source_key LIKE 'doujin-%'
+          OR source_type = 1
+          OR source_name = '同人誌中心')
+        AND end_date >= CURRENT_DATE()
+        AND source_url IS NOT NULL
+        AND source_url <> ''
+        AND source_url NOT IN (${placeholders})`,
+    sourceUrls,
+  );
 }
 
 async function updateExistingDoujinEventByUrl(pool, event) {
@@ -154,6 +569,7 @@ async function updateExistingDoujinEventByUrl(pool, event) {
             start_date = ?,
             end_date = ?,
             venue = ?,
+            detailed_address = COALESCE(NULLIF(detailed_address, ''), ?),
             fee = ?,
             organizer = ?,
             description = ?,
@@ -170,11 +586,60 @@ async function updateExistingDoujinEventByUrl(pool, event) {
       event.startDate,
       event.endDate,
       event.venue,
+      event.detailedAddress ?? '',
       event.fee,
       event.organizer,
       event.description,
       event.status,
       existingId,
+    ],
+  );
+
+  return true;
+}
+
+async function updateExistingEventByFingerprint(pool, event) {
+  const [rows] = await pool.execute(
+    `SELECT id, name, venue, detailed_address AS detailedAddress
+       FROM events
+      WHERE start_date = ?
+        AND end_date = ?
+      ORDER BY updated_at DESC, id DESC`,
+    [event.startDate, event.endDate],
+  );
+
+  const existing = rows.find((row) => isLikelySameEvent(row, event));
+  if (!existing) return false;
+
+  await pool.execute(
+    `UPDATE events
+        SET image_url = COALESCE(NULLIF(image_url, ''), ?),
+            category = ?,
+            name = ?,
+            venue = ?,
+            detailed_address = COALESCE(NULLIF(detailed_address, ''), ?),
+            fee = COALESCE(NULLIF(fee, ''), ?),
+            organizer = COALESCE(NULLIF(organizer, ''), ?),
+            description = CASE
+              WHEN description IS NULL OR description = '' THEN ?
+              WHEN CHAR_LENGTH(?) > CHAR_LENGTH(description) THEN ?
+              ELSE description
+            END,
+            status = ?
+      WHERE id = ?`,
+    [
+      event.imageUrl,
+      event.category,
+      event.name,
+      event.venue,
+      event.detailedAddress ?? '',
+      event.fee,
+      event.organizer,
+      event.description,
+      event.description,
+      event.description,
+      event.status,
+      existing.id,
     ],
   );
 
@@ -273,13 +738,180 @@ function firstMatch(value, pattern) {
   return value.match(pattern)?.[1]?.trim();
 }
 
-function absoluteUrl(value) {
+function textValue(value) {
+  if (value == null) return '';
+  if (Array.isArray(value)) {
+    return value.map(textValue).filter(Boolean)[0] ?? '';
+  }
+  if (typeof value === 'object') {
+    return textValue(value.name || value.url || value['@id']);
+  }
+  return normalize(String(value));
+}
+
+function dateValue(value) {
+  const text = textValue(value);
+  return text.match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? '';
+}
+
+function parseCosmosDateRange(value) {
+  const match = normalize(value).match(
+    /(\d{4})\/(\d{2})\/(\d{2})\s*\([^)]*\)\s*\d{1,2}:\d{2}\s*~\s*(\d{2})\/(\d{2})\s*\([^)]*\)\s*\d{1,2}:\d{2}/,
+  );
+  if (!match) return null;
+
+  return {
+    startDate: `${match[1]}-${match[2]}-${match[3]}`,
+    endDate: `${match[1]}-${match[4]}-${match[5]}`,
+  };
+}
+
+function parseAcostaTitleDateRange(value) {
+  const text = normalize(value);
+  const match = text.match(
+    /(\d{4})年(\d{1,2})月(\d{1,2})日(?:\([^)]*\))?(?:[・･]\s*)?(\d{1,2})?日?/,
+  );
+  if (!match) return null;
+
+  const year = match[1];
+  const month = match[2].padStart(2, '0');
+  const startDay = match[3].padStart(2, '0');
+  const endDay = (match[4] ?? match[3]).padStart(2, '0');
+
+  return {
+    startDate: `${year}-${month}-${startDay}`,
+    endDate: `${year}-${month}-${endDay}`,
+  };
+}
+
+function imageValue(value) {
+  if (Array.isArray(value)) {
+    return imageValue(value[0]);
+  }
+  if (value && typeof value === 'object') {
+    return absoluteUrl(textValue(value.url || value.contentUrl));
+  }
+  return absoluteUrl(textValue(value));
+}
+
+function inferDoujinCategory(value) {
+  const text = String(value ?? '').toUpperCase();
+  if (text.includes('PT ONLY')) return 'PT ONLY';
+  if (text.includes('ONLY')) return 'ONLY';
+  if (text.includes('茶會')) return '茶會';
+  return '綜合';
+}
+
+function absoluteUrl(value, baseUrl = sourceOrigin) {
   if (!value) return '';
   try {
-    return new URL(value, sourceOrigin).href;
+    return new URL(value, baseUrl).href;
   } catch {
     return '';
   }
+}
+
+async function fetchPublicHtml(url) {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const { data } = await axios.get(url, {
+        timeout: 20000,
+        headers: {
+          'user-agent': 'CosCircleBot/1.0 (+https://coscircle.app)',
+          accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'accept-language': 'zh-TW,zh;q=0.9,ja;q=0.8,en;q=0.6',
+        },
+      });
+
+      return data;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 2 || !shouldRetryPublicFetch(error)) break;
+      await sleep(1200 + attempt * 800);
+    }
+  }
+
+  throw lastError;
+}
+
+function shouldRetryPublicFetch(error) {
+  const status = error?.response?.status;
+  return status == null || status === 408 || status === 429 || status >= 500;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function dedupeEventsByFingerprint(events) {
+  const byFingerprint = new Map();
+
+  for (const event of events) {
+    const key = eventFingerprint(event);
+    const existing = byFingerprint.get(key);
+    if (!existing || eventCompletenessScore(event) > eventCompletenessScore(existing)) {
+      byFingerprint.set(key, event);
+    }
+  }
+
+  return [...byFingerprint.values()];
+}
+
+function isLikelySameEvent(existing, incoming) {
+  const existingName = canonicalEventText(existing.name);
+  const incomingName = canonicalEventText(incoming.name);
+  const existingVenue = canonicalEventText(
+    [existing.venue, existing.detailedAddress].filter(Boolean).join(' '),
+  );
+  const incomingVenue = canonicalEventText(
+    [incoming.venue, incoming.detailedAddress].filter(Boolean).join(' '),
+  );
+
+  return (
+    hasSharedSignificantToken(existingName, incomingName) ||
+    (existingVenue && incomingVenue && hasSharedSignificantToken(existingVenue, incomingVenue))
+  );
+}
+
+function eventFingerprint(event) {
+  return [
+    event.startDate,
+    event.endDate,
+    canonicalEventText(event.name).slice(0, 80),
+    canonicalEventText(event.venue).slice(0, 80),
+  ].join('|');
+}
+
+function canonicalEventText(value) {
+  return normalize(String(value ?? ''))
+    .toLowerCase()
+    .replace(/[【】〖〗「」『』!！@＠()[\]（）・･\s]/g, '')
+    .replace(/國立台灣/g, '國立臺灣')
+    .replace(/台灣/g, '臺灣')
+    .replace(/園区/g, '園區')
+    .replace(/号/g, '號');
+}
+
+function hasSharedSignificantToken(left, right) {
+  if (!left || !right) return false;
+  if (left.includes(right) || right.includes(left)) return true;
+
+  const tokens = ['cosmos', 'acosta'];
+  return tokens.some((token) => left.includes(token) && right.includes(token));
+}
+
+function eventCompletenessScore(event) {
+  return [
+    event.sourceUrl,
+    event.imageUrl,
+    event.venue,
+    event.detailedAddress,
+    event.fee,
+    event.organizer,
+    event.description,
+  ].filter((value) => String(value ?? '').trim()).length;
 }
 
 function previousMediaElement(element) {
@@ -295,6 +927,55 @@ function previousMediaElement(element) {
 
 function isCliEntry() {
   return process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+}
+
+function shouldTryBrowserFetch(error) {
+  const status = error?.response?.status;
+  return status === 403 || status === 429 || status == null;
+}
+
+function parseAndRequireEvents(html) {
+  if (isCloudflareChallengeHtml(html)) {
+    throw new Error('doujin_source_cloudflare_challenge');
+  }
+
+  const events = parseEventsFromHtml(html);
+  if (events.length === 0) {
+    throw new Error('doujin_events_parse_empty');
+  }
+  return events;
+}
+
+function isCloudflareChallengeHtml(html) {
+  const text = String(html ?? '').slice(0, 20000);
+  const titleLooksLikeChallenge =
+    /<title>\s*(?:Just a moment\.\.\.|請稍候|安全性檢查)\s*<\/title>/i.test(text);
+  const bodyLooksLikeChallenge =
+    text.includes('/cdn-cgi/challenge-platform/') ||
+    text.includes('__cf_chl_') ||
+    text.includes('cf-turnstile-response') ||
+    text.includes('Checking if the site connection is secure') ||
+    text.includes('Performance and Security by Cloudflare');
+
+  return titleLooksLikeChallenge && bodyLooksLikeChallenge;
+}
+
+function findExistingBrowserPath() {
+  for (const browserPath of defaultBrowserPaths) {
+    try {
+      accessSync(browserPath);
+      return browserPath;
+    } catch {
+      // Try the next path.
+    }
+  }
+  return '';
+}
+
+function summarizeHttpError(error) {
+  const status = error?.response?.status;
+  const statusText = error?.response?.statusText;
+  return [status, statusText, error?.message].filter(Boolean).join(' ') || 'unknown';
 }
 
 function slugify(value) {

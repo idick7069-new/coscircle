@@ -6,6 +6,7 @@ import '../../../core/models/profile.dart';
 import '../../../core/repositories/profile_repository.dart';
 import '../../../core/services/oobe_service.dart';
 import '../../../core/utils/error_message.dart';
+import '../../../core/utils/participant_role_style.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/cos_ui.dart';
 
@@ -20,14 +21,20 @@ class OnboardingProfilePage extends ConsumerStatefulWidget {
 class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
   final _pageController = PageController();
   final _nicknameController = TextEditingController();
-  final Set<String> _roles = {'Coser'};
+  final Set<String> _roles = {'coser'};
   final Set<String> _regions = {};
   int _page = 0;
   bool _saving = false;
   String? _errorText;
 
   static const _regionOptions = ['北部', '中部', '南部', '離島', '海外'];
-  static const _roleOptions = ['Coser', '攝影', '馬內', '路人'];
+  static const _roleOptions = ['coser', 'photographer', 'manager', 'self'];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInitialProfile();
+  }
 
   @override
   void dispose() {
@@ -146,6 +153,27 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
     );
   }
 
+  Future<void> _loadInitialProfile() async {
+    final profile = await ref.read(profileRepositoryProvider).currentProfile();
+    if (!mounted || profile == null) return;
+    setState(() {
+      if (_nicknameController.text.trim().isEmpty &&
+          profile.nickname.trim().isNotEmpty) {
+        _nicknameController.text = profile.nickname.trim();
+      }
+      if (_regions.isEmpty && profile.regions.isNotEmpty) {
+        _regions.addAll(profile.regions);
+      }
+      if (profile.profileRoles.isNotEmpty) {
+        _roles
+          ..clear()
+          ..addAll(
+            profile.profileRoles.where((role) => _roleOptions.contains(role)),
+          );
+      }
+    });
+  }
+
   Future<void> _finish() async {
     setState(() {
       _saving = true;
@@ -164,6 +192,7 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
             current.copyWith(
               nickname: nickname.isEmpty ? '圈圈新朋友' : nickname,
               bio: current.bio.isEmpty ? '剛加入 CosCircle，活動現場歡迎認親！' : null,
+              profileRoles: _roles.toList(),
               regions: _regions.isEmpty ? current.regions : _regions.toList(),
             ),
           );
@@ -405,9 +434,10 @@ class _ProfileSetupStep extends StatelessWidget {
                 children: [
                   for (final role in roleOptions)
                     CosChoicePill(
-                      label: role,
+                      label: participantRoleLabel(role),
                       selected: roles.contains(role),
-                      icon: Icons.badge_outlined,
+                      icon: participantRoleIcon(role),
+                      color: participantRoleColorForScheme(role, scheme),
                       onTap: () {
                         roles.contains(role)
                             ? roles.remove(role)

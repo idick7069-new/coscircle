@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +11,7 @@ import '../../../core/models/profile.dart';
 import '../../../core/models/work.dart';
 import '../../../core/repositories/profile_repository.dart';
 import '../../../core/utils/event_day_display.dart';
+import '../../../core/utils/participant_role_style.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/cos_ui.dart';
 import '../../works/presentation/work_selector.dart';
@@ -16,6 +19,7 @@ import '../../works/presentation/work_selector.dart';
 const _profileRegionOptions = ['北部', '中部', '南部', '離島', '海外'];
 const _genderLabels = {'male': '生理男', 'female': '生理女', 'private': '不公開'};
 const _bookingVisibilityLabels = {'public': '全部人', 'circle': '僅小圈圈'};
+const _profileRoleOptions = ['coser', 'photographer', 'manager', 'self'];
 
 final bookingFollowersProvider =
     FutureProvider.autoDispose<List<BookingFollowerGroup>>((ref) {
@@ -49,6 +53,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   List<String> _travelRegions = const [];
   bool _travelSameRegion = false;
   String _gender = 'private';
+  List<String> _profileRoles = const [];
   String _bookingVisibility = 'public';
   List<String> _otherPhotoUrls = const [];
   final List<XFile?> _pickedOtherPhotos = List<XFile?>.filled(3, null);
@@ -132,6 +137,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   ? _EditProfileForm(
                       key: const ValueKey('profile-edit'),
                       avatarUrl: _avatarUrl,
+                      pickedAvatar: _pickedAvatar,
                       nickname: _nickname,
                       facebook: _facebook,
                       bio: _bio,
@@ -143,8 +149,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                       travelRegions: _travelRegions,
                       travelSameRegion: _travelSameRegion,
                       gender: _gender,
+                      profileRoles: _profileRoles,
                       bookingVisibility: _bookingVisibility,
                       otherPhotoUrls: _otherPhotoUrls,
+                      pickedOtherPhotos: _pickedOtherPhotos,
                       onPickAvatar: _pickAvatar,
                       onDeepPitWorksChanged: (works) =>
                           setState(() => _deepPitWorks = works),
@@ -162,6 +170,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                       }),
                       onGenderChanged: (value) =>
                           setState(() => _gender = value),
+                      onProfileRolesChanged: (roles) =>
+                          setState(() => _profileRoles = roles),
                       onBookingVisibilityChanged: (value) =>
                           setState(() => _bookingVisibility = value),
                       onPickOtherPhoto: _pickOtherPhoto,
@@ -200,6 +210,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     _gender = _genderLabels.containsKey(profile.gender)
         ? profile.gender
         : 'private';
+    _profileRoles = _normalizeProfileRoles(profile.profileRoles);
     _bookingVisibility =
         _bookingVisibilityLabels.containsKey(profile.bookingVisibility)
         ? profile.bookingVisibility
@@ -252,6 +263,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           travelSameRegion: _travelSameRegion,
           landmine: _landmine.text.trim(),
           gender: _gender,
+          profileRoles: _profileRoles,
           bookingVisibility: _bookingVisibility,
           otherPhotoUrls: otherPhotoUrls
               .map((url) => url.trim())
@@ -361,6 +373,13 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   bool _sameStringSet(List<String> left, List<String> right) {
     return left.length == right.length && left.every(right.contains);
+  }
+
+  List<String> _normalizeProfileRoles(List<String> roles) {
+    return [
+      for (final role in _profileRoleOptions)
+        if (roles.contains(role)) role,
+    ];
   }
 
   void _showShareSheet(BuildContext context, UserProfile profile) {
@@ -745,6 +764,8 @@ class _ProfileHeroCard extends StatelessWidget {
                       style: Theme.of(context).textTheme.headlineMedium
                           ?.copyWith(fontWeight: FontWeight.w900, height: 1.02),
                     ),
+                    const SizedBox(height: 10),
+                    _ProfileRoleBadgeWrap(roles: profile.profileRoles),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
@@ -810,6 +831,11 @@ class _ProfileReadinessCard extends StatelessWidget {
         label: '自介',
         ready: profile.bio.trim().isNotEmpty,
         icon: Icons.article_outlined,
+      ),
+      _ProfileReadinessCue(
+        label: '身份',
+        ready: profile.profileRoles.isNotEmpty,
+        icon: Icons.diversity_3_outlined,
       ),
       _ProfileReadinessCue(
         label: '座標',
@@ -904,6 +930,82 @@ class _ProfileReadinessCard extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ProfileRoleBadgeWrap extends StatelessWidget {
+  const _ProfileRoleBadgeWrap({required this.roles});
+
+  final List<String> roles;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final normalized = [
+      for (final role in _profileRoleOptions)
+        if (roles.contains(role)) role,
+    ];
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        if (normalized.isEmpty)
+          _ProfileRolePill(
+            label: '身份待補',
+            icon: Icons.diversity_3_outlined,
+            color: scheme.primary,
+          )
+        else
+          for (final role in normalized)
+            _ProfileRolePill(
+              label: participantRoleLabel(role),
+              icon: participantRoleIcon(role),
+              color: participantRoleColorForScheme(role, scheme),
+            ),
+      ],
+    );
+  }
+}
+
+class _ProfileRolePill extends StatelessWidget {
+  const _ProfileRolePill({
+    required this.label,
+    required this.icon,
+    required this.color,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
+        border: Border.all(color: color.withValues(alpha: 0.62), width: 1.4),
+        boxShadow: [CosUi.softShadow(color)],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 22, color: color),
+            const SizedBox(width: 7),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: scheme.onSurface,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1986,6 +2088,7 @@ class _EditProfileForm extends StatelessWidget {
   const _EditProfileForm({
     super.key,
     required this.avatarUrl,
+    required this.pickedAvatar,
     required this.nickname,
     required this.facebook,
     required this.bio,
@@ -1997,8 +2100,10 @@ class _EditProfileForm extends StatelessWidget {
     required this.travelRegions,
     required this.travelSameRegion,
     required this.gender,
+    required this.profileRoles,
     required this.bookingVisibility,
     required this.otherPhotoUrls,
+    required this.pickedOtherPhotos,
     required this.onPickAvatar,
     required this.onDeepPitWorksChanged,
     required this.onShallowPitWorksChanged,
@@ -2006,6 +2111,7 @@ class _EditProfileForm extends StatelessWidget {
     required this.onTravelRegionsChanged,
     required this.onUseSameRegions,
     required this.onGenderChanged,
+    required this.onProfileRolesChanged,
     required this.onBookingVisibilityChanged,
     required this.onPickOtherPhoto,
     required this.onRemoveOtherPhoto,
@@ -2014,6 +2120,7 @@ class _EditProfileForm extends StatelessWidget {
   });
 
   final String avatarUrl;
+  final XFile? pickedAvatar;
   final TextEditingController nickname;
   final TextEditingController facebook;
   final TextEditingController bio;
@@ -2025,8 +2132,10 @@ class _EditProfileForm extends StatelessWidget {
   final List<String> travelRegions;
   final bool travelSameRegion;
   final String gender;
+  final List<String> profileRoles;
   final String bookingVisibility;
   final List<String> otherPhotoUrls;
+  final List<XFile?> pickedOtherPhotos;
   final VoidCallback onPickAvatar;
   final ValueChanged<List<WorkTag>> onDeepPitWorksChanged;
   final ValueChanged<List<WorkTag>> onShallowPitWorksChanged;
@@ -2034,6 +2143,7 @@ class _EditProfileForm extends StatelessWidget {
   final ValueChanged<List<String>> onTravelRegionsChanged;
   final VoidCallback onUseSameRegions;
   final ValueChanged<String> onGenderChanged;
+  final ValueChanged<List<String>> onProfileRolesChanged;
   final ValueChanged<String> onBookingVisibilityChanged;
   final ValueChanged<int> onPickOtherPhoto;
   final ValueChanged<int> onRemoveOtherPhoto;
@@ -2063,12 +2173,9 @@ class _EditProfileForm extends StatelessWidget {
               child: Stack(
                 alignment: Alignment.bottomRight,
                 children: [
-                  CircleAvatar(
-                    radius: 42,
-                    backgroundImage: pickedImageProvider(avatarUrl),
-                    child: avatarUrl.isEmpty
-                        ? const Icon(Icons.person, size: 38)
-                        : null,
+                  _EditableAvatarPreview(
+                    avatarUrl: avatarUrl,
+                    pickedAvatar: pickedAvatar,
                   ),
                   IconButton.filled(
                     tooltip: '上傳頭像',
@@ -2093,6 +2200,12 @@ class _EditProfileForm extends StatelessWidget {
               value: _genderLabels.containsKey(gender) ? gender : 'private',
               enabled: !saving,
               onChanged: onGenderChanged,
+            ),
+            const SizedBox(height: 10),
+            _ProfileRoleSelector(
+              selected: profileRoles,
+              enabled: !saving,
+              onChanged: onProfileRolesChanged,
             ),
             const SizedBox(height: 10),
             TextField(
@@ -2176,6 +2289,7 @@ class _EditProfileForm extends StatelessWidget {
           children: [
             _EditableOtherPhotoGrid(
               photoUrls: otherPhotoUrls,
+              pickedPhotos: pickedOtherPhotos,
               enabled: !saving,
               onPick: onPickOtherPhoto,
               onRemove: onRemoveOtherPhoto,
@@ -2191,6 +2305,69 @@ class _EditProfileForm extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _EditableAvatarPreview extends StatelessWidget {
+  const _EditableAvatarPreview({
+    required this.avatarUrl,
+    required this.pickedAvatar,
+  });
+
+  final String avatarUrl;
+  final XFile? pickedAvatar;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox.square(
+      dimension: 84,
+      child: ClipOval(
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: scheme.surfaceContainerHighest),
+          child: pickedAvatar != null
+              ? _PickedXFileImage(file: pickedAvatar!)
+              : avatarUrl.isEmpty
+              ? const Icon(Icons.person, size: 38)
+              : Image(
+                  image: pickedImageProvider(avatarUrl)!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const Icon(Icons.broken_image_outlined),
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PickedXFileImage extends StatelessWidget {
+  const _PickedXFileImage({required this.file});
+
+  final XFile file;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List>(
+      future: file.readAsBytes(),
+      builder: (context, snapshot) {
+        final bytes = snapshot.data;
+        if (bytes == null) {
+          return const Center(
+            child: SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
+        return Image.memory(
+          bytes,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) =>
+              const Center(child: Icon(Icons.broken_image_outlined)),
+        );
+      },
     );
   }
 }
@@ -2235,6 +2412,59 @@ class _GenderSelector extends StatelessWidget {
                   _ => Icons.visibility_off_outlined,
                 },
                 onTap: () => onChanged(entry.key),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ProfileRoleSelector extends StatelessWidget {
+  const _ProfileRoleSelector({
+    required this.selected,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final List<String> selected;
+  final bool enabled;
+  final ValueChanged<List<String>> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '身份',
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+            color: scheme.onSurfaceVariant,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final role in _profileRoleOptions)
+              CosChoicePill(
+                label: participantRoleLabel(role),
+                selected: selected.contains(role),
+                enabled: enabled,
+                icon: participantRoleIcon(role),
+                color: participantRoleColorForScheme(role, scheme),
+                onTap: () {
+                  final next = selected.contains(role)
+                      ? selected.where((item) => item != role).toList()
+                      : [
+                          for (final item in _profileRoleOptions)
+                            if (selected.contains(item) || item == role) item,
+                        ];
+                  onChanged(next);
+                },
               ),
           ],
         ),
@@ -2710,12 +2940,14 @@ class _OtherPhotoGrid extends StatelessWidget {
 class _EditableOtherPhotoGrid extends StatelessWidget {
   const _EditableOtherPhotoGrid({
     required this.photoUrls,
+    required this.pickedPhotos,
     required this.enabled,
     required this.onPick,
     required this.onRemove,
   });
 
   final List<String> photoUrls;
+  final List<XFile?> pickedPhotos;
   final bool enabled;
   final ValueChanged<int> onPick;
   final ValueChanged<int> onRemove;
@@ -2739,11 +2971,17 @@ class _EditableOtherPhotoGrid extends StatelessWidget {
           ),
           itemBuilder: (context, index) {
             final url = index < photoUrls.length ? photoUrls[index] : '';
+            final picked = index < pickedPhotos.length
+                ? pickedPhotos[index]
+                : null;
             return _EditablePhotoSlot(
               imageUrl: url,
+              pickedImage: picked,
               enabled: enabled,
               onPick: () => onPick(index),
-              onRemove: url.isEmpty ? null : () => onRemove(index),
+              onRemove: url.isEmpty && picked == null
+                  ? null
+                  : () => onRemove(index),
             );
           },
         ),
@@ -2755,12 +2993,14 @@ class _EditableOtherPhotoGrid extends StatelessWidget {
 class _EditablePhotoSlot extends StatelessWidget {
   const _EditablePhotoSlot({
     required this.imageUrl,
+    required this.pickedImage,
     required this.enabled,
     required this.onPick,
     required this.onRemove,
   });
 
   final String imageUrl;
+  final XFile? pickedImage;
   final bool enabled;
   final VoidCallback onPick;
   final VoidCallback? onRemove;
@@ -2782,7 +3022,9 @@ class _EditablePhotoSlot extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              if (imageUrl.isEmpty)
+              if (pickedImage != null)
+                _PickedXFileImage(file: pickedImage!)
+              else if (imageUrl.isEmpty)
                 Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [

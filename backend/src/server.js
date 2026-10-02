@@ -6,7 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import cors from 'cors';
 import express from 'express';
-import { importEvents } from '../scripts/scrape-events.js';
+import {
+  importEvents,
+  importEventsFromHtml,
+  scrapeEvents,
+} from '../scripts/scrape-events.js';
 import { createPool } from './db.js';
 import { sendRecognitionPush } from './push-service.js';
 
@@ -19,6 +23,7 @@ const scrypt = promisify(crypto.scrypt);
 const isProduction = process.env.NODE_ENV === 'production';
 const eventScraperEnabled = process.env.EVENT_SCRAPER_ENABLED !== 'false';
 const eventScraperTimeZone = process.env.EVENT_SCRAPER_TIME_ZONE ?? 'Asia/Taipei';
+const syncIngestToken = String(process.env.SYNC_INGEST_TOKEN ?? '').trim();
 const maxUploadImageBytes = 5 * 1024 * 1024;
 const corsOrigins = String(process.env.CORS_ORIGINS ?? '')
   .split(',')
@@ -79,11 +84,74 @@ function createRateLimiter({ windowMs, max }) {
   };
 }
 
+function isValidSyncIngestToken(req) {
+  if (syncIngestToken.length < 32) return false;
+  const header = String(req.get('authorization') ?? '');
+  const token = header.startsWith('Bearer ')
+    ? header.slice('Bearer '.length).trim()
+    : String(req.get('x-coscircle-sync-token') ?? '').trim();
+  if (token.length !== syncIngestToken.length) return false;
+
+  return crypto.timingSafeEqual(
+    Buffer.from(token),
+    Buffer.from(syncIngestToken),
+  );
+}
+
 if (eventScraperEnabled) {
   scheduleDailyEventImport();
 }
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, name: 'CosCircle API' }));
+
+app.post('/api/source-ingest/doujin-html', async (req, res, next) => {
+  try {
+    if (!isValidSyncIngestToken(req)) {
+      res.status(401).json({ error: 'invalid_sync_ingest_token' });
+      return;
+    }
+
+    const html = String(req.body.html ?? '');
+    const sourceUrl = String(
+      req.body.sourceUrl ?? 'https://www.doujin.com.tw/events/alist/all',
+    ).trim();
+    if (!html.includes('同人活動') || !html.includes('活動時間')) {
+      res.status(400).json({ error: 'invalid_doujin_html' });
+      return;
+    }
+
+    const events = await importEventsFromHtml(html, pool);
+    await recordSourceSyncRun({
+      sourceKey: 'doujin-events-edge',
+      sourceUrl,
+      status: 'success',
+      importedCount: events.length,
+    });
+    res.json({
+      imported: true,
+      count: events.length,
+      source: 'edge-html',
+    });
+  } catch (error) {
+    try {
+      await recordSourceSyncRun({
+        sourceKey: 'doujin-events-edge',
+        sourceUrl:
+          req.body?.sourceUrl?.toString() ??
+          'https://www.doujin.com.tw/events/alist/all',
+        status: 'failure',
+        errorCode:
+          error?.response?.status?.toString() ??
+          error?.code?.toString() ??
+          'edge_ingest_failed',
+        errorMessage: summarizeError(error),
+      });
+    } catch (recordError) {
+      console.error('[event-scraper] failed to record edge sync status', recordError);
+    }
+    next(error);
+  }
+});
 
 app.use('/api/auth', createRateLimiter({ windowMs: 15 * 60 * 1000, max: 30 }));
 app.use('/api/uploads', createRateLimiter({ windowMs: 60 * 60 * 1000, max: 80 }));
@@ -354,6 +422,7 @@ app.put('/api/me', async (req, res, next) => {
       travelSameRegion = false,
       landmine,
       gender = 'private',
+      profileRoles = [],
       otherPhotoUrls = [],
       bookingVisibility = 'public',
       pitWorkIds = [],
@@ -377,6 +446,12 @@ app.put('/api/me', async (req, res, next) => {
     const normalizedGender = ['male', 'female', 'private'].includes(gender)
       ? gender
       : 'private';
+    const normalizedProfileRoles = normalizeStringArray(profileRoles, [
+      'coser',
+      'photographer',
+      'manager',
+      'self',
+    ]);
     const normalizedPhotoUrls = normalizeStringArray(otherPhotoUrls).slice(0, 3);
     const normalizedBookingVisibility = normalizeBookingVisibility(bookingVisibility);
     await connection.beginTransaction();
@@ -392,6 +467,7 @@ app.put('/api/me', async (req, res, next) => {
               travel_same_region = ?,
               landmine = ?,
               gender = ?,
+              profile_roles_json = ?,
               other_photo_urls_json = ?,
               booking_visibility = ?
         WHERE id = ?`,
@@ -409,6 +485,7 @@ app.put('/api/me', async (req, res, next) => {
           : 0,
         landmine ?? null,
         normalizedGender,
+        JSON.stringify(normalizedProfileRoles),
         JSON.stringify(normalizedPhotoUrls),
         normalizedBookingVisibility,
         req.userId,
@@ -522,13 +599,16 @@ app.get('/api/events', async (req, res, next) => {
               events.source_name AS sourceName,
               events.source_url AS sourceUrl,
               CASE WHEN my_bookings.event_id IS NULL THEN FALSE ELSE TRUE END AS isJoined,
+              COALESCE(my_bookings.joined_day_indexes, '') AS joinedDayIndexes,
               CASE WHEN followed_bookings.user_id IS NULL THEN FALSE ELSE TRUE END AS hasFollowedParticipants,
               CASE WHEN circle_bookings.user_id IS NULL THEN FALSE ELSE TRUE END AS hasCircleMembers
          FROM events
          LEFT JOIN (
-           SELECT DISTINCT event_id
+           SELECT event_id,
+                  GROUP_CONCAT(day_index ORDER BY day_index SEPARATOR ',') AS joined_day_indexes
              FROM event_bookings
             WHERE user_id = ?
+            GROUP BY event_id
          ) AS my_bookings
            ON my_bookings.event_id = events.id
          LEFT JOIN (
@@ -676,6 +756,70 @@ app.get('/api/admin/users', async (req, res, next) => {
 app.post('/api/admin/sync-doujin-events', syncDoujinEvents);
 app.post('/api/admin/events/sync-doujin', syncDoujinEvents);
 
+app.get('/api/admin/doujin-sync-check', async (_req, res, next) => {
+  try {
+    const [dbEvents, syncRuns] = await Promise.all([
+      fetchDoujinDbEvents(),
+      fetchRecentSyncRuns(),
+    ]);
+    const approvedDbEvents = dbEvents.filter((event) => event.status === 'approved');
+    const base = {
+      sourceUrl: 'https://www.doujin.com.tw/events/alist',
+      databaseCount: approvedDbEvents.length,
+      databaseCurrentOrFutureCount: approvedDbEvents.filter(
+        (event) => !event.isEnded,
+      ).length,
+      databaseEndedCount: approvedDbEvents.filter((event) => event.isEnded)
+        .length,
+      recentRuns: syncRuns,
+    };
+
+    try {
+      const sourceEvents = await scrapeEvents();
+      const sourceKeys = new Set(sourceEvents.map((event) => event.sourceKey));
+      const dbKeys = new Set(approvedDbEvents.map((event) => event.sourceKey));
+      const missingInDatabase = sourceEvents
+        .filter((event) => !dbKeys.has(event.sourceKey))
+        .map(formatDoujinCheckEvent);
+      const extraInDatabase = approvedDbEvents
+        .filter((event) => !sourceKeys.has(event.sourceKey))
+        .map(formatDoujinCheckEvent);
+
+      res.json({
+        ...base,
+        sourceAvailable: true,
+        sourceCount: sourceEvents.length,
+        matchedCount: sourceEvents.length - missingInDatabase.length,
+        isCountMatched: sourceEvents.length === dbEvents.length,
+        isFullyMatched:
+          missingInDatabase.length === 0 && extraInDatabase.length === 0,
+        missingInDatabase,
+        extraInDatabase,
+      });
+    } catch (error) {
+      res.json({
+        ...base,
+        sourceAvailable: false,
+        sourceCount: null,
+        matchedCount: null,
+        isCountMatched: false,
+        isFullyMatched: false,
+        missingInDatabase: [],
+        extraInDatabase: [],
+        sourceError: {
+          code:
+            error?.response?.status?.toString() ??
+            error?.code?.toString() ??
+            'source_fetch_failed',
+          message: summarizeError(error),
+        },
+      });
+    }
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get('/api/admin/sync-status', async (_req, res, next) => {
   try {
     const [rows] = await pool.query(
@@ -811,6 +955,56 @@ async function syncDoujinEvents(_req, res, next) {
     }
     next(error);
   }
+}
+
+async function fetchDoujinDbEvents() {
+  const [rows] = await pool.query(
+    `SELECT source_key AS sourceKey,
+            category,
+            name,
+            source_url AS sourceUrl,
+            DATE_FORMAT(start_date, '%Y-%m-%d') AS startDate,
+            DATE_FORMAT(end_date, '%Y-%m-%d') AS endDate,
+            venue,
+            status,
+            end_date < CURDATE() AS isEnded
+       FROM events
+      WHERE source_name = '同人誌中心'
+         OR source_type = 1
+         OR source_key LIKE 'doujin-%'
+      ORDER BY start_date ASC, id ASC`,
+  );
+  return rows;
+}
+
+async function fetchRecentSyncRuns() {
+  const [rows] = await pool.query(
+    `SELECT source_key AS sourceKey,
+            source_url AS sourceUrl,
+            status,
+            imported_count AS importedCount,
+            error_code AS errorCode,
+            error_message AS errorMessage,
+            DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s') AS createdAt
+       FROM source_sync_runs
+      ORDER BY created_at DESC
+      LIMIT 5`,
+  );
+  return rows;
+}
+
+function formatDoujinCheckEvent(event) {
+  return {
+    sourceKey: event.sourceKey,
+    category: event.category,
+    name: event.name,
+    sourceUrl: event.sourceUrl,
+    startDate: event.startDate,
+    endDate: event.endDate,
+    venue: event.venue,
+    status: event.status,
+    isEnded: event.isEnded === true || event.isEnded === 1,
+  };
 }
 
 app.delete('/api/admin/events/:eventId', async (req, res, next) => {
@@ -1443,7 +1637,8 @@ app.post('/api/events/:eventId/bookings', async (req, res, next) => {
       Number.parseInt(dayIndex, 10) || 1,
     );
     const [[event]] = await pool.execute(
-      `SELECT start_date AS startDate, end_date AS endDate, status
+      `SELECT start_date AS startDate, end_date AS endDate, status,
+              end_date < CURRENT_DATE() AS isEnded
          FROM events
         WHERE id = ?
         LIMIT 1`,
@@ -1456,6 +1651,10 @@ app.post('/api/events/:eventId/bookings', async (req, res, next) => {
     const eventDayCount = daysBetweenDates(event.startDate, event.endDate) + 1;
     if (normalizedDayIndex > eventDayCount) {
       res.status(400).json({ error: 'invalid_day_index' });
+      return;
+    }
+    if (event.isEnded) {
+      res.status(409).json({ error: 'event_ended' });
       return;
     }
     await pool.execute(
@@ -2201,10 +2400,30 @@ function scheduleDailyEventImport() {
     lastRunDate = now.date;
     try {
       const events = await importEvents(pool);
+      await recordSourceSyncRun({
+        sourceKey: 'doujin-events-daily',
+        sourceUrl: 'https://www.doujin.com.tw/events/alist/all',
+        status: 'success',
+        importedCount: events.length,
+      });
       console.log(
         `[event-scraper] imported ${events.length} events from Doujin at ${now.date} 12:00 ${eventScraperTimeZone}`,
       );
     } catch (error) {
+      try {
+        await recordSourceSyncRun({
+          sourceKey: 'doujin-events-daily',
+          sourceUrl: 'https://www.doujin.com.tw/events/alist/all',
+          status: 'failure',
+          errorCode:
+            error?.response?.status?.toString() ??
+            error?.code?.toString() ??
+            'daily_sync_failed',
+          errorMessage: summarizeError(error),
+        });
+      } catch (recordError) {
+        console.error('[event-scraper] failed to record daily sync status', recordError);
+      }
       console.error('[event-scraper] daily import failed', error);
     } finally {
       running = false;
@@ -2248,6 +2467,11 @@ async function ensureCollaborationTables() {
     tableName: 'users',
     columnName: 'booking_visibility',
     definition: "ENUM('public','circle') NOT NULL DEFAULT 'public'",
+  });
+  await ensureColumn({
+    tableName: 'users',
+    columnName: 'profile_roles_json',
+    definition: 'TEXT NULL',
   });
   await ensureColumn({
     tableName: 'users',
@@ -2527,7 +2751,8 @@ function normalizeAdminEventPayload(body) {
   const imageUrl = String(body.imageUrl ?? '').trim();
   const sourceUrl = String(body.sourceUrl ?? '').trim();
   const sourceType = Number.parseInt(body.sourceType ?? 3, 10);
-  const sourceName = String(body.sourceName ?? '管理後台').trim() || '管理後台';
+  const sourceName =
+    String(body.sourceName ?? '官方人員建立').trim() || '官方人員建立';
   const status = String(body.status ?? 'approved').trim();
 
   if (!name) return { ok: false, error: 'event_name_required' };
@@ -2769,6 +2994,7 @@ async function fetchUserProfile(userId) {
             travel_same_region AS travelSameRegion,
             landmine,
             gender,
+            profile_roles_json AS profileRolesJson,
             other_photo_urls_json AS otherPhotoUrlsJson,
             booking_visibility AS bookingVisibility
        FROM users
@@ -2799,6 +3025,7 @@ async function fetchUserProfileByPublicCode(publicCode, viewerUserId = null) {
             users.travel_same_region AS travelSameRegion,
             users.landmine,
             users.gender,
+            users.profile_roles_json AS profileRolesJson,
             users.other_photo_urls_json AS otherPhotoUrlsJson,
             CASE WHEN follows.followed_user_id IS NULL THEN FALSE ELSE TRUE END AS isFollowed
        FROM users
@@ -2848,6 +3075,7 @@ function normalizeProfileJsonFields(profile) {
   const {
     regionsJson,
     travelRegionsJson,
+    profileRolesJson,
     otherPhotoUrlsJson,
     travelSameRegion,
     ...rest
@@ -2867,6 +3095,9 @@ function normalizeProfileJsonFields(profile) {
     travelSameRegion: isSameRegion,
     regions,
     travelRegions,
+    profileRoles: parseJsonStringArray(profileRolesJson).filter((role) =>
+      ['coser', 'photographer', 'manager', 'self'].includes(role),
+    ),
     otherPhotoUrls: parseJsonStringArray(otherPhotoUrlsJson).slice(0, 3),
   };
 }

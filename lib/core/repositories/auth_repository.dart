@@ -42,13 +42,13 @@ enum SocialLoginProvider {
 class AuthRepository {
   AuthRepository({required ApiClient apiClient}) : _apiClient = apiClient;
 
-  static const _tokenKey = 'auth_token';
+  static const tokenKey = 'auth_token';
 
   final ApiClient _apiClient;
 
   Future<String?> restoreToken() async {
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString(_tokenKey);
+    final token = prefs.getString(tokenKey);
     if (token == null || token.isEmpty) return null;
     _apiClient.setAuthToken(token);
     if (appDemoMode && token == _demoToken) return token;
@@ -56,7 +56,7 @@ class AuthRepository {
       await _apiClient.get('/me');
       return token;
     } catch (_) {
-      await prefs.remove(_tokenKey);
+      await prefs.remove(tokenKey);
       _apiClient.setAuthToken(null);
       return null;
     }
@@ -121,7 +121,7 @@ class AuthRepository {
       }
     } finally {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_tokenKey);
+      await prefs.remove(tokenKey);
       _apiClient.setAuthToken(null);
     }
   }
@@ -136,7 +136,7 @@ class AuthRepository {
 
   Future<void> _saveToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_tokenKey, token);
+    await prefs.setString(tokenKey, token);
     _apiClient.setAuthToken(token);
   }
 

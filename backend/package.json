@@ -8,6 +8,8 @@
     "dev": "node src/server.js",
     "smoke:privacy": "node scripts/privacy-smoke.js",
     "scrape:events": "node scripts/scrape-events.js",
+    "sync:doujin-edge": "node scripts/doujin-edge-sync.js",
+    "install:doujin-edge-sync": "bash scripts/install-doujin-edge-sync-launchd.sh",
     "clean:doujin-events": "node scripts/clean-doujin-events.js"
   },
   "dependencies": {

@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { createPool } from '../src/db.js';
 
-const apiBaseUrl = String(process.env.API_BASE_URL ?? 'http://127.0.0.1:8080/api')
+const apiBaseUrl = String(process.env.API_BASE_URL ?? 'http://34.187.168.222/api')
   .replace(/\/$/, '');
 const configuredEventId = process.env.SMOKE_EVENT_ID?.trim();
 const password = 'QA0714pass';

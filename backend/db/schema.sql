@@ -18,6 +18,7 @@ CREATE TABLE users (
   travel_same_region BOOLEAN NOT NULL DEFAULT FALSE,
   landmine TEXT NULL,
   gender VARCHAR(40) NOT NULL DEFAULT 'private',
+  profile_roles_json TEXT NULL,
   other_photo_urls_json TEXT NULL,
   booking_visibility ENUM('public','circle') NOT NULL DEFAULT 'public',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

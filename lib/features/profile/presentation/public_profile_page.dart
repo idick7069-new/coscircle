@@ -5,9 +5,12 @@ import 'package:go_router/go_router.dart';
 import '../../../core/models/work.dart';
 import '../../../core/models/profile.dart';
 import '../../../core/repositories/profile_repository.dart';
+import '../../../core/utils/participant_role_style.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/cos_ui.dart';
+
+const _profileRoleOptions = ['coser', 'photographer', 'manager', 'self'];
 
 final publicProfileProvider = FutureProvider.autoDispose
     .family<UserProfile?, String>((ref, publicCode) {
@@ -541,6 +544,8 @@ class _PublicProfileIdentity extends StatelessWidget {
             height: 1.02,
           ),
         ),
+        const SizedBox(height: 10),
+        _PublicProfileRoleBadges(roles: profile.profileRoles),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
@@ -567,6 +572,82 @@ class _PublicProfileIdentity extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _PublicProfileRoleBadges extends StatelessWidget {
+  const _PublicProfileRoleBadges({required this.roles});
+
+  final List<String> roles;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final normalized = [
+      for (final role in _profileRoleOptions)
+        if (roles.contains(role)) role,
+    ];
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        if (normalized.isEmpty)
+          _PublicProfileRolePill(
+            label: '身份待補',
+            icon: Icons.diversity_3_outlined,
+            color: scheme.primary,
+          )
+        else
+          for (final role in normalized)
+            _PublicProfileRolePill(
+              label: participantRoleLabel(role),
+              icon: participantRoleIcon(role),
+              color: participantRoleColorForScheme(role, scheme),
+            ),
+      ],
+    );
+  }
+}
+
+class _PublicProfileRolePill extends StatelessWidget {
+  const _PublicProfileRolePill({
+    required this.label,
+    required this.icon,
+    required this.color,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
+        border: Border.all(color: color.withValues(alpha: 0.62), width: 1.4),
+        boxShadow: [CosUi.softShadow(color)],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 22, color: color),
+            const SizedBox(width: 7),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: scheme.onSurface,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

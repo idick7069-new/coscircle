@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_client.dart';
+import '../models/admin_doujin_sync_check.dart';
 import '../models/admin_stats.dart';
 import '../models/admin_sync_run.dart';
 import '../models/admin_user.dart';
@@ -72,6 +73,19 @@ class AdminRepository {
           .toList();
     } catch (error) {
       throw Exception('同步狀態載入失敗：${_describeError(error)}');
+    }
+  }
+
+  Future<AdminDoujinSyncCheck> checkDoujinSync() async {
+    try {
+      final response = await _apiClient
+          .get('/admin/doujin-sync-check')
+          .timeout(const Duration(seconds: 24));
+      return AdminDoujinSyncCheck.fromJson(
+        response.data as Map<String, dynamic>,
+      );
+    } catch (error) {
+      throw Exception('同步檢查載入失敗：${_describeError(error)}');
     }
   }
 

@@ -41,7 +41,6 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders["usesCleartextTraffic"] = "true"
         manifestPlaceholders["googleMapsApiKey"] =
             googleMapsApiKey ?: "AIzaSyBDv2hOA5avNalrAnwDTpwRUKsdhPVdmI4"
     }
@@ -59,7 +58,6 @@ android {
 
     buildTypes {
         debug {
-            manifestPlaceholders["usesCleartextTraffic"] = "true"
         }
         release {
             if (isReleaseTask && googleMapsApiKey.isNullOrBlank()) {
@@ -67,7 +65,6 @@ android {
                     "Release builds require -PGOOGLE_MAPS_API_KEY=your_google_maps_key"
                 )
             }
-            manifestPlaceholders["usesCleartextTraffic"] = "false"
             manifestPlaceholders["googleMapsApiKey"] = googleMapsApiKey ?: ""
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")

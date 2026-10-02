@@ -18,6 +18,7 @@ class EventCard extends ConsumerWidget {
     required this.onTap,
     required this.onBookingPressed,
     required this.onDetailPressed,
+    this.isJoinedOverride,
   });
 
   final CosEvent event;
@@ -26,6 +27,7 @@ class EventCard extends ConsumerWidget {
   final VoidCallback? onTap;
   final VoidCallback? onBookingPressed;
   final VoidCallback onDetailPressed;
+  final bool? isJoinedOverride;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -36,6 +38,7 @@ class EventCard extends ConsumerWidget {
             : '${DateFormat('yyyy/MM/dd').format(event.startDate)} - ${DateFormat('MM/dd').format(event.endDate)}');
     final status = event.status(DateTime.now());
     final isEnded = status == EventStatus.ended;
+    final isJoined = isJoinedOverride ?? event.isJoined;
     final participants = ref.watch(eventParticipantsProvider(event.id));
     final statusText = switch (status) {
       EventStatus.ended => '已結束',
@@ -87,9 +90,7 @@ class EventCard extends ConsumerWidget {
                               ),
                               CosBadge(
                                 label: event.sourceName,
-                                icon: event.sourceType == 1
-                                    ? Icons.public
-                                    : Icons.how_to_vote_outlined,
+                                icon: _sourceIcon(event.sourceType),
                                 color: scheme.tertiary,
                               ),
                             ],
@@ -142,11 +143,11 @@ class EventCard extends ConsumerWidget {
                                         : onBookingPressed,
                                     style: _compactFilledButtonStyle(),
                                     icon: Icon(
-                                      event.isJoined
+                                      isJoined
                                           ? Icons.edit_outlined
                                           : Icons.add_circle_outline,
                                     ),
-                                    label: Text(event.isJoined ? '修改' : '加入'),
+                                    label: Text(isJoined ? '修改' : '加入'),
                                   ),
                                 ],
                               ),
@@ -212,6 +213,17 @@ class _IconLine extends StatelessWidget {
       ],
     );
   }
+}
+
+IconData _sourceIcon(int sourceType) {
+  return switch (sourceType) {
+    1 => Icons.public,
+    2 => Icons.how_to_vote_outlined,
+    3 => Icons.verified_user_outlined,
+    4 => Icons.auto_awesome_outlined,
+    5 => Icons.photo_camera_outlined,
+    _ => Icons.link_outlined,
+  };
 }
 
 class _EventImage extends StatelessWidget {

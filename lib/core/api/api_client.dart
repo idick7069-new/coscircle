@@ -79,7 +79,7 @@ class ApiClient {
 
 String _defaultBaseUrl() {
   const devLanBaseUrl = 'http://34.187.168.222/api';
-  if (kIsWeb) return 'http://127.0.0.1:8080/api';
+  if (kIsWeb) return devLanBaseUrl;
   if (Platform.isAndroid || Platform.isIOS) return devLanBaseUrl;
-  return 'http://127.0.0.1:8080/api';
+  return devLanBaseUrl;
 }

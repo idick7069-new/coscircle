@@ -1,10 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/api_client.dart';
 import '../config/app_environment.dart';
 import '../models/booking.dart';
 import '../models/event.dart';
 import '../models/participant.dart';
+import 'auth_repository.dart';
 
 final eventRepositoryProvider = Provider<EventRepository>((ref) {
   if (appDemoMode) return InMemoryEventRepository();
@@ -28,7 +31,7 @@ class ApiEventRepository implements EventRepository {
 
   @override
   Future<List<CosEvent>> fetchEvents() async {
-    final response = await _apiClient.get('/events');
+    final response = await _getWithRestoredToken('/events');
     final rows = response.data as List<dynamic>;
     return rows
         .map((row) => CosEvent.fromJson(row as Map<String, dynamic>))
@@ -84,6 +87,19 @@ class ApiEventRepository implements EventRepository {
       query: dayIndex == null ? null : {'dayIndex': dayIndex},
     );
   }
+
+  Future<Response<dynamic>> _getWithRestoredToken(String path) async {
+    try {
+      return await _apiClient.get(path);
+    } on DioException catch (error) {
+      if (error.response?.statusCode != 401) rethrow;
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString(AuthRepository.tokenKey);
+      if (token == null || token.isEmpty) rethrow;
+      _apiClient.setAuthToken(token);
+      return _apiClient.get(path);
+    }
+  }
 }
 
 class InMemoryEventRepository implements EventRepository {
@@ -92,11 +108,16 @@ class InMemoryEventRepository implements EventRepository {
   @override
   Future<List<CosEvent>> fetchEvents() async {
     await Future<void>.delayed(const Duration(milliseconds: 180));
-    return _seedEvents
-        .map(
-          (event) => event.copyWith(isJoined: _bookings.containsKey(event.id)),
-        )
-        .toList();
+    return _seedEvents.map((event) {
+      final joinedDayIndexes = _bookings.values
+          .where((booking) => booking.eventId == event.id)
+          .map((booking) => booking.dayIndex)
+          .toList();
+      return event.copyWith(
+        isJoined: joinedDayIndexes.isNotEmpty,
+        joinedDayIndexes: joinedDayIndexes,
+      );
+    }).toList();
   }
 
   @override
@@ -116,18 +137,19 @@ class InMemoryEventRepository implements EventRepository {
 
   @override
   Future<void> upsertBooking(EventBooking booking) async {
-    _bookings[booking.eventId] = booking;
+    _bookings[_bookingKey(booking.eventId, booking.dayIndex)] = booking;
   }
 
   @override
   Future<void> removeBooking(String eventId, {int? dayIndex}) async {
     if (dayIndex == null) {
-      _bookings.remove(eventId);
+      _bookings.removeWhere((_, booking) => booking.eventId == eventId);
       return;
     }
-    final booking = _bookings[eventId];
-    if (booking?.dayIndex == dayIndex) _bookings.remove(eventId);
+    _bookings.remove(_bookingKey(eventId, dayIndex));
   }
+
+  String _bookingKey(String eventId, int dayIndex) => '$eventId:$dayIndex';
 }
 
 final _seedEvents = <CosEvent>[

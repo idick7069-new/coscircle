@@ -13,7 +13,7 @@ class EventDayItem {
 
   String get title => eventDayTitle(event, dayIndex);
 
-  bool get isJoined => event.isJoined;
+  bool get isJoined => event.joinedDayIndexes.contains(dayIndex);
 
   EventStatus status(DateTime now) {
     final today = DateTime(now.year, now.month, now.day);

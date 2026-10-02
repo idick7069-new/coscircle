@@ -34,7 +34,7 @@ class EventListPage extends ConsumerStatefulWidget {
 class _EventListPageState extends ConsumerState<EventListPage> {
   static const _filterKey = 'event_list_filter';
   static const _joinedOnlyKey = 'event_list_joined_only';
-  static const _hideEndedKey = 'event_list_hide_ended';
+  static const _hideEndedKey = 'event_list_hide_ended_v2';
   static const _selectedDayKey = 'event_list_selected_day';
   static const _focusedDayKey = 'event_list_focused_day';
   static const _validFilters = {'全部', '我有加入', '關注者', '小圈圈'};
@@ -42,7 +42,7 @@ class _EventListPageState extends ConsumerState<EventListPage> {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
   bool _joinedOnly = false;
-  bool _hideEnded = true;
+  bool _hideEnded = false;
   String _filter = '全部';
 
   @override
@@ -93,7 +93,7 @@ class _EventListPageState extends ConsumerState<EventListPage> {
                         context.push('/events/${event.id}'),
                   ),
                 ),
-              SliverToBoxAdapter(child: _calendar(items)),
+              SliverToBoxAdapter(child: _calendar(expanded)),
               SliverToBoxAdapter(child: _filterChips()),
               if (filtered.isEmpty)
                 const SliverToBoxAdapter(child: _EmptyEventResult())
@@ -116,6 +116,7 @@ class _EventListPageState extends ConsumerState<EventListPage> {
                           'yyyy/MM/dd E',
                           'zh_TW',
                         ).format(item.date),
+                        isJoinedOverride: item.isJoined,
                         onTap: status == EventStatus.active
                             ? () => widget.onOpenCurrentEvent(item)
                             : null,
@@ -148,8 +149,11 @@ class _EventListPageState extends ConsumerState<EventListPage> {
     );
   }
 
-  Widget _calendar(List<CosEvent> events) {
+  Widget _calendar(List<EventDayItem> items) {
     final scheme = Theme.of(context).colorScheme;
+    final firstDay = _calendarFirstDay(items);
+    final lastDay = _calendarLastDay(items);
+    final focusedDay = _calendarFocusedDay(firstDay, lastDay);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: CosCard(
@@ -165,36 +169,40 @@ class _EventListPageState extends ConsumerState<EventListPage> {
               ),
             ),
             const SizedBox(height: 8),
-            TableCalendar<CosEvent>(
-              firstDay: DateTime(2026, 1, 1),
-              lastDay: DateTime(2026, 12, 31),
-              focusedDay: _focusedDay,
+            TableCalendar<EventDayItem>(
+              firstDay: firstDay,
+              lastDay: lastDay,
+              focusedDay: focusedDay,
               selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-              eventLoader: (day) => events.where((event) {
+              eventLoader: (day) => items.where((item) {
                 final date = DateTime(day.year, day.month, day.day);
-                return !date.isBefore(event.startDate) &&
-                    !date.isAfter(event.endDate);
+                return DateTime(
+                      item.date.year,
+                      item.date.month,
+                      item.date.day,
+                    ) ==
+                    date;
               }).toList(),
               calendarBuilders: CalendarBuilders(
-                markerBuilder: (context, day, events) {
-                  if (events.isEmpty) return null;
-                  final hasJoined = events.any((event) => event.isJoined);
+                markerBuilder: (context, day, dayItems) {
+                  if (dayItems.isEmpty) return null;
+                  final hasJoined = dayItems.any((item) => item.isJoined);
                   return Positioned(
                     bottom: 6,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        for (final event in events.take(3))
+                        for (final item in dayItems.take(3))
                           Container(
-                            width: hasJoined && event.isJoined ? 7 : 5,
-                            height: hasJoined && event.isJoined ? 7 : 5,
+                            width: hasJoined && item.isJoined ? 7 : 5,
+                            height: hasJoined && item.isJoined ? 7 : 5,
                             margin: const EdgeInsets.symmetric(horizontal: 1),
                             decoration: BoxDecoration(
-                              color: event.isJoined
+                              color: item.isJoined
                                   ? scheme.primary
                                   : scheme.secondary,
                               shape: BoxShape.circle,
-                              border: event.isJoined
+                              border: item.isJoined
                                   ? Border.all(
                                       color: scheme.onPrimary,
                                       width: 1,
@@ -209,6 +217,7 @@ class _EventListPageState extends ConsumerState<EventListPage> {
               ),
               calendarFormat: CalendarFormat.month,
               availableCalendarFormats: const {CalendarFormat.month: '月'},
+              availableGestures: AvailableGestures.horizontalSwipe,
               onDaySelected: (selectedDay, focusedDay) {
                 _updateFilters(
                   selectedDay: selectedDay,
@@ -311,6 +320,15 @@ class _EventListPageState extends ConsumerState<EventListPage> {
                     color: Theme.of(context).colorScheme.secondary,
                     onTap: () => _updateFilters(hideEnded: !_hideEnded),
                   ),
+                  if (_selectedDay != null) ...[
+                    const SizedBox(width: 8),
+                    CosChoicePill(
+                      label: '清除日期',
+                      selected: false,
+                      icon: Icons.event_repeat_outlined,
+                      onTap: _clearSelectedDay,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -326,18 +344,10 @@ class _EventListPageState extends ConsumerState<EventListPage> {
       final selected = _selectedDay;
       final matchesDate =
           selected == null ||
-          (!DateTime(
-                selected.year,
-                selected.month,
-                selected.day,
-              ).isBefore(event.startDate) &&
-              !DateTime(
-                selected.year,
-                selected.month,
-                selected.day,
-              ).isAfter(event.endDate));
+          DateTime(item.date.year, item.date.month, item.date.day) ==
+              DateTime(selected.year, selected.month, selected.day);
       final matchesJoined =
-          (!_joinedOnly && _filter != '我有加入') || event.isJoined;
+          (!_joinedOnly && _filter != '我有加入') || item.isJoined;
       final matchesType = switch (_filter) {
         '關注者' => event.hasFollowedParticipants,
         '小圈圈' => event.hasCircleMembers,
@@ -347,6 +357,32 @@ class _EventListPageState extends ConsumerState<EventListPage> {
           !_hideEnded || item.status(DateTime.now()) != EventStatus.ended;
       return matchesDate && matchesJoined && matchesType && matchesEnded;
     }).toList()..sort((a, b) => a.date.compareTo(b.date));
+  }
+
+  DateTime _calendarFirstDay(List<EventDayItem> items) {
+    final now = DateTime.now();
+    final dates = items.map((item) => item.date).toList();
+    final earliest = dates.isEmpty
+        ? DateTime(now.year, 1, 1)
+        : dates.reduce((a, b) => a.isBefore(b) ? a : b);
+    final firstYear = earliest.year < now.year ? earliest.year : now.year;
+    return DateTime(firstYear, 1, 1);
+  }
+
+  DateTime _calendarLastDay(List<EventDayItem> items) {
+    final now = DateTime.now();
+    final dates = items.map((item) => item.date).toList();
+    final latest = dates.isEmpty
+        ? DateTime(now.year, 12, 31)
+        : dates.reduce((a, b) => a.isAfter(b) ? a : b);
+    final lastYear = latest.year > now.year ? latest.year : now.year;
+    return DateTime(lastYear, 12, 31);
+  }
+
+  DateTime _calendarFocusedDay(DateTime firstDay, DateTime lastDay) {
+    if (_focusedDay.isBefore(firstDay)) return firstDay;
+    if (_focusedDay.isAfter(lastDay)) return lastDay;
+    return _focusedDay;
   }
 
   Future<void> _restoreFilters() async {
@@ -360,7 +396,7 @@ class _EventListPageState extends ConsumerState<EventListPage> {
         _filter = filter;
       }
       _joinedOnly = prefs.getBool(_joinedOnlyKey) ?? false;
-      _hideEnded = prefs.getBool(_hideEndedKey) ?? true;
+      _hideEnded = prefs.getBool(_hideEndedKey) ?? false;
       _selectedDay = selectedDay;
       _focusedDay = focusedDay ?? selectedDay ?? DateTime.now();
     });
@@ -372,15 +408,21 @@ class _EventListPageState extends ConsumerState<EventListPage> {
     bool? hideEnded,
     DateTime? selectedDay,
     DateTime? focusedDay,
+    bool clearSelectedDay = false,
   }) {
     setState(() {
       if (filter != null) _filter = filter;
       if (joinedOnly != null) _joinedOnly = joinedOnly;
       if (hideEnded != null) _hideEnded = hideEnded;
+      if (clearSelectedDay) _selectedDay = null;
       if (selectedDay != null) _selectedDay = selectedDay;
       if (focusedDay != null) _focusedDay = focusedDay;
     });
     _saveFilters();
+  }
+
+  void _clearSelectedDay() {
+    _updateFilters(clearSelectedDay: true);
   }
 
   Future<void> _saveFilters() async {
@@ -414,13 +456,37 @@ class _EventListPageState extends ConsumerState<EventListPage> {
     int dayIndex = 1,
   }) async {
     if (event.status(DateTime.now()) == EventStatus.ended) return;
+    final initialParticipant = await _myParticipantForDay(event.id, dayIndex);
+    if (!context.mounted) return;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) =>
-          BookingSheet(event: event, initialDayIndex: dayIndex),
+      builder: (context) => BookingSheet(
+        event: event,
+        initialDayIndex: dayIndex,
+        initialParticipant: initialParticipant,
+      ),
     );
+  }
+
+  Future<EventParticipant?> _myParticipantForDay(
+    String eventId,
+    int dayIndex,
+  ) async {
+    try {
+      final participants = await ref.read(
+        eventParticipantsProvider(eventId).future,
+      );
+      return participants
+          .where(
+            (participant) =>
+                participant.isMe && participant.dayIndex == dayIndex,
+          )
+          .firstOrNull;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _refreshEvents() async {
@@ -870,7 +936,7 @@ class _EventSpotlightCard extends StatelessWidget {
                               label: event.category,
                               color: scheme.primary,
                             ),
-                            if (event.isJoined)
+                            if (item.isJoined)
                               CosBadge(
                                 label: '已加入',
                                 icon: Icons.check_circle,
@@ -930,11 +996,11 @@ class _EventSpotlightCard extends StatelessWidget {
                                 ? null
                                 : () => onBookingPressed(event, item.dayIndex),
                             icon: Icon(
-                              event.isJoined
+                              item.isJoined
                                   ? Icons.edit_outlined
                                   : Icons.add_circle_outline,
                             ),
-                            label: Text(event.isJoined ? '修改' : '加入'),
+                            label: Text(item.isJoined ? '修改' : '加入'),
                           ),
                         ];
                         final message = Text(

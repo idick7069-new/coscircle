@@ -18,6 +18,7 @@ class CosEvent {
     this.sourceUrl = '',
     this.reviewStatus = 'approved',
     this.isJoined = false,
+    this.joinedDayIndexes = const [],
     this.hasFollowedParticipants = false,
     this.hasCircleMembers = false,
   });
@@ -38,6 +39,7 @@ class CosEvent {
   final String sourceUrl;
   final String reviewStatus;
   final bool isJoined;
+  final List<int> joinedDayIndexes;
   final bool hasFollowedParticipants;
   final bool hasCircleMembers;
 
@@ -68,6 +70,7 @@ class CosEvent {
       sourceUrl: json['sourceUrl']?.toString() ?? '',
       reviewStatus: json['status']?.toString() ?? 'approved',
       isJoined: json['isJoined'] == true || json['isJoined'] == 1,
+      joinedDayIndexes: _intList(json['joinedDayIndexes']),
       hasFollowedParticipants:
           json['hasFollowedParticipants'] == true ||
           json['hasFollowedParticipants'] == 1,
@@ -87,7 +90,7 @@ class CosEvent {
     return EventStatus.upcoming;
   }
 
-  CosEvent copyWith({bool? isJoined}) {
+  CosEvent copyWith({bool? isJoined, List<int>? joinedDayIndexes}) {
     return CosEvent(
       id: id,
       name: name,
@@ -105,6 +108,7 @@ class CosEvent {
       sourceUrl: sourceUrl,
       reviewStatus: reviewStatus,
       isJoined: isJoined ?? this.isJoined,
+      joinedDayIndexes: joinedDayIndexes ?? this.joinedDayIndexes,
       hasFollowedParticipants: hasFollowedParticipants,
       hasCircleMembers: hasCircleMembers,
     );
@@ -115,6 +119,9 @@ String _sourceNameFor(int type) {
   return switch (type) {
     1 => '同人誌中心',
     2 => '投稿活動',
+    3 => '官方人員建立',
+    4 => 'COSMOS 創作攝影展',
+    5 => 'acosta!',
     _ => '其他來源',
   };
 }
@@ -123,4 +130,22 @@ DateTime _parseDateOnly(String value) {
   final date = value.split('T').first;
   final parts = date.split('-').map(int.parse).toList();
   return DateTime(parts[0], parts[1], parts[2]);
+}
+
+List<int> _intList(Object? value) {
+  if (value is List) {
+    return value
+        .map((item) => int.tryParse(item.toString()))
+        .whereType<int>()
+        .where((item) => item > 0)
+        .toList();
+  }
+  final text = value?.toString().trim() ?? '';
+  if (text.isEmpty) return const [];
+  return text
+      .split(',')
+      .map((item) => int.tryParse(item.trim()))
+      .whereType<int>()
+      .where((item) => item > 0)
+      .toList();
 }

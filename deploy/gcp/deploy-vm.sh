@@ -74,7 +74,8 @@ gcloud compute scp \
 
 gcloud compute ssh "${VM_NAME}" --zone "${ZONE}" --command "
 set -euo pipefail
-sudo mkdir -p /opt/coscircle/api/releases/${RELEASE_ID} /var/www/coscircle/releases/${RELEASE_ID}
+sudo mkdir -p /opt/coscircle/api/releases/${RELEASE_ID} /var/www/coscircle/releases/${RELEASE_ID} /var/lib/coscircle/uploads
+sudo chown -R coscircle:coscircle /var/lib/coscircle/uploads
 sudo tar -xzf /tmp/coscircle-api-${RELEASE_ID}.tar.gz -C /opt/coscircle/api/releases/${RELEASE_ID}
 sudo tar -xzf /tmp/coscircle-web-${RELEASE_ID}.tar.gz -C /var/www/coscircle/releases/${RELEASE_ID}
 sudo rm -rf /opt/coscircle/api/releases/${RELEASE_ID}/uploads

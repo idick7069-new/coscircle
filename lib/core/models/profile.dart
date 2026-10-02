@@ -19,6 +19,7 @@ class UserProfile {
     this.travelSameRegion = false,
     this.landmine = '',
     this.gender = 'private',
+    this.profileRoles = const [],
     this.otherPhotoUrls = const [],
     this.bookingVisibility = 'public',
   });
@@ -40,6 +41,7 @@ class UserProfile {
   final bool travelSameRegion;
   final String landmine;
   final String gender;
+  final List<String> profileRoles;
   final List<String> otherPhotoUrls;
   final String bookingVisibility;
 
@@ -81,6 +83,10 @@ class UserProfile {
           json['travelSameRegion'] == true || json['travelSameRegion'] == 1,
       landmine: json['landmine']?.toString() ?? '',
       gender: json['gender']?.toString() ?? 'private',
+      profileRoles: (json['profileRoles'] as List<dynamic>? ?? const [])
+          .map((item) => item.toString())
+          .where((item) => _validProfileRoles.contains(item))
+          .toList(),
       otherPhotoUrls: (json['otherPhotoUrls'] as List<dynamic>? ?? const [])
           .map((item) => item.toString())
           .where((item) => item.isNotEmpty)
@@ -107,6 +113,7 @@ class UserProfile {
       'travelSameRegion': travelSameRegion,
       'landmine': landmine,
       'gender': gender,
+      'profileRoles': profileRoles,
       'otherPhotoUrls': otherPhotoUrls.take(3).toList(),
       'bookingVisibility': bookingVisibility,
     };
@@ -129,6 +136,7 @@ class UserProfile {
     bool? travelSameRegion,
     String? landmine,
     String? gender,
+    List<String>? profileRoles,
     List<String>? otherPhotoUrls,
     String? bookingVisibility,
   }) {
@@ -152,8 +160,11 @@ class UserProfile {
       travelSameRegion: travelSameRegion ?? this.travelSameRegion,
       landmine: landmine ?? this.landmine,
       gender: gender ?? this.gender,
+      profileRoles: profileRoles ?? this.profileRoles,
       otherPhotoUrls: otherPhotoUrls ?? this.otherPhotoUrls,
       bookingVisibility: bookingVisibility ?? this.bookingVisibility,
     );
   }
 }
+
+const _validProfileRoles = {'coser', 'photographer', 'manager', 'self'};

@@ -274,7 +274,7 @@ class CosReveal extends StatefulWidget {
     super.key,
     required this.child,
     this.delay = Duration.zero,
-    this.offset = const Offset(0, 14),
+    this.offset = const Offset(0, 0.08),
   });
 
   final Widget child;

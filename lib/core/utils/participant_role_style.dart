@@ -34,3 +34,13 @@ String participantRoleLabel(String role) {
     _ => '路人',
   };
 }
+
+IconData participantRoleIcon(String role) {
+  return switch (role) {
+    'photographer' => Icons.photo_camera_outlined,
+    'coser' => Icons.theater_comedy_outlined,
+    'manager' => Icons.support_agent_outlined,
+    'self' => Icons.explore_outlined,
+    _ => Icons.badge_outlined,
+  };
+}
