@@ -1,11 +1,11 @@
 import 'dotenv/config';
-import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { execFile } from 'child_process';
-import { accessSync } from 'fs';
 import { pathToFileURL } from 'url';
-import { promisify } from 'util';
 import { createPool } from '../src/db.js';
+import { assertSourceFetchHost } from './source-fetch-host.js';
+import { fetchSourceHtml } from './curl-fetch.js';
+import { inTransaction } from '../src/db-transaction.js';
+import { validateDoujinHtml, validateDoujinCount, saveDoujinSnapshot } from './event-snapshot.js';
 
 const sourceUrl = 'https://www.doujin.com.tw/events/alist';
 const allEventsSourceUrl = 'https://www.doujin.com.tw/events/alist/all';
@@ -14,39 +14,54 @@ const cosmosOenEventUrl =
   'https://cosmos.oen.tw/events/3DGSdlOZgTrm1idEZRYTbUp2f4y';
 const acostaTaiwanUrl = 'https://acosta.jp/area/over-sea/taiwan/';
 const acostaOrigin = new URL(acostaTaiwanUrl).origin;
-const execFileAsync = promisify(execFile);
-const browserFetchEnabled = process.env.EVENT_SCRAPER_BROWSER_FALLBACK === 'true';
-const defaultBrowserPaths = [
-  '/usr/bin/google-chrome-stable',
-  '/usr/bin/google-chrome',
-  '/usr/bin/chromium',
-  '/usr/bin/chromium-browser',
-];
 
 export async function fetchDoujinEventsHtml(url = allEventsSourceUrl) {
-  const { data } = await axios.get(url, {
-    timeout: 20000,
-    headers: {
-      'user-agent': 'CosCircleBot/1.0 (+https://coscircle.app)',
-      accept:
-        'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'accept-language': 'zh-TW,zh;q=0.9,en;q=0.6',
-    },
-  });
-
-  return data;
+  return fetchSourceHtml(url);
 }
 
 export async function scrapeEvents(url = allEventsSourceUrl) {
-  const doujinEvents = await scrapeDoujinEvents(url);
-  if (url !== allEventsSourceUrl) return doujinEvents;
-
-  const supplementalEvents = await scrapeSupplementalEvents();
+  if (url !== allEventsSourceUrl) return scrapeDoujinEvents(url);
+  const { doujinEvents, supplementalEvents } = await collectEventSources();
   return dedupeEventsByFingerprint([...doujinEvents, ...supplementalEvents]);
 }
 
+export async function collectEventSources({
+  doujin = scrapeDoujinEvents,
+  cosmos = scrapeCosmosOenEvents,
+  acosta = scrapeAcostaTaiwanEvents,
+  supplemental,
+} = {}) {
+  const definitions = [
+    {sourceKey: 'doujin-source', sourceUrl: allEventsSourceUrl, fetch: doujin},
+    ...(supplemental ? [{sourceKey: 'supplemental-source', sourceUrl: '', fetch: supplemental}] : [
+      {sourceKey: 'cosmos-source', sourceUrl: cosmosOenEventUrl, fetch: cosmos},
+      {sourceKey: 'acosta-source', sourceUrl: acostaTaiwanUrl, fetch: acosta},
+    ]),
+  ];
+  const results = await Promise.allSettled(definitions.map((source) => Promise.resolve().then(source.fetch)));
+  const sourceResults = results.map((result, index) => ({
+    sourceKey: definitions[index].sourceKey,
+    sourceUrl: definitions[index].sourceUrl,
+    status: result.status === 'fulfilled' ? 'success' : 'failure',
+    events: result.status === 'fulfilled' ? result.value : [],
+    importedCount: 0,
+    errorCode: result.status === 'rejected' ? String(result.reason?.response?.status ?? result.reason?.code ?? 'fetch_failed') : null,
+    errorMessage: result.status === 'rejected' ? summarizeHttpError(result.reason) : null,
+  }));
+  const doujinSucceeded = results[0].status === 'fulfilled';
+  const doujinEvents = doujinSucceeded ? results[0].value : [];
+  const supplementalEvents = sourceResults.slice(1).flatMap((source) => source.events);
+  for (const result of results) {
+    if (result.status === 'rejected') console.warn('[event-scraper] source failed; existing records preserved', summarizeHttpError(result.reason));
+  }
+  if (!doujinEvents.length && !supplementalEvents.length) {
+    throw Object.assign(new Error('all_event_sources_unavailable'), {sourceResults});
+  }
+  return { doujinEvents, supplementalEvents, doujinSucceeded, sourceResults };
+}
+
 export async function scrapeDoujinEvents(url = allEventsSourceUrl) {
-  const html = await fetchDoujinEventsHtmlWithFallback(url);
+  const html = await fetchDoujinEventsHtml(url);
   return parseAndRequireEvents(html);
 }
 
@@ -66,64 +81,6 @@ export async function scrapeSupplementalEvents() {
   }
 
   return events;
-}
-
-export async function fetchDoujinEventsHtmlWithFallback(url = allEventsSourceUrl) {
-  try {
-    const html = await fetchDoujinEventsHtml(url);
-    if (!isCloudflareChallengeHtml(html)) return html;
-    if (!browserFetchEnabled) throw new Error('doujin_source_cloudflare_challenge');
-    console.warn('[event-scraper] axios returned a Cloudflare challenge; trying browser fetch');
-  } catch (error) {
-    if (!browserFetchEnabled || !shouldTryBrowserFetch(error)) throw error;
-    console.warn(
-      `[event-scraper] axios failed (${summarizeHttpError(error)}); trying browser fetch`,
-    );
-  }
-
-  return fetchDoujinEventsHtmlWithBrowser(url);
-}
-
-export async function fetchDoujinEventsHtmlWithBrowser(
-  url = allEventsSourceUrl,
-  {
-    executablePath = process.env.EVENT_SCRAPER_CHROME_PATH,
-    timeoutMs = Number(process.env.EVENT_SCRAPER_BROWSER_TIMEOUT_MS ?? 45000),
-  } = {},
-) {
-  const chromePath = executablePath || findExistingBrowserPath();
-  if (!chromePath) {
-    throw new Error('EVENT_SCRAPER_CHROME_PATH is not set and no Chrome/Chromium binary was found.');
-  }
-
-  const { stdout } = await execFileAsync(
-    chromePath,
-    [
-      '--headless=new',
-      '--disable-gpu',
-      '--disable-dev-shm-usage',
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--no-sandbox',
-      '--window-size=1365,900',
-      '--virtual-time-budget=10000',
-      '--dump-dom',
-      url,
-    ],
-    {
-      timeout: timeoutMs,
-      maxBuffer: 20 * 1024 * 1024,
-      env: {
-        ...process.env,
-        HOME: process.env.EVENT_SCRAPER_BROWSER_HOME ?? '/tmp/coscircle-chrome',
-      },
-    },
-  );
-
-  if (isCloudflareChallengeHtml(stdout)) {
-    throw new Error('browser_fetch_cloudflare_challenge');
-  }
-  return stdout;
 }
 
 export function parseEventsFromHtml(html) {
@@ -311,7 +268,8 @@ function structuredEventToCosCircleEvent(value) {
 async function scrapeCosmosOenEvents() {
   const html = await fetchPublicHtml(cosmosOenEventUrl);
   const event = parseCosmosOenEventFromHtml(html, cosmosOenEventUrl);
-  return event ? [event] : [];
+  if (!event) throw new Error('cosmos_events_parse_empty');
+  return [event];
 }
 
 export function parseCosmosOenEventFromHtml(html, eventUrl = cosmosOenEventUrl) {
@@ -354,16 +312,14 @@ export function parseCosmosOenEventFromHtml(html, eventUrl = cosmosOenEventUrl) 
 async function scrapeAcostaTaiwanEvents() {
   const listHtml = await fetchPublicHtml(acostaTaiwanUrl);
   const eventUrls = acostaTaiwanEventUrlsFromHtml(listHtml);
+  if (!eventUrls.length) throw new Error('acosta_events_parse_empty');
   const events = [];
 
   for (const eventUrl of eventUrls) {
-    try {
-      const eventHtml = await fetchPublicHtml(eventUrl);
-      const event = parseAcostaEventFromHtml(eventHtml, eventUrl);
-      if (event) events.push(event);
-    } catch (error) {
-      console.warn(`[event-scraper] acosta event failed: ${eventUrl} ${summarizeHttpError(error)}`);
-    }
+    const eventHtml = await fetchPublicHtml(eventUrl);
+    const event = parseAcostaEventFromHtml(eventHtml, eventUrl);
+    if (!event) throw new Error(`acosta_event_parse_failed: ${eventUrl}`);
+    events.push(event);
   }
 
   return events;
@@ -438,26 +394,58 @@ export function parseAcostaEventFromHtml(html, eventUrl) {
   };
 }
 
-export async function importEvents(pool = createPool()) {
-  const doujinEvents = await scrapeDoujinEvents();
-  const supplementalEvents = await scrapeSupplementalEvents();
-  const events = dedupeEventsByFingerprint([...doujinEvents, ...supplementalEvents]);
-  await upsertEvents(pool, doujinEvents, {
-    doujinEvents,
-    rejectMissingDoujin: true,
-  });
-  await upsertEvents(pool, supplementalEvents, {
-    doujinEvents: [],
-    rejectMissingDoujin: false,
-  });
-  return events;
+export async function importEvents(pool = createPool(), sources = {}, onSourceResult = async () => {}) {
+  let sourceResults;
+  try {
+    ({sourceResults} = await collectEventSources(sources));
+  } catch (error) {
+    for (const {events: _events, ...report} of error.sourceResults ?? []) {
+      const publish = await onSourceResult(report, pool);
+      if (typeof publish === 'function') publish();
+    }
+    throw error;
+  }
+  const importedEvents = [];
+  for (const source of sourceResults) {
+    let reported = false;
+    if (source.status === 'success') {
+      try {
+        const publish = await inTransaction(pool, async (db) => {
+          if (source.sourceKey === 'doujin-source') await validateDoujinCount(db, source.events);
+          if (source.events.length) await upsertEvents(db, source.events);
+          if (source.sourceKey === 'doujin-source') await saveDoujinSnapshot(db, source.events);
+          source.importedCount = source.events.length;
+          const {events: _events, ...report} = source;
+          return onSourceResult(report, db);
+        });
+        reported = true;
+        if (typeof publish === 'function') publish();
+        importedEvents.push(...source.events);
+      } catch (error) {
+        source.status = 'failure';
+        source.importedCount = 0;
+        source.errorCode = String(error?.code ?? 'import_failed');
+        source.errorMessage = summarizeHttpError(error);
+      }
+    }
+    const {events: _events, ...report} = source;
+    if (!reported) {
+      const publish = await onSourceResult(report, pool);
+      if (typeof publish === 'function') publish();
+    }
+  }
+  if (sourceResults.every((source) => source.status === 'failure')) {
+    throw Object.assign(new Error('all_event_sources_unavailable'), {sourceResults});
+  }
+  return dedupeEventsByFingerprint(importedEvents);
 }
 
 export async function importEventsFromHtml(html, pool = createPool()) {
   const events = parseAndRequireEvents(html);
-  await upsertEvents(pool, events, {
-    doujinEvents: events,
-    rejectMissingDoujin: true,
+  await inTransaction(pool, async (db) => {
+    await validateDoujinCount(db, events);
+    await upsertEvents(db, events);
+    await saveDoujinSnapshot(db, events);
   });
   return events;
 }
@@ -465,7 +453,6 @@ export async function importEventsFromHtml(html, pool = createPool()) {
 async function upsertEvents(
   pool,
   events,
-  { doujinEvents = events, rejectMissingDoujin = true } = {},
 ) {
   for (const event of events) {
     if (await updateExistingDoujinEventByUrl(pool, event)) {
@@ -513,31 +500,7 @@ async function upsertEvents(
       ],
     );
   }
-  await rejectCancelledDoujinEventFamilies(pool);
-  if (rejectMissingDoujin) {
-    await rejectMissingDoujinEvents(pool, doujinEvents);
-  }
-}
-
-export async function rejectMissingDoujinEvents(pool, events) {
-  const sourceUrls = events
-    .map((event) => event.sourceUrl)
-    .filter((url) => typeof url === 'string' && url.length > 0);
-  if (sourceUrls.length === 0) return;
-
-  const placeholders = sourceUrls.map(() => '?').join(', ');
-  await pool.execute(
-    `UPDATE events
-        SET status = 'rejected'
-      WHERE (source_key LIKE 'doujin-%'
-          OR source_type = 1
-          OR source_name = '同人誌中心')
-        AND end_date >= CURRENT_DATE()
-        AND source_url IS NOT NULL
-        AND source_url <> ''
-        AND source_url NOT IN (${placeholders})`,
-    sourceUrls,
-  );
+  // Only explicit cancellation in fetched records changes publication status.
 }
 
 async function updateExistingDoujinEventByUrl(pool, event) {
@@ -600,7 +563,7 @@ async function updateExistingDoujinEventByUrl(pool, event) {
 
 async function updateExistingEventByFingerprint(pool, event) {
   const [rows] = await pool.execute(
-    `SELECT id, name, venue, detailed_address AS detailedAddress
+    `SELECT id, name, venue, source_url AS sourceUrl, detailed_address AS detailedAddress
        FROM events
       WHERE start_date = ?
         AND end_date = ?
@@ -812,20 +775,11 @@ function absoluteUrl(value, baseUrl = sourceOrigin) {
 }
 
 async function fetchPublicHtml(url) {
+  assertSourceFetchHost();
   let lastError;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      const { data } = await axios.get(url, {
-        timeout: 20000,
-        headers: {
-          'user-agent': 'CosCircleBot/1.0 (+https://coscircle.app)',
-          accept:
-            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'accept-language': 'zh-TW,zh;q=0.9,ja;q=0.8,en;q=0.6',
-        },
-      });
-
-      return data;
+      return await fetchSourceHtml(url);
     } catch (error) {
       lastError = error;
       if (attempt === 2 || !shouldRetryPublicFetch(error)) break;
@@ -837,8 +791,10 @@ async function fetchPublicHtml(url) {
 }
 
 function shouldRetryPublicFetch(error) {
+  if (error?.code === 'gcp_only_source_fetch' || String(error?.code ?? '').startsWith('curl_')) return false;
+  if (error?.response?.headers?.['cf-mitigated'] === 'challenge') return false;
   const status = error?.response?.status;
-  return status == null || status === 408 || status === 429 || status >= 500;
+  return status === 408 || status >= 500;
 }
 
 function sleep(ms) {
@@ -859,7 +815,11 @@ function dedupeEventsByFingerprint(events) {
   return [...byFingerprint.values()];
 }
 
-function isLikelySameEvent(existing, incoming) {
+export function isLikelySameEvent(existing, incoming) {
+  const doujinId = (url) => String(url ?? '').match(/^https:\/\/www\.doujin\.com\.tw\/events\/info\/(\d+)(?:[/?#]|$)/)?.[1];
+  const existingId = doujinId(existing.sourceUrl);
+  const incomingId = doujinId(incoming.sourceUrl);
+  if (existingId && incomingId && existingId !== incomingId) return false;
   const existingName = canonicalEventText(existing.name);
   const incomingName = canonicalEventText(incoming.name);
   const existingVenue = canonicalEventText(
@@ -869,10 +829,9 @@ function isLikelySameEvent(existing, incoming) {
     [incoming.venue, incoming.detailedAddress].filter(Boolean).join(' '),
   );
 
-  return (
-    hasSharedSignificantToken(existingName, incomingName) ||
-    (existingVenue && incomingVenue && hasSharedSignificantToken(existingVenue, incomingVenue))
-  );
+  // A shared venue/date alone is not identity: independent fairs can be co-located.
+  return hasSharedSignificantToken(existingName, incomingName)
+    && (!existingVenue || !incomingVenue || hasSharedSignificantToken(existingVenue, incomingVenue));
 }
 
 function eventFingerprint(event) {
@@ -929,12 +888,7 @@ function isCliEntry() {
   return process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 }
 
-function shouldTryBrowserFetch(error) {
-  const status = error?.response?.status;
-  return status === 403 || status === 429 || status == null;
-}
-
-function parseAndRequireEvents(html) {
+export function parseAndRequireEvents(html) {
   if (isCloudflareChallengeHtml(html)) {
     throw new Error('doujin_source_cloudflare_challenge');
   }
@@ -943,6 +897,7 @@ function parseAndRequireEvents(html) {
   if (events.length === 0) {
     throw new Error('doujin_events_parse_empty');
   }
+  validateDoujinHtml(html, events);
   return events;
 }
 
@@ -960,21 +915,13 @@ function isCloudflareChallengeHtml(html) {
   return titleLooksLikeChallenge && bodyLooksLikeChallenge;
 }
 
-function findExistingBrowserPath() {
-  for (const browserPath of defaultBrowserPaths) {
-    try {
-      accessSync(browserPath);
-      return browserPath;
-    } catch {
-      // Try the next path.
-    }
-  }
-  return '';
-}
-
 function summarizeHttpError(error) {
   const status = error?.response?.status;
   const statusText = error?.response?.statusText;
+  if (error?.response?.headers?.['cf-mitigated'] === 'challenge') {
+    return [status, 'Cloudflare 驗證攔截：未取得活動資料', error.response.headers['cf-ray']]
+      .filter(Boolean).join(' ');
+  }
   return [status, statusText, error?.message].filter(Boolean).join(' ') || 'unknown';
 }
 

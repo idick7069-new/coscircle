@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS friendships (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_low_id BIGINT UNSIGNED NOT NULL,
+  user_high_id BIGINT UNSIGNED NOT NULL,
+  requester_id BIGINT UNSIGNED NOT NULL,
+  recipient_id BIGINT UNSIGNED NOT NULL,
+  status ENUM('pending','ignored','accepted') NOT NULL DEFAULT 'pending',
+  introduction VARCHAR(200) NOT NULL,
+  event_id BIGINT UNSIGNED NULL,
+  day_index INT UNSIGNED NULL,
+  event_name VARCHAR(255) NULL,
+  event_date DATE NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  accepted_at TIMESTAMP NULL,
+  UNIQUE KEY uq_friend_pair (user_low_id, user_high_id),
+  KEY idx_friend_inbox (recipient_id, status),
+  KEY idx_friend_outbox (requester_id, status),
+  FOREIGN KEY (user_low_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_high_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (requester_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE SET NULL
+);

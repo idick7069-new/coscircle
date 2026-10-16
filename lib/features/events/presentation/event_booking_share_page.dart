@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 
@@ -6,12 +5,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/models/event.dart';
 import '../../../core/models/participant.dart';
 import '../../../core/utils/event_day_display.dart';
+import '../../../core/utils/error_message.dart';
 import '../../../core/utils/participant_role_style.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/cos_ui.dart';
@@ -125,20 +124,22 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('預訂分享圖'),
-        actions: [
-          IconButton(
-            tooltip: '分享圖片',
+      appBar: AppBar(title: const Text('預訂分享圖')),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: FilledButton.icon(
             onPressed: _sharing ? null : _shareImage,
             icon: _sharing
                 ? CosLoadingPulse(
-                    color: Theme.of(context).colorScheme.primary,
-                    size: 22,
+                    color: Theme.of(context).colorScheme.onPrimary,
+                    size: 20,
                   )
                 : const Icon(Icons.ios_share),
+            label: Text(_sharing ? '產生中' : '分享圖片'),
           ),
-        ],
+        ),
       ),
       body: SafeArea(
         child: ListView(
@@ -158,8 +159,6 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
               bookingCount: widget.bookings.length,
               dayCount: _dayCount,
               selectedLayer: _selectedLayer,
-              sharing: _sharing,
-              onShare: _shareImage,
             ),
             const SizedBox(height: 12),
             CosReveal(
@@ -398,11 +397,6 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
               ),
               const SizedBox(height: 12),
             ],
-            FilledButton.icon(
-              onPressed: _sharing ? null : _shareImage,
-              icon: const Icon(Icons.ios_share),
-              label: const Text('產生並分享圖片'),
-            ),
           ],
         ),
       ),
@@ -485,26 +479,28 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       final bytes = byteData?.buffer.asUint8List();
       if (bytes == null) return;
-      final file = await _writeTempImage(bytes);
+      if (!mounted) return;
+      final box = context.findRenderObject() as RenderBox?;
       await SharePlus.instance.share(
         ShareParams(
           title: '${eventDisplayName(widget.event)} 參加預定',
           text: '${eventDisplayName(widget.event)} 參加預定',
-          files: [XFile(file.path, mimeType: 'image/png')],
+          files: [XFile.fromData(bytes, mimeType: 'image/png')],
           fileNameOverrides: ['coscircle_booking_${widget.event.id}.png'],
+          sharePositionOrigin: box == null
+              ? null
+              : box.localToGlobal(Offset.zero) & box.size,
         ),
       );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('分享圖片失敗：${userFacingError(error)}')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _sharing = false);
     }
-  }
-
-  Future<File> _writeTempImage(Uint8List bytes) async {
-    final dir = await getTemporaryDirectory();
-    final file = File(
-      '${dir.path}/coscircle_booking_${widget.event.id}_${DateTime.now().millisecondsSinceEpoch}.png',
-    );
-    return file.writeAsBytes(bytes, flush: true);
   }
 }
 
@@ -514,16 +510,12 @@ class _ShareComposerHero extends StatelessWidget {
     required this.bookingCount,
     required this.dayCount,
     required this.selectedLayer,
-    required this.sharing,
-    required this.onShare,
   });
 
   final CosEvent event;
   final int bookingCount;
   final int dayCount;
   final _SelectedShareLayer? selectedLayer;
-  final bool sharing;
-  final VoidCallback onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -541,14 +533,6 @@ class _ShareComposerHero extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final compact = constraints.maxWidth < 420;
-            final action = FilledButton.icon(
-              onPressed: sharing ? null : onShare,
-              icon: sharing
-                  ? CosLoadingPulse(color: scheme.onPrimary, size: 20)
-                  : const Icon(Icons.ios_share),
-              label: Text(sharing ? '產生中' : '分享圖片'),
-            );
             final intro = Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -611,20 +595,7 @@ class _ShareComposerHero extends StatelessWidget {
               ],
             );
 
-            if (compact) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [intro, const SizedBox(height: 14), action],
-              );
-            }
-
-            return Row(
-              children: [
-                Expanded(child: intro),
-                const SizedBox(width: 16),
-                action,
-              ],
-            );
+            return intro;
           },
         ),
       ),

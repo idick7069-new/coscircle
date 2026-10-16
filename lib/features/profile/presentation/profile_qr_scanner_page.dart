@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/providers/event_providers.dart';
+import '../../../core/models/event_day_item.dart';
 
 import '../../../shared/widgets/cos_ui.dart';
+import '../../../core/utils/app_qr_code.dart';
 
-class ProfileQrScannerPage extends StatefulWidget {
+class ProfileQrScannerPage extends ConsumerStatefulWidget {
   const ProfileQrScannerPage({super.key});
 
   @override
-  State<ProfileQrScannerPage> createState() => _ProfileQrScannerPageState();
+  ConsumerState<ProfileQrScannerPage> createState() =>
+      _ProfileQrScannerPageState();
 }
 
-class _ProfileQrScannerPageState extends State<ProfileQrScannerPage> {
+class _ProfileQrScannerPageState extends ConsumerState<ProfileQrScannerPage> {
   bool _handled = false;
 
   @override
@@ -27,10 +32,37 @@ class _ProfileQrScannerPageState extends State<ProfileQrScannerPage> {
                   .map((barcode) => barcode.rawValue?.trim() ?? '')
                   .where((value) => value.isNotEmpty)
                   .firstOrNull;
-              final publicCode = _extractPublicCode(value);
+              final publicCode = extractAppQrCode(
+                value,
+                'profiles',
+                minimumLength: 8,
+              );
               if (publicCode == null) return;
               _handled = true;
-              context.replace('/profiles/$publicCode');
+              final target = ref.read(selectedCurrentEventTargetProvider);
+              final days = expandEventDays(
+                ref.read(eventsProvider).asData?.value ?? [],
+              );
+              final now = DateTime.now();
+              final day = days
+                  .where(
+                    (day) =>
+                        day.event.id == target?.eventId &&
+                        day.dayIndex == target?.dayIndex &&
+                        day.date == DateTime(now.year, now.month, now.day),
+                  )
+                  .firstOrNull;
+              context.replace(
+                Uri(
+                  path: '/profiles/$publicCode',
+                  queryParameters: day == null
+                      ? null
+                      : {
+                          'eventId': day.event.id,
+                          'dayIndex': '${day.dayIndex}',
+                        },
+                ).toString(),
+              );
             },
           ),
           CosScannerOverlay(
@@ -44,26 +76,5 @@ class _ProfileQrScannerPageState extends State<ProfileQrScannerPage> {
         ],
       ),
     );
-  }
-
-  String? _extractPublicCode(String? value) {
-    final text = value?.trim() ?? '';
-    if (text.isEmpty) return null;
-
-    final uri = Uri.tryParse(text);
-    if (uri != null) {
-      if (uri.scheme == 'coscircle' &&
-          uri.host == 'profiles' &&
-          uri.pathSegments.isNotEmpty) {
-        return uri.pathSegments.first;
-      }
-      final profileIndex = uri.pathSegments.indexOf('profiles');
-      if (profileIndex >= 0 && profileIndex + 1 < uri.pathSegments.length) {
-        return uri.pathSegments[profileIndex + 1];
-      }
-    }
-
-    if (RegExp(r'^[a-zA-Z0-9_-]{8,80}$').hasMatch(text)) return text;
-    return null;
   }
 }

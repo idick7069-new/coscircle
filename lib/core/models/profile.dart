@@ -7,6 +7,7 @@ class UserProfile {
     this.publicCode = '',
     this.isAdmin = false,
     this.isFollowed = false,
+    this.isMe = false,
     this.avatarUrl = '',
     this.facebookUrl = '',
     this.bio = '',
@@ -22,6 +23,7 @@ class UserProfile {
     this.profileRoles = const [],
     this.otherPhotoUrls = const [],
     this.bookingVisibility = 'public',
+    this.onboardingCompleted = false,
   });
 
   final String id;
@@ -29,6 +31,7 @@ class UserProfile {
   final String publicCode;
   final bool isAdmin;
   final bool isFollowed;
+  final bool isMe;
   final String avatarUrl;
   final String facebookUrl;
   final String bio;
@@ -44,6 +47,7 @@ class UserProfile {
   final List<String> profileRoles;
   final List<String> otherPhotoUrls;
   final String bookingVisibility;
+  final bool onboardingCompleted;
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     final pitWorks = (json['pitWorks'] as List<dynamic>? ?? const [])
@@ -58,10 +62,14 @@ class UserProfile {
             .toList();
     return UserProfile(
       id: json['id']?.toString() ?? '',
+      onboardingCompleted:
+          json['onboardingCompleted'] == true ||
+          json['onboardingCompleted'] == 1,
       nickname: json['nickname']?.toString() ?? '',
       publicCode: json['publicCode']?.toString() ?? '',
       isAdmin: json['isAdmin'] == true || json['isAdmin'] == 1,
       isFollowed: json['isFollowed'] == true || json['isFollowed'] == 1,
+      isMe: json['isMe'] == true || json['isMe'] == 1,
       avatarUrl: json['avatarUrl']?.toString() ?? '',
       facebookUrl: json['facebookUrl']?.toString() ?? '',
       bio: json['bio']?.toString() ?? '',
@@ -101,6 +109,7 @@ class UserProfile {
   Map<String, dynamic> toJson() {
     return {
       'nickname': nickname,
+      'onboardingCompleted': onboardingCompleted,
       'avatarUrl': avatarUrl,
       'facebookUrl': facebookUrl,
       'bio': bio,
@@ -121,6 +130,7 @@ class UserProfile {
 
   UserProfile copyWith({
     String? nickname,
+    bool? onboardingCompleted,
     String? publicCode,
     bool? isAdmin,
     bool? isFollowed,
@@ -144,10 +154,12 @@ class UserProfile {
     final nextShallowPitWorks = shallowPitWorks ?? this.shallowPitWorks;
     return UserProfile(
       id: id,
+      onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
       nickname: nickname ?? this.nickname,
       publicCode: publicCode ?? this.publicCode,
       isAdmin: isAdmin ?? this.isAdmin,
       isFollowed: isFollowed ?? this.isFollowed,
+      isMe: isMe,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       facebookUrl: facebookUrl ?? this.facebookUrl,
       bio: bio ?? this.bio,

@@ -30,24 +30,41 @@ class CosUi {
 }
 
 class CosLogoMark extends StatelessWidget {
-  const CosLogoMark({super.key, this.size = 42});
+  const CosLogoMark({
+    super.key,
+    this.size = 42,
+    this.orbitRotation = 0,
+    this.markOpacity = 1,
+  });
 
   final double size;
+  final double orbitRotation;
+  final double markOpacity;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return CustomPaint(
       size: Size.square(size),
-      painter: _CosLogoMarkPainter(scheme),
+      painter: _CosLogoMarkPainter(
+        scheme,
+        orbitRotation: orbitRotation,
+        markOpacity: markOpacity,
+      ),
     );
   }
 }
 
 class _CosLogoMarkPainter extends CustomPainter {
-  const _CosLogoMarkPainter(this.scheme);
+  const _CosLogoMarkPainter(
+    this.scheme, {
+    this.orbitRotation = 0,
+    this.markOpacity = 1,
+  });
 
   final ColorScheme scheme;
+  final double orbitRotation;
+  final double markOpacity;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -82,12 +99,12 @@ class _CosLogoMarkPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeWidth = stroke
-      ..color = scheme.primary;
+      ..color = scheme.primary.withValues(alpha: markOpacity);
     final rightPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeWidth = stroke
-      ..color = scheme.secondary;
+      ..color = scheme.secondary.withValues(alpha: markOpacity);
     final orbitPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = size.width * 0.025
@@ -112,6 +129,10 @@ class _CosLogoMarkPainter extends CustomPainter {
       false,
       rightPaint,
     );
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+    canvas.rotate(orbitRotation);
+    canvas.translate(-center.dx, -center.dy);
     canvas.drawOval(markRect.inflate(size.width * 0.07), orbitPaint);
 
     final sparkle = Paint()..color = scheme.tertiary;
@@ -120,11 +141,14 @@ class _CosLogoMarkPainter extends CustomPainter {
       size.width * 0.045,
       sparkle,
     );
+    canvas.restore();
   }
 
   @override
   bool shouldRepaint(covariant _CosLogoMarkPainter oldDelegate) {
-    return oldDelegate.scheme != scheme;
+    return oldDelegate.scheme != scheme ||
+        oldDelegate.orbitRotation != orbitRotation ||
+        oldDelegate.markOpacity != markOpacity;
   }
 }
 
@@ -639,41 +663,58 @@ class CosSectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        if (icon != null) ...[
-          CosIconBubble(icon: icon!, size: 36),
-          const SizedBox(width: 10),
-        ],
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
-              ),
-              if (subtitle != null) ...[
-                const SizedBox(height: 2),
-                Text(
-                  subtitle!,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stacked =
+            trailing != null &&
+            (constraints.maxWidth < 340 ||
+                MediaQuery.textScalerOf(context).scale(14) > 18);
+        final header = Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            if (icon != null) ...[
+              CosIconBubble(icon: icon!, size: 36),
+              const SizedBox(width: 10),
             ],
-          ),
-        ),
-        if (trailing != null) ...[const SizedBox(width: 10), trailing!],
-      ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (trailing != null && !stacked) ...[
+              const SizedBox(width: 10),
+              Flexible(child: trailing!),
+            ],
+          ],
+        );
+        return stacked
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [header, const SizedBox(height: 8), trailing!],
+              )
+            : header;
+      },
     );
   }
 }
@@ -922,13 +963,15 @@ class _CosChoicePillState extends State<CosChoicePill> {
                       : scheme.onSurfaceVariant.withValues(alpha: 0.5),
                 ),
                 const SizedBox(width: 6),
-                Text(
-                  widget.label,
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: enabled
-                        ? (widget.selected ? accent : scheme.onSurface)
-                        : scheme.onSurfaceVariant.withValues(alpha: 0.6),
-                    fontWeight: FontWeight.w900,
+                Flexible(
+                  child: Text(
+                    widget.label,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: enabled
+                          ? (widget.selected ? accent : scheme.onSurface)
+                          : scheme.onSurfaceVariant.withValues(alpha: 0.6),
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                 ),
               ],

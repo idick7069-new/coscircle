@@ -7,6 +7,7 @@ import '../api/api_client.dart';
 import '../models/admin_doujin_sync_check.dart';
 import '../models/admin_stats.dart';
 import '../models/admin_sync_run.dart';
+import '../models/admin_sync_job.dart';
 import '../models/admin_user.dart';
 import '../models/event.dart';
 import '../models/event_submission.dart';
@@ -230,11 +231,20 @@ class AdminRepository {
     );
   }
 
-  Future<int> syncDoujinEvents() async {
+  Future<AdminSyncJob?> fetchSyncJob(String id) async {
+    final response = await _apiClient.get('/admin/event-sync-jobs/$id');
+    return response.data == null
+        ? null
+        : AdminSyncJob.fromJson(
+            Map<String, dynamic>.from(response.data as Map),
+          );
+  }
+
+  Future<AdminSyncJob> syncDoujinEvents() async {
     try {
       final response = await _apiClient.post('/admin/sync-doujin-events');
       final data = response.data as Map<String, dynamic>;
-      return int.tryParse(data['count'].toString()) ?? 0;
+      return AdminSyncJob.fromJson(data);
     } on DioException catch (error) {
       if (error.response?.statusCode == 404) {
         throw Exception('後端尚未載入手動同步 API，請重啟 backend 後再試');

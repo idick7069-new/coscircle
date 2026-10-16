@@ -17,6 +17,7 @@ final eventRepositoryProvider = Provider<EventRepository>((ref) {
 abstract class EventRepository {
   Future<List<CosEvent>> fetchEvents();
   Future<List<EventParticipant>> fetchParticipants(String eventId);
+  Future<Map<String, List<EventParticipant>>> fetchMyBookings();
   Future<void> followUser(String userId);
   Future<void> unfollowUser(String userId);
   Future<void> blockUser(String userId);
@@ -28,6 +29,19 @@ class ApiEventRepository implements EventRepository {
   ApiEventRepository({required ApiClient apiClient}) : _apiClient = apiClient;
 
   final ApiClient _apiClient;
+
+  @override
+  Future<Map<String, List<EventParticipant>>> fetchMyBookings() async {
+    final response = await _apiClient.get('/me/bookings');
+    final result = <String, List<EventParticipant>>{};
+    for (final row in response.data as List<dynamic>) {
+      final data = row as Map<String, dynamic>;
+      result
+          .putIfAbsent(data['eventId'].toString(), () => [])
+          .add(EventParticipant.fromJson(data));
+    }
+    return result;
+  }
 
   @override
   Future<List<CosEvent>> fetchEvents() async {
@@ -123,7 +137,40 @@ class InMemoryEventRepository implements EventRepository {
   @override
   Future<List<EventParticipant>> fetchParticipants(String eventId) async {
     await Future<void>.delayed(const Duration(milliseconds: 120));
-    return _seedParticipants[eventId] ?? const [];
+    final own =
+        (await fetchMyBookings())[eventId] ?? const <EventParticipant>[];
+    return [
+      ...(_seedParticipants[eventId] ?? const <EventParticipant>[]).where(
+        (item) => !item.isMe,
+      ),
+      ...own,
+    ];
+  }
+
+  @override
+  Future<Map<String, List<EventParticipant>>> fetchMyBookings() async {
+    final result = <String, List<EventParticipant>>{};
+    for (final booking in _bookings.values) {
+      result
+          .putIfAbsent(booking.eventId, () => [])
+          .add(
+            EventParticipant.fromJson({
+              'userId': 'me',
+              'nickname': '圈圈新朋友',
+              'isMe': true,
+              'dayIndex': booking.dayIndex,
+              'role': booking.role.name,
+              'workId': booking.workId,
+              'characterName': booking.characterName,
+              'outfitImageUrl': booking.outfitImagePath,
+              'interactionTags': booking.interactionTags,
+              'availableTime': booking.availableTime,
+              'presenceStatus': booking.presenceStatus,
+              'message': booking.message,
+            }),
+          );
+    }
+    return result;
   }
 
   @override

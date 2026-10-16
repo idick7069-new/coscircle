@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -11,15 +13,29 @@ import '../../../core/repositories/auth_repository.dart';
 import '../../../core/repositories/profile_repository.dart';
 import '../../../core/repositories/submission_repository.dart';
 import '../../../core/services/oobe_service.dart';
+import '../../../core/services/line_login_service.dart';
 import '../../../core/services/push_notification_service.dart';
 import '../../../core/utils/error_message.dart';
+import '../../../core/repositories/event_repository.dart';
+import '../../../core/repositories/social_repository.dart';
+import '../../../core/providers/event_providers.dart';
+import '../../../core/utils/user_action.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/cos_ui.dart';
 import '../../admin/presentation/admin_dashboard_page.dart';
 import 'theme_settings_page.dart';
+import 'login_methods_page.dart';
+
+const _bugReportUrl = String.fromEnvironment('BUG_REPORT_URL');
+const _feedbackFormUrl = String.fromEnvironment(
+  'FEEDBACK_FORM_URL',
+  defaultValue: 'https://forms.gle/WGFe57Y1AFW1LQda8',
+);
 
 class SettingsPage extends ConsumerWidget {
-  const SettingsPage({super.key});
+  const SettingsPage({super.key, this.feedbackFormUrl = _feedbackFormUrl});
+
+  final String feedbackFormUrl;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -51,6 +67,16 @@ class SettingsPage extends ConsumerWidget {
                     ),
                   ),
                 ),
+                _SettingsAction(
+                  icon: Icons.wifi_tethering_outlined,
+                  title: '連線狀態',
+                  subtitle: '檢查手機是否能連到後端服務',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ConnectionStatusPage(),
+                    ),
+                  ),
+                ),
               ],
             );
           },
@@ -58,6 +84,7 @@ class SettingsPage extends ConsumerWidget {
         _SettingsSection(
           title: 'App 體驗',
           children: [
+            const _RecognitionNotificationToggle(),
             _SettingsAction(
               icon: Icons.palette_outlined,
               title: '介面主題',
@@ -74,23 +101,19 @@ class SettingsPage extends ConsumerWidget {
               ),
             ),
             _SettingsAction(
-              icon: Icons.wifi_tethering_outlined,
-              title: '連線狀態',
-              subtitle: '檢查手機是否能連到後端服務',
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ConnectionStatusPage()),
-              ),
-            ),
-            _SettingsAction(
               icon: Icons.school_outlined,
               title: '重新觀看新手教學',
               subtitle: '重新跑一次第一次使用流程',
               onTap: () async {
-                final profile = await ref
-                    .read(profileRepositoryProvider)
-                    .currentProfile();
-                if (profile != null) {
-                  await ref.read(oobeServiceProvider).reset(profile.id);
+                if (!await runUserAction(context, () async {
+                  final profile = await ref
+                      .read(profileRepositoryProvider)
+                      .currentProfile();
+                  if (profile != null) {
+                    await ref.read(oobeServiceProvider).reset(profile.id);
+                  }
+                })) {
+                  return;
                 }
                 if (context.mounted) context.go('/onboarding');
               },
@@ -106,15 +129,54 @@ class SettingsPage extends ConsumerWidget {
               subtitle: '補充你知道的 cosplay / 同人活動',
               onTap: () => _submitEventDialog(context, ref),
             ),
-            _SettingsAction(
-              icon: Icons.bug_report_outlined,
-              title: 'BUG回報',
-              subtitle: '回報異常或提出改善建議',
-              trailing: const Icon(Icons.open_in_new),
-              onTap: () => Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const BugReportPage())),
-            ),
+            if (feedbackFormUrl.trim().isNotEmpty)
+              _SettingsAction(
+                icon: Icons.feedback_outlined,
+                title: '意見回饋',
+                subtitle: '分享建議與使用感受',
+                trailing: const Icon(Icons.open_in_new),
+                onTap: () => runUserAction(context, () async {
+                  final uri = Uri.tryParse(feedbackFormUrl.trim());
+                  final valid =
+                      uri != null &&
+                      uri.scheme == 'https' &&
+                      uri.userInfo.isEmpty &&
+                      uri.port == 443 &&
+                      ((uri.host == 'forms.gle' &&
+                              uri.pathSegments.isNotEmpty) ||
+                          (uri.host == 'docs.google.com' &&
+                              uri.path.startsWith('/forms/') &&
+                              uri.path.endsWith('/viewform')));
+                  if (!valid) throw Exception('意見回饋表單連結尚未設定完成');
+                  if (!await launchUrl(
+                    uri,
+                    mode: LaunchMode.externalApplication,
+                  )) {
+                    throw Exception('無法開啟意見回饋表單，請稍後再試');
+                  }
+                }),
+              ),
+            if (_bugReportUrl.isNotEmpty)
+              _SettingsAction(
+                icon: Icons.bug_report_outlined,
+                title: 'BUG回報',
+                subtitle: '回報使用異常',
+                trailing: const Icon(Icons.open_in_new),
+                onTap: () => kIsWeb
+                    ? runUserAction(context, () async {
+                        if (!await launchUrl(
+                          Uri.parse(_bugReportUrl),
+                          mode: LaunchMode.externalApplication,
+                        )) {
+                          throw Exception('無法開啟回報頁');
+                        }
+                      })
+                    : Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const BugReportPage(),
+                        ),
+                      ),
+              ),
             _SettingsAction(
               icon: Icons.info_outline,
               title: '顯示版本號',
@@ -135,13 +197,39 @@ class SettingsPage extends ConsumerWidget {
         _SettingsSection(
           title: '帳號',
           children: [
+            if (ref.watch(lineLoginEnabledProvider))
+              _SettingsAction(
+                icon: Icons.manage_accounts_outlined,
+                title: '登入方式',
+                subtitle: 'Email／密碼與 LINE',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const LoginMethodsPage()),
+                ),
+              ),
             _SettingsAction(
               icon: Icons.logout,
               title: '登出',
               subtitle: '離開目前帳號',
               onTap: () async {
-                await ref.read(pushNotificationServiceProvider).dispose();
-                await ref.read(authRepositoryProvider).logout();
+                if (!await runUserAction(context, () async {
+                  final push = ref.read(pushNotificationServiceProvider);
+                  final token = push.registeredToken;
+                  await ref
+                      .read(authRepositoryProvider)
+                      .logout(pushToken: token);
+                  try {
+                    await push.dispose();
+                  } catch (_) {
+                    // A plugin cleanup failure must not keep the account signed in.
+                  }
+                  await push.deleteDeviceToken();
+                  ref.invalidate(profileRepositoryProvider);
+                  ref.invalidate(eventRepositoryProvider);
+                  ref.invalidate(socialRepositoryProvider);
+                  ref.invalidate(selectedCurrentEventTargetProvider);
+                })) {
+                  return;
+                }
                 if (context.mounted) context.go('/login');
               },
             ),
@@ -517,8 +605,132 @@ class _SubmitEventActionBar extends StatelessWidget {
   }
 }
 
+class _RecognitionNotificationToggle extends ConsumerStatefulWidget {
+  const _RecognitionNotificationToggle();
+
+  @override
+  ConsumerState<_RecognitionNotificationToggle> createState() =>
+      _RecognitionNotificationToggleState();
+}
+
+class _RecognitionNotificationToggleState
+    extends ConsumerState<_RecognitionNotificationToggle>
+    with WidgetsBindingObserver {
+  bool? _enabled;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_busy) _refresh();
+  }
+
+  Future<void> _refresh() async {
+    try {
+      final enabled = await ref
+          .read(pushNotificationServiceProvider)
+          .notificationsEnabled();
+      if (mounted && !_busy) {
+        setState(() {
+          _enabled = enabled;
+          _error = null;
+        });
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = userFacingError(error));
+    }
+  }
+
+  Future<void> _change(bool enabled) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final success = await runUserAction(
+      context,
+      () => ref
+          .read(pushNotificationServiceProvider)
+          .setNotificationsEnabled(enabled),
+    );
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      if (success) _enabled = enabled;
+    });
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(enabled ? '認親通知已開啟' : '此裝置的認親通知已關閉')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final supported = ref.watch(pushNotificationServiceProvider).isSupported;
+    if (_error != null) {
+      return ListTile(
+        title: const Text('認親通知'),
+        subtitle: Text(_error!),
+        trailing: IconButton(
+          tooltip: '重新讀取通知狀態',
+          onPressed: _refresh,
+          icon: const Icon(Icons.refresh),
+        ),
+      );
+    }
+    return SwitchListTile(
+      secondary: const Icon(Icons.notifications_outlined),
+      title: const Text('認親通知'),
+      subtitle: Text(
+        !supported
+            ? '此平台尚未支援推播通知'
+            : _enabled == null
+            ? '讀取通知狀態中'
+            : '接收此裝置的現場認親通知',
+      ),
+      value: _enabled ?? false,
+      onChanged: !supported || _busy || _enabled == null ? null : _change,
+    );
+  }
+}
+
 class ConnectionStatusPage extends ConsumerWidget {
   const ConnectionStatusPage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return FutureBuilder(
+      future: ref.watch(profileRepositoryProvider).currentProfile(),
+      builder: (context, snapshot) {
+        if (snapshot.data?.isAdmin == true) {
+          return const _ConnectionStatusContent();
+        }
+        return AppPage(
+          appBar: AppBar(title: const Text('連線狀態')),
+          child: Center(
+            child: snapshot.connectionState == ConnectionState.waiting
+                ? const CircularProgressIndicator()
+                : const Text('僅管理員可使用連線診斷'),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ConnectionStatusContent extends ConsumerWidget {
+  const _ConnectionStatusContent();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -808,7 +1020,7 @@ class _BugReportPageState extends State<BugReportPage> {
           },
         ),
       )
-      ..loadRequest(Uri.parse('https://docs.google.com/forms/'));
+      ..loadRequest(Uri.parse(_bugReportUrl));
   }
 
   @override

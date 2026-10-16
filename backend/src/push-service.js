@@ -27,7 +27,7 @@ function getFirebaseApp() {
   }
 }
 
-export async function sendRecognitionPush({ tokens, requestId, eventId, requesterName }) {
+export async function sendRecognitionPush({ tokens, requestId, eventId, dayIndex, requesterName }) {
   const app = getFirebaseApp();
   const activeTokens = [...new Set(tokens.map((token) => String(token).trim()))].filter(
     Boolean,
@@ -46,6 +46,7 @@ export async function sendRecognitionPush({ tokens, requestId, eventId, requeste
       type: 'recognition_request',
       requestId: String(requestId),
       eventId: String(eventId),
+      dayIndex: String(dayIndex),
     },
     android: {
       priority: 'high',

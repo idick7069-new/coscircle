@@ -15,6 +15,7 @@ class AdminDoujinSyncCheck {
     required this.extraInDatabase,
     required this.recentRuns,
     this.sourceError,
+    this.checkedAt = '',
   });
 
   final String sourceUrl;
@@ -30,10 +31,12 @@ class AdminDoujinSyncCheck {
   final List<AdminDoujinCheckEvent> extraInDatabase;
   final List<AdminSyncRun> recentRuns;
   final AdminDoujinSourceError? sourceError;
+  final String checkedAt;
 
   factory AdminDoujinSyncCheck.fromJson(Map<String, dynamic> json) {
     return AdminDoujinSyncCheck(
       sourceUrl: json['sourceUrl']?.toString() ?? '',
+      checkedAt: json['checkedAt']?.toString() ?? '',
       sourceAvailable: json['sourceAvailable'] == true,
       sourceCount: _nullableInt(json['sourceCount']),
       databaseCount: _asInt(json['databaseCount']),

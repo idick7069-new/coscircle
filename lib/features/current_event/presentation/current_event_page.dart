@@ -52,7 +52,7 @@ final currentEventCirclesProvider =
       return ref.watch(socialRepositoryProvider).fetchCircles();
     });
 
-enum LocationFilter { all, followed, circle }
+enum LocationFilter { all, followed, circle, friends }
 
 class _LocationShareSettings {
   const _LocationShareSettings({
@@ -70,23 +70,26 @@ class CurrentEventPage extends ConsumerStatefulWidget {
     this.eventId,
     this.dayIndex = 1,
     this.onOpenEvents,
+    this.isVisible = true,
   });
 
   final String? eventId;
   final int dayIndex;
   final VoidCallback? onOpenEvents;
+  final bool isVisible;
 
   @override
   ConsumerState<CurrentEventPage> createState() => _CurrentEventPageState();
 }
 
-class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
+class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
+    with WidgetsBindingObserver {
   static const _defaultPosition = LatLng(25.033964, 121.564468);
   LocationFilter _filter = LocationFilter.all;
   bool _isSharing = false;
   bool _myLocationEnabled = false;
   bool _hasConfirmedLocationSharing = false;
-  LatLng _initialPosition = _defaultPosition;
+  final LatLng _initialPosition = _defaultPosition;
   LatLng? _draftMeetupPosition;
   CurrentEventTarget? _selectedTarget;
   GoogleMapController? _mapController;
@@ -99,7 +102,34 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
   @override
   void initState() {
     super.initState();
-    _resolveInitialPosition();
+    WidgetsBinding.instance.addObserver(this);
+    _updateRefreshTimer();
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant CurrentEventPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isVisible != widget.isVisible) _updateRefreshTimer();
+    if (oldWidget.eventId != widget.eventId ||
+        oldWidget.dayIndex != widget.dayIndex) {
+      _selectedTarget = null;
+      _resetEventScopedState();
+    }
+  }
+
+  void _updateRefreshTimer() {
+    _refreshTimer?.cancel();
+    if (!widget.isVisible ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.paused) {
+      return;
+    }
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 30),
       (_) => _refreshCurrentEventData(),
@@ -107,18 +137,12 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
   }
 
   @override
-  void dispose() {
-    _refreshTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  void didUpdateWidget(covariant CurrentEventPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.eventId != widget.eventId ||
-        oldWidget.dayIndex != widget.dayIndex) {
-      _selectedTarget = null;
-      _resetEventScopedState();
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _updateRefreshTimer();
+      if (widget.isVisible) _refreshCurrentEventData();
+    } else {
+      _refreshTimer?.cancel();
     }
   }
 
@@ -294,6 +318,9 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
                       onShareLocation: _isSharing
                           ? null
                           : () => _shareLocation(eventId, dayIndex),
+                      onUpdateLocation: mySharedLocation == null || _isSharing
+                          ? null
+                          : () => _updateSharedLocation(eventId, dayIndex),
                       onStopSharing: mySharedLocation == null || _isSharing
                           ? null
                           : () => _stopSharingLocation(eventId),
@@ -327,33 +354,7 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
   String? _defaultCurrentEventId(List<CosEvent>? events) {
     if (events == null) return null;
 
-    final now = DateTime.now();
-    final joined = events
-        .where(
-          (event) => event.isJoined && event.status(now) == EventStatus.active,
-        )
-        .toList();
-    if (joined.isEmpty) return null;
-    joined.sort(
-      (a, b) =>
-          _distanceFromToday(a, now).compareTo(_distanceFromToday(b, now)),
-    );
-    return joined.first.id;
-  }
-
-  Future<void> _resolveInitialPosition() async {
-    try {
-      final position = await _currentPosition();
-      if (!mounted) return;
-      final target = LatLng(position.latitude, position.longitude);
-      setState(() {
-        _initialPosition = target;
-        _myLocationEnabled = true;
-      });
-      await _mapController?.animateCamera(CameraUpdate.newLatLng(target));
-    } catch (_) {
-      // Keep the default Taipei position when location is unavailable.
-    }
+    return _currentEventTargets(events).firstOrNull?.event.id;
   }
 
   void _refreshCurrentEventData() {
@@ -426,16 +427,6 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
         previous.circleId != current.circleId;
   }
 
-  int _distanceFromToday(CosEvent event, DateTime now) {
-    final today = DateTime(now.year, now.month, now.day);
-    final start = DateTime(
-      event.startDate.year,
-      event.startDate.month,
-      event.startDate.day,
-    );
-    return start.difference(today).inDays.abs();
-  }
-
   List<EventDayItem> _currentEventTargets(List<CosEvent>? events) {
     if (events == null) return const [];
     final now = DateTime.now();
@@ -455,6 +446,12 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
     if (id == null) return null;
     final event = events.where((event) => event.id == id).firstOrNull;
     if (event == null || event.status(now) != EventStatus.active) return null;
+    final day = _currentDayIndex(event, target);
+    if (!event.joinedDayIndexes.contains(day) ||
+        EventDayItem(event: event, dayIndex: day).status(now) !=
+            EventStatus.active) {
+      return null;
+    }
     return event;
   }
 
@@ -549,6 +546,8 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
         items.where((item) => item.isFollowed || item.isMe).toList(),
       LocationFilter.circle =>
         items.where((item) => item.isCircleMember || item.isMe).toList(),
+      LocationFilter.friends =>
+        items.where((item) => item.isFriend || item.isMe).toList(),
       LocationFilter.all => items,
     };
   }
@@ -1308,10 +1307,11 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
 
   Future<void> _shareLocation(String eventId, int dayIndex) async {
     final settings = await _showLocationSharingSheet();
-    if (settings == null) return;
+    if (settings == null || !mounted) return;
     setState(() => _isSharing = true);
     try {
       final position = await _currentPosition();
+      if (!mounted) return;
       await ref
           .read(locationRepositoryProvider)
           .shareLocation(
@@ -1322,8 +1322,8 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
             visibility: settings.visibility,
             expiresInMinutes: settings.expiresInMinutes,
           );
-      ref.invalidate(sharedLocationsProvider(eventId));
       if (!mounted) return;
+      ref.invalidate(sharedLocationsProvider(eventId));
       setState(() => _myLocationEnabled = true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('已分享位置，${settings.expiresInMinutes} 分鐘後自動停止')),
@@ -1363,6 +1363,44 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('停止分享失敗：${userFacingError(error)}')),
       );
+    }
+  }
+
+  Future<void> _updateSharedLocation(String eventId, int dayIndex) async {
+    if (_isSharing) return;
+    setState(() => _isSharing = true);
+    try {
+      final position = await _currentPosition();
+      if (!mounted) return;
+      await ref
+          .read(locationRepositoryProvider)
+          .updateSharedLocation(
+            eventId: eventId,
+            dayIndex: dayIndex,
+            latitude: position.latitude,
+            longitude: position.longitude,
+          );
+      if (!mounted) return;
+      ref.invalidate(sharedLocationsProvider(eventId));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('位置已更新，原分享範圍與到期時間不變')));
+    } catch (error) {
+      if (!mounted) return;
+      ref.invalidate(sharedLocationsProvider(eventId));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('更新位置失敗：${userFacingError(error)}'),
+          action: '$error'.contains('永久拒絕')
+              ? SnackBarAction(
+                  label: '開啟設定',
+                  onPressed: Geolocator.openAppSettings,
+                )
+              : null,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSharing = false);
     }
   }
 
@@ -2376,6 +2414,7 @@ class _EventMapHeader extends StatelessWidget {
       LocationFilter.all => '全部',
       LocationFilter.followed => '關注',
       LocationFilter.circle => '小圈圈',
+      LocationFilter.friends => '戳友',
     };
     final eventTitle = event == null
         ? '目前無當前活動'
@@ -2493,6 +2532,10 @@ class _EventMapHeader extends StatelessWidget {
                         value: LocationFilter.circle,
                         child: Text('僅顯示小圈圈'),
                       ),
+                      PopupMenuItem(
+                        value: LocationFilter.friends,
+                        child: Text('僅顯示戳友'),
+                      ),
                     ],
                   ),
                 ],
@@ -2546,6 +2589,7 @@ class _MapActionDock extends StatefulWidget {
     required this.mySharedLocation,
     required this.onMeetup,
     required this.onShareLocation,
+    required this.onUpdateLocation,
     required this.onStopSharing,
     required this.onStealthMode,
   });
@@ -2558,6 +2602,7 @@ class _MapActionDock extends StatefulWidget {
   final SharedLocation? mySharedLocation;
   final VoidCallback? onMeetup;
   final VoidCallback? onShareLocation;
+  final VoidCallback? onUpdateLocation;
   final VoidCallback? onStopSharing;
   final VoidCallback? onStealthMode;
 
@@ -2602,7 +2647,13 @@ class _MapActionDockState extends State<_MapActionDock> {
                         220.0,
                         360.0,
                       )
-                    : 64,
+                    : ((MediaQuery.textScalerOf(context).scale(14) +
+                                      MediaQuery.textScalerOf(
+                                        context,
+                                      ).scale(12)) *
+                                  1.5 +
+                              16)
+                          .clamp(64.0, 140.0),
               ),
               child: SingleChildScrollView(
                 physics: _expanded
@@ -2623,6 +2674,7 @@ class _MapActionDockState extends State<_MapActionDock> {
                       onPrimaryAction: sharingLocation == null
                           ? widget.onShareLocation
                           : widget.onStopSharing,
+                      onUpdateLocation: widget.onUpdateLocation,
                       onExpandedChanged: (value) =>
                           setState(() => _expanded = value),
                     ),
@@ -2659,14 +2711,22 @@ class _MapActionDockState extends State<_MapActionDock> {
                               label: const Text('集合點'),
                             ),
                             OutlinedButton.icon(
-                              onPressed: widget.onShareLocation,
+                              onPressed: sharingLocation == null
+                                  ? widget.onShareLocation
+                                  : widget.onUpdateLocation,
                               icon: widget.isSharing
                                   ? CosLoadingPulse(
                                       color: scheme.primary,
                                       size: 20,
                                     )
                                   : const Icon(Icons.share_location),
-                              label: Text(widget.isSharing ? '定位中' : '分享位置'),
+                              label: Text(
+                                widget.isSharing
+                                    ? '定位中'
+                                    : sharingLocation == null
+                                    ? '分享位置'
+                                    : '更新位置',
+                              ),
                             ),
                             if (sharingLocation != null)
                               TextButton.icon(
@@ -2769,6 +2829,7 @@ class _MapActionDockHeader extends StatelessWidget {
     required this.expanded,
     required this.isSharing,
     required this.onPrimaryAction,
+    required this.onUpdateLocation,
     required this.onExpandedChanged,
   });
 
@@ -2780,6 +2841,7 @@ class _MapActionDockHeader extends StatelessWidget {
   final bool expanded;
   final bool isSharing;
   final VoidCallback? onPrimaryAction;
+  final VoidCallback? onUpdateLocation;
   final ValueChanged<bool> onExpandedChanged;
 
   @override
@@ -2839,6 +2901,14 @@ class _MapActionDockHeader extends StatelessWidget {
                       : Icons.visibility_off_outlined,
                 ),
         ),
+        if (sharingLocation != null)
+          IconButton(
+            tooltip: '更新位置',
+            onPressed: onUpdateLocation,
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+            icon: const Icon(Icons.my_location),
+          ),
         IconButton(
           tooltip: expanded ? '收合現場雷達' : '展開現場雷達',
           visualDensity: VisualDensity.compact,

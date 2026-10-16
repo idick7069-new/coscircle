@@ -11,6 +11,10 @@ import '../../../core/models/profile.dart';
 import '../../../core/models/work.dart';
 import '../../../core/repositories/profile_repository.dart';
 import '../../../core/utils/event_day_display.dart';
+import '../../../core/utils/error_message.dart';
+import '../../../core/utils/upload_image_data.dart';
+import '../../../core/utils/user_action.dart';
+import '../../../core/utils/public_app_link.dart';
 import '../../../core/utils/participant_role_style.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/cos_ui.dart';
@@ -61,11 +65,21 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   bool _initialized = false;
   bool _editing = false;
   bool _saving = false;
-  static const _maxUploadBytes = 5 * 1024 * 1024;
-  static const _allowedImageMimeTypes = {
-    'image/jpeg',
-    'image/png',
-    'image/webp',
+  String? _editTarget;
+  final _fieldKeys = {
+    for (final label in [
+      '暱稱',
+      '頭像',
+      '自介',
+      '身份',
+      '座標',
+      '跑場',
+      '深坑',
+      '淺坑',
+      '照片',
+      '場次安全',
+    ])
+      label: GlobalKey(),
   };
 
   @override
@@ -92,8 +106,33 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const _ProfileLoadingState();
         }
-        final profile =
-            snapshot.data ?? const UserProfile(id: 'me', nickname: '');
+        if (snapshot.hasError || snapshot.data == null) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.wifi_off_outlined, size: 40),
+                  const SizedBox(height: 12),
+                  Text(
+                    snapshot.hasError
+                        ? '名片載入失敗：${userFacingError(snapshot.error!)}'
+                        : '無法取得名片資料',
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        setState(() => _profileFuture = _fetchProfile()),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('重試'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        final profile = snapshot.data!;
         if (!_initialized) {
           _loadProfile(profile);
         }
@@ -118,12 +157,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 ),
                 IconButton.filled(
                   tooltip: _editing ? '取消編輯' : '編輯',
-                  onPressed: () {
-                    setState(() {
-                      if (_editing) _loadProfile(profile);
-                      _editing = !_editing;
-                    });
-                  },
+                  onPressed: _saving
+                      ? null
+                      : () {
+                          setState(() {
+                            if (_editing) _loadProfile(profile);
+                            _editTarget = null;
+                            _editing = !_editing;
+                          });
+                        },
                   icon: Icon(_editing ? Icons.close : Icons.edit),
                 ),
               ],
@@ -134,54 +176,60 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               switchInCurve: Curves.easeOutCubic,
               switchOutCurve: Curves.easeInCubic,
               child: _editing
-                  ? _EditProfileForm(
-                      key: const ValueKey('profile-edit'),
-                      avatarUrl: _avatarUrl,
-                      pickedAvatar: _pickedAvatar,
-                      nickname: _nickname,
-                      facebook: _facebook,
-                      bio: _bio,
-                      age: _age,
-                      landmine: _landmine,
-                      deepPitWorks: _deepPitWorks,
-                      shallowPitWorks: _shallowPitWorks,
-                      regions: _regions,
-                      travelRegions: _travelRegions,
-                      travelSameRegion: _travelSameRegion,
-                      gender: _gender,
-                      profileRoles: _profileRoles,
-                      bookingVisibility: _bookingVisibility,
-                      otherPhotoUrls: _otherPhotoUrls,
-                      pickedOtherPhotos: _pickedOtherPhotos,
-                      onPickAvatar: _pickAvatar,
-                      onDeepPitWorksChanged: (works) =>
-                          setState(() => _deepPitWorks = works),
-                      onShallowPitWorksChanged: (works) =>
-                          setState(() => _shallowPitWorks = works),
-                      onRegionsChanged: (regions) =>
-                          setState(() => _regions = regions),
-                      onTravelRegionsChanged: (regions) => setState(() {
-                        _travelRegions = regions;
-                        _travelSameRegion = _sameStringSet(_regions, regions);
-                      }),
-                      onUseSameRegions: () => setState(() {
-                        _travelRegions = List<String>.from(_regions);
-                        _travelSameRegion = _regions.isNotEmpty;
-                      }),
-                      onGenderChanged: (value) =>
-                          setState(() => _gender = value),
-                      onProfileRolesChanged: (roles) =>
-                          setState(() => _profileRoles = roles),
-                      onBookingVisibilityChanged: (value) =>
-                          setState(() => _bookingVisibility = value),
-                      onPickOtherPhoto: _pickOtherPhoto,
-                      onRemoveOtherPhoto: _removeOtherPhoto,
-                      onSave: () => _saveProfile(context, profile),
-                      saving: _saving,
+                  ? AbsorbPointer(
+                      absorbing: _saving,
+                      child: _EditProfileForm(
+                        key: const ValueKey('profile-edit'),
+                        avatarUrl: _avatarUrl,
+                        pickedAvatar: _pickedAvatar,
+                        nickname: _nickname,
+                        facebook: _facebook,
+                        bio: _bio,
+                        age: _age,
+                        landmine: _landmine,
+                        deepPitWorks: _deepPitWorks,
+                        shallowPitWorks: _shallowPitWorks,
+                        regions: _regions,
+                        travelRegions: _travelRegions,
+                        travelSameRegion: _travelSameRegion,
+                        gender: _gender,
+                        profileRoles: _profileRoles,
+                        bookingVisibility: _bookingVisibility,
+                        otherPhotoUrls: _otherPhotoUrls,
+                        pickedOtherPhotos: _pickedOtherPhotos,
+                        onPickAvatar: _pickAvatar,
+                        onDeepPitWorksChanged: (works) =>
+                            setState(() => _deepPitWorks = works),
+                        onShallowPitWorksChanged: (works) =>
+                            setState(() => _shallowPitWorks = works),
+                        onRegionsChanged: (regions) =>
+                            setState(() => _regions = regions),
+                        onTravelRegionsChanged: (regions) => setState(() {
+                          _travelRegions = regions;
+                          _travelSameRegion = _sameStringSet(_regions, regions);
+                        }),
+                        onUseSameRegions: () => setState(() {
+                          _travelRegions = List<String>.from(_regions);
+                          _travelSameRegion = _regions.isNotEmpty;
+                        }),
+                        onGenderChanged: (value) =>
+                            setState(() => _gender = value),
+                        onProfileRolesChanged: (roles) =>
+                            setState(() => _profileRoles = roles),
+                        onBookingVisibilityChanged: (value) =>
+                            setState(() => _bookingVisibility = value),
+                        onPickOtherPhoto: _pickOtherPhoto,
+                        onRemoveOtherPhoto: _removeOtherPhoto,
+                        onSave: () => _saveProfile(context, profile),
+                        saving: _saving,
+                        fieldKeys: _fieldKeys,
+                        initialTarget: _editTarget,
+                      ),
                     )
                   : _ProfileSummary(
                       key: const ValueKey('profile-summary'),
                       profile: profile,
+                      onEditItem: _editProfileItem,
                     ),
             ),
           ],
@@ -192,6 +240,26 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   Future<UserProfile?> _fetchProfile() {
     return ref.read(profileRepositoryProvider).currentProfile();
+  }
+
+  Future<void> _editProfileItem(String label) async {
+    setState(() {
+      _editTarget = label;
+      _editing = true;
+    });
+    // The outgoing summary must stop determining the scroll extent first.
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || !_editing || _editTarget != label) return;
+    final target = _fieldKeys[label]?.currentContext;
+    if (target != null && target.mounted) {
+      await Scrollable.ensureVisible(
+        target,
+        alignment: 0.08,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
 
   void _loadProfile(UserProfile profile) {
@@ -229,11 +297,16 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       var avatarUrl = _avatarUrl;
       final pickedAvatar = _pickedAvatar;
       if (pickedAvatar != null) {
+        final image = await readUploadImage(pickedAvatar);
         final uploadedUrl = await repository.uploadImage(
-          bytes: await pickedAvatar.readAsBytes(),
-          mimeType: _mimeTypeForImage(pickedAvatar),
+          bytes: image.bytes,
+          mimeType: image.mimeType,
         );
-        if (uploadedUrl.isNotEmpty) avatarUrl = uploadedUrl;
+        if (uploadedUrl.isNotEmpty) {
+          avatarUrl = uploadedUrl;
+          _avatarUrl = uploadedUrl;
+          _pickedAvatar = null;
+        }
       }
       final otherPhotoUrls = List<String>.from(_otherPhotoUrls);
       while (otherPhotoUrls.length < 3) {
@@ -242,11 +315,19 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       for (var index = 0; index < _pickedOtherPhotos.length; index += 1) {
         final picked = _pickedOtherPhotos[index];
         if (picked == null) continue;
+        final image = await readUploadImage(picked);
         final uploadedUrl = await repository.uploadImage(
-          bytes: await picked.readAsBytes(),
-          mimeType: _mimeTypeForImage(picked),
+          bytes: image.bytes,
+          mimeType: image.mimeType,
         );
-        if (uploadedUrl.isNotEmpty) otherPhotoUrls[index] = uploadedUrl;
+        if (uploadedUrl.isNotEmpty) {
+          otherPhotoUrls[index] = uploadedUrl;
+          while (_otherPhotoUrls.length <= index) {
+            _otherPhotoUrls.add('');
+          }
+          _otherPhotoUrls[index] = uploadedUrl;
+          _pickedOtherPhotos[index] = null;
+        }
       }
 
       final saved = await repository.saveProfile(
@@ -272,6 +353,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               .toList(),
         ),
       );
+      if (!mounted) return;
       setState(() {
         _editing = false;
         _loadProfile(saved);
@@ -284,9 +366,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       }
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('個人資訊儲存失敗：$error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('個人資訊儲存失敗：${userFacingError(error)}')),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -326,49 +408,24 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       if (index < _otherPhotoUrls.length) {
         final urls = List<String>.from(_otherPhotoUrls);
         urls[index] = '';
-        _otherPhotoUrls = urls.where((url) => url.isNotEmpty).toList();
+        _otherPhotoUrls = urls;
       }
       _pickedOtherPhotos[index] = null;
     });
   }
 
-  String _mimeTypeForPath(String path) {
-    final lower = path.toLowerCase();
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.webp')) return 'image/webp';
-    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
-    return '';
-  }
-
-  String _mimeTypeForImage(XFile image) {
-    final pickedMimeType = image.mimeType?.toLowerCase();
-    if (pickedMimeType != null &&
-        _allowedImageMimeTypes.contains(pickedMimeType)) {
-      return pickedMimeType;
-    }
-    return _mimeTypeForPath(image.path);
-  }
-
   Future<bool> _validatePickedImage(XFile image) async {
-    final mimeType = _mimeTypeForImage(image);
-    if (!_allowedImageMimeTypes.contains(mimeType)) {
+    try {
+      await readUploadImage(image);
+      return mounted;
+    } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('僅支援 JPG、PNG、WebP 圖片')));
+        ).showSnackBar(SnackBar(content: Text(userFacingError(error))));
       }
       return false;
     }
-    final length = await image.length();
-    if (length > _maxUploadBytes) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('圖片大小不可超過 5MB')));
-      }
-      return false;
-    }
-    return true;
   }
 
   bool _sameStringSet(List<String> left, List<String> right) {
@@ -389,56 +446,71 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       ).showSnackBar(const SnackBar(content: Text('尚未取得分享碼，請稍後再試')));
       return;
     }
-    final url = 'coscircle://profiles/${profile.publicCode}';
+    final url = publicAppLink('/profiles/${profile.publicCode}');
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
+      useSafeArea: true,
       builder: (context) {
         return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: CosGradientPanel(
-              icon: Icons.qr_code_2,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CosSectionHeader(
-                    title: '分享 Cos 名片',
-                    subtitle: '讓同好掃描後快速看見你的坑單和照片牆',
-                    icon: Icons.badge_outlined,
-                  ),
-                  const SizedBox(height: 16),
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: QrImageView(
-                        data: url,
-                        version: QrVersions.auto,
-                        size: 210,
-                        backgroundColor: Colors.white,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+            ),
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: CosGradientPanel(
+                  icon: Icons.qr_code_2,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CosSectionHeader(
+                        title: '分享 Cos 名片',
+                        subtitle: '讓同好掃描後快速看見你的坑單和照片牆',
+                        icon: Icons.badge_outlined,
                       ),
-                    ),
+                      const SizedBox(height: 16),
+                      Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 238),
+                          child: AspectRatio(
+                            aspectRatio: 1,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(14),
+                                child: QrImageView(
+                                  data: url,
+                                  version: QrVersions.auto,
+                                  backgroundColor: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        profile.nickname.isEmpty
+                            ? 'CosCircle 名片'
+                            : profile.nickname,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 6),
+                      SelectableText(
+                        url,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    profile.nickname.isEmpty
-                        ? 'CosCircle 名片'
-                        : profile.nickname,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  SelectableText(
-                    url,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -449,9 +521,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 }
 
 class _ProfileSummary extends StatelessWidget {
-  const _ProfileSummary({super.key, required this.profile});
+  const _ProfileSummary({
+    super.key,
+    required this.profile,
+    required this.onEditItem,
+  });
 
   final UserProfile profile;
+  final ValueChanged<String> onEditItem;
 
   @override
   Widget build(BuildContext context) {
@@ -463,7 +540,10 @@ class _ProfileSummary extends StatelessWidget {
         const SizedBox(height: 14),
         CosReveal(
           delay: const Duration(milliseconds: 45),
-          child: _ProfileReadinessCard(profile: profile),
+          child: _ProfileReadinessCard(
+            profile: profile,
+            onEditItem: onEditItem,
+          ),
         ),
         const SizedBox(height: 12),
         CosReveal(
@@ -473,7 +553,10 @@ class _ProfileSummary extends StatelessWidget {
         const SizedBox(height: 12),
         CosReveal(
           delay: const Duration(milliseconds: 75),
-          child: _BookingPrivacyDashboard(profile: profile),
+          child: _BookingPrivacyDashboard(
+            profile: profile,
+            onEdit: () => onEditItem('場次安全'),
+          ),
         ),
         const SizedBox(height: 12),
         CosReveal(
@@ -809,9 +892,13 @@ class _ProfileHeroCard extends StatelessWidget {
 }
 
 class _ProfileReadinessCard extends StatelessWidget {
-  const _ProfileReadinessCard({required this.profile});
+  const _ProfileReadinessCard({
+    required this.profile,
+    required this.onEditItem,
+  });
 
   final UserProfile profile;
+  final ValueChanged<String> onEditItem;
 
   @override
   Widget build(BuildContext context) {
@@ -926,7 +1013,11 @@ class _ProfileReadinessCard extends StatelessWidget {
             runSpacing: 8,
             children: [
               for (final cue in cues)
-                _ProfileReadinessChip(cue: cue, color: scheme.primary),
+                _ProfileReadinessChip(
+                  cue: cue,
+                  color: scheme.primary,
+                  onTap: () => onEditItem(cue.label),
+                ),
             ],
           ),
         ],
@@ -997,11 +1088,13 @@ class _ProfileRolePill extends StatelessWidget {
           children: [
             Icon(icon, size: 22, color: color),
             const SizedBox(width: 7),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: scheme.onSurface,
-                fontWeight: FontWeight.w900,
+            Flexible(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: scheme.onSurface,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
             ),
           ],
@@ -1024,40 +1117,55 @@ class _ProfileReadinessCue {
 }
 
 class _ProfileReadinessChip extends StatelessWidget {
-  const _ProfileReadinessChip({required this.cue, required this.color});
+  const _ProfileReadinessChip({
+    required this.cue,
+    required this.color,
+    required this.onTap,
+  });
 
   final _ProfileReadinessCue cue;
   final Color color;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final accent = cue.ready ? color : scheme.onSurfaceVariant;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: cue.ready ? 0.12 : 0.06),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: ValueKey('profile-readiness-${cue.label}'),
+        onTap: onTap,
         borderRadius: BorderRadius.circular(99),
-        border: Border.all(color: accent.withValues(alpha: 0.22)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              cue.ready ? Icons.check_circle : cue.icon,
-              size: 15,
-              color: accent,
+        child: Ink(
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: cue.ready ? 0.12 : 0.06),
+            borderRadius: BorderRadius.circular(99),
+            border: Border.all(color: accent.withValues(alpha: 0.22)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  cue.ready ? Icons.check_circle : cue.icon,
+                  size: 15,
+                  color: accent,
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  cue.label,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: cue.ready
+                        ? scheme.onSurface
+                        : scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 5),
-            Text(
-              cue.label,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: cue.ready ? scheme.onSurface : scheme.onSurfaceVariant,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -1141,17 +1249,19 @@ class _ProfileConnectionSignalCard extends StatelessWidget {
 }
 
 class _BookingPrivacyDashboard extends ConsumerWidget {
-  const _BookingPrivacyDashboard({required this.profile});
+  const _BookingPrivacyDashboard({required this.profile, required this.onEdit});
 
   final UserProfile profile;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final groups = ref.watch(bookingFollowersProvider);
     final blockedUsers = ref.watch(blockedUsersProvider);
-    final visibilityLabel =
-        _bookingVisibilityLabels[profile.bookingVisibility] ?? '全部人';
+    final visibilityLabel = profile.bookingVisibility == 'circle'
+        ? '僅小圈圈看得到'
+        : '大家都看得到';
     final followerCount = groups.whenOrNull(
       data: (items) =>
           items.fold<int>(0, (total, group) => total + group.followers.length),
@@ -1159,12 +1269,14 @@ class _BookingPrivacyDashboard extends ConsumerWidget {
     final blockedCount = blockedUsers.whenOrNull(data: (items) => items.length);
 
     return CosCard(
+      key: const ValueKey('booking-safety-edit'),
+      onTap: onEdit,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           CosSectionHeader(
             title: '場次安全',
-            subtitle: '管理誰能看見你的場次預定與追蹤訊號',
+            subtitle: '封鎖者除外',
             icon: Icons.shield_outlined,
             trailing: CosBadge(
               label: visibilityLabel,
@@ -1193,7 +1305,10 @@ class _BookingPrivacyDashboard extends ConsumerWidget {
               return Column(
                 children: [
                   for (final group in items) ...[
-                    _BookingFollowerGroupTile(group: group),
+                    _BookingFollowerGroupTile(
+                      group: group,
+                      isPublic: profile.bookingVisibility == 'public',
+                    ),
                     if (group != items.last) const SizedBox(height: 10),
                   ],
                 ],
@@ -1266,7 +1381,13 @@ class _BookingPrivacyDashboard extends ConsumerWidget {
       actionLabel: '解除封鎖',
     );
     if (!confirmed) return;
-    await ref.read(profileRepositoryProvider).unblockUser(user.userId);
+    if (!context.mounted) return;
+    if (!await runUserAction(
+      context,
+      () => ref.read(profileRepositoryProvider).unblockUser(user.userId),
+    )) {
+      return;
+    }
     ref.invalidate(blockedUsersProvider);
     ref.invalidate(bookingFollowersProvider);
     if (!context.mounted) return;
@@ -1277,9 +1398,13 @@ class _BookingPrivacyDashboard extends ConsumerWidget {
 }
 
 class _BookingFollowerGroupTile extends ConsumerWidget {
-  const _BookingFollowerGroupTile({required this.group});
+  const _BookingFollowerGroupTile({
+    required this.group,
+    required this.isPublic,
+  });
 
   final BookingFollowerGroup group;
+  final bool isPublic;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1326,18 +1451,17 @@ class _BookingFollowerGroupTile extends ConsumerWidget {
                   ),
                 ),
                 CosBadge(
-                  label: '${group.followers.length}',
+                  label: '${group.followers.length} 位追蹤者',
                   icon: Icons.visibility_outlined,
                   color: scheme.secondary,
                 ),
               ],
             ),
             const SizedBox(height: 10),
+            Text(isPublic ? '大家都看得到' : '僅小圈圈看得到'),
+            const SizedBox(height: 8),
             if (group.followers.isEmpty)
-              Text(
-                '目前沒有追蹤者能看到這筆預定。',
-                style: Theme.of(context).textTheme.bodySmall,
-              )
+              Text('目前沒有追蹤者', style: Theme.of(context).textTheme.bodySmall)
             else
               Column(
                 children: [
@@ -1369,7 +1493,13 @@ class _BookingFollowerGroupTile extends ConsumerWidget {
       actionLabel: '取消關注',
     );
     if (!confirmed) return;
-    await ref.read(profileRepositoryProvider).removeFollower(follower.userId);
+    if (!context.mounted) return;
+    if (!await runUserAction(
+      context,
+      () => ref.read(profileRepositoryProvider).removeFollower(follower.userId),
+    )) {
+      return;
+    }
     ref.invalidate(bookingFollowersProvider);
     if (!context.mounted) return;
     ScaffoldMessenger.of(
@@ -1390,7 +1520,13 @@ class _BookingFollowerGroupTile extends ConsumerWidget {
       destructive: true,
     );
     if (!confirmed) return;
-    await ref.read(profileRepositoryProvider).blockUser(follower.userId);
+    if (!context.mounted) return;
+    if (!await runUserAction(
+      context,
+      () => ref.read(profileRepositoryProvider).blockUser(follower.userId),
+    )) {
+      return;
+    }
     ref.invalidate(bookingFollowersProvider);
     ref.invalidate(blockedUsersProvider);
     if (!context.mounted) return;
@@ -1674,7 +1810,7 @@ class _BookingPrivacyEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return const _BookingPrivacyMessage(
       icon: Icons.visibility_off_outlined,
-      message: '目前沒有追蹤者正在看你的場次預定。',
+      message: '目前沒有出席預定可列出。',
     );
   }
 }
@@ -2087,6 +2223,8 @@ class _WorkTagSection extends StatelessWidget {
 class _EditProfileForm extends StatelessWidget {
   const _EditProfileForm({
     super.key,
+    required this.fieldKeys,
+    required this.initialTarget,
     required this.avatarUrl,
     required this.pickedAvatar,
     required this.nickname,
@@ -2119,6 +2257,8 @@ class _EditProfileForm extends StatelessWidget {
     required this.saving,
   });
 
+  final Map<String, GlobalKey> fieldKeys;
+  final String? initialTarget;
   final String avatarUrl;
   final XFile? pickedAvatar;
   final TextEditingController nickname;
@@ -2170,6 +2310,7 @@ class _EditProfileForm extends StatelessWidget {
           initiallyExpanded: true,
           children: [
             Center(
+              key: fieldKeys['頭像'],
               child: Stack(
                 alignment: Alignment.bottomRight,
                 children: [
@@ -2187,6 +2328,7 @@ class _EditProfileForm extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             TextField(
+              key: fieldKeys['暱稱'],
               controller: nickname,
               decoration: const InputDecoration(labelText: '暱稱'),
             ),
@@ -2203,12 +2345,14 @@ class _EditProfileForm extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             _ProfileRoleSelector(
+              key: fieldKeys['身份'],
               selected: profileRoles,
               enabled: !saving,
               onChanged: onProfileRolesChanged,
             ),
             const SizedBox(height: 10),
             TextField(
+              key: fieldKeys['自介'],
               controller: bio,
               decoration: const InputDecoration(labelText: '自我介紹'),
               maxLines: 4,
@@ -2217,9 +2361,11 @@ class _EditProfileForm extends StatelessWidget {
         ),
         _ProfileFormSection(
           title: '地區與跑場',
+          initiallyExpanded: ['座標', '跑場'].contains(initialTarget),
           icon: Icons.explore_outlined,
           children: [
             _RegionSelector(
+              key: fieldKeys['座標'],
               label: '座標',
               selected: regions,
               onChanged: onRegionsChanged,
@@ -2227,6 +2373,7 @@ class _EditProfileForm extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             _RegionSelector(
+              key: fieldKeys['跑場'],
               label: '跑場範圍',
               selected: travelRegions,
               onChanged: onTravelRegionsChanged,
@@ -2241,15 +2388,18 @@ class _EditProfileForm extends StatelessWidget {
         ),
         _ProfileFormSection(
           title: '坑單',
+          initiallyExpanded: ['深坑', '淺坑'].contains(initialTarget),
           icon: Icons.label_important_outline,
           children: [
             WorkMultiSelector(
+              key: fieldKeys['深坑'],
               label: '深坑',
               selected: deepPitWorks,
               onChanged: onDeepPitWorksChanged,
             ),
             const SizedBox(height: 10),
             WorkMultiSelector(
+              key: fieldKeys['淺坑'],
               label: '淺坑',
               selected: shallowPitWorks,
               onChanged: onShallowPitWorksChanged,
@@ -2274,9 +2424,11 @@ class _EditProfileForm extends StatelessWidget {
         ),
         _ProfileFormSection(
           title: '安全與可見範圍',
+          initiallyExpanded: initialTarget == '場次安全',
           icon: Icons.shield_outlined,
           children: [
             _BookingVisibilitySelector(
+              key: fieldKeys['場次安全'],
               value: bookingVisibility,
               enabled: !saving,
               onChanged: onBookingVisibilityChanged,
@@ -2285,9 +2437,11 @@ class _EditProfileForm extends StatelessWidget {
         ),
         _ProfileFormSection(
           title: '其他照片',
+          initiallyExpanded: initialTarget == '照片',
           icon: Icons.photo_library_outlined,
           children: [
             _EditableOtherPhotoGrid(
+              key: fieldKeys['照片'],
               photoUrls: otherPhotoUrls,
               pickedPhotos: pickedOtherPhotos,
               enabled: !saving,
@@ -2422,6 +2576,7 @@ class _GenderSelector extends StatelessWidget {
 
 class _ProfileRoleSelector extends StatelessWidget {
   const _ProfileRoleSelector({
+    super.key,
     required this.selected,
     required this.enabled,
     required this.onChanged,
@@ -2694,19 +2849,28 @@ class _ProfileFormSectionState extends State<_ProfileFormSection> {
                   ),
                 ),
               ),
-              AnimatedSize(
-                duration: reduceMotion
-                    ? Duration.zero
-                    : const Duration(milliseconds: 240),
-                curve: Curves.easeOutCubic,
-                alignment: Alignment.topCenter,
-                child: _expanded
-                    ? Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                        child: Column(children: widget.children),
-                      )
-                    : const SizedBox(width: double.infinity),
-              ),
+              if (reduceMotion)
+                if (_expanded)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                    child: Column(children: widget.children),
+                  )
+                else
+                  const SizedBox(width: double.infinity)
+              else
+                AnimatedSize(
+                  duration: reduceMotion
+                      ? Duration.zero
+                      : const Duration(milliseconds: 240),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.topCenter,
+                  child: _expanded
+                      ? Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                          child: Column(children: widget.children),
+                        )
+                      : const SizedBox(width: double.infinity),
+                ),
             ],
           ),
         ),
@@ -2717,6 +2881,7 @@ class _ProfileFormSectionState extends State<_ProfileFormSection> {
 
 class _BookingVisibilitySelector extends StatelessWidget {
   const _BookingVisibilitySelector({
+    super.key,
     required this.value,
     required this.enabled,
     required this.onChanged,
@@ -2837,6 +3002,7 @@ class _BookingVisibilityOption extends StatelessWidget {
 
 class _RegionSelector extends StatelessWidget {
   const _RegionSelector({
+    super.key,
     required this.label,
     required this.selected,
     required this.onChanged,
@@ -2939,6 +3105,7 @@ class _OtherPhotoGrid extends StatelessWidget {
 
 class _EditableOtherPhotoGrid extends StatelessWidget {
   const _EditableOtherPhotoGrid({
+    super.key,
     required this.photoUrls,
     required this.pickedPhotos,
     required this.enabled,

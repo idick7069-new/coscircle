@@ -57,6 +57,7 @@ dependencies:
   path_provider: ^2.1.5
   firebase_core: ^4.12.1
   firebase_messaging: ^16.4.3
+  flutter_line_sdk: 2.6.2
 
 dev_dependencies:
   flutter_test:

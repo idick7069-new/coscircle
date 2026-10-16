@@ -7,6 +7,8 @@ import '../../../core/models/participant.dart';
 import '../../../core/providers/event_providers.dart';
 import '../../../core/repositories/event_repository.dart';
 import '../../../core/utils/event_day_display.dart';
+import '../../../core/utils/error_message.dart';
+import '../../../core/utils/user_action.dart';
 import '../../../core/utils/participant_role_style.dart';
 import '../../../shared/widgets/cos_ui.dart';
 import 'event_booking_share_page.dart';
@@ -37,6 +39,26 @@ class _MyEventsPageState extends ConsumerState<MyEventsPage> {
         child: FutureBuilder<List<_MyBookingItem>>(
           future: _itemsFuture,
           builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('活動載入失敗：${userFacingError(snapshot.error!)}'),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: () =>
+                            setState(() => _itemsFuture = _loadMyBookings()),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('重試'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
             if (!snapshot.hasData) {
               return const _MyEventsLoadingState();
             }
@@ -100,8 +122,12 @@ class _MyEventsPageState extends ConsumerState<MyEventsPage> {
                         offset: const Offset(0, 10),
                         child: _MyBookingCard(
                           item: entry.$2,
-                          onEdit: () => _editBooking(entry.$2),
-                          onCancel: () => _cancelBooking(entry.$2),
+                          onEdit: entry.$2.isEnded
+                              ? null
+                              : () => _editBooking(entry.$2),
+                          onCancel: entry.$2.isEnded
+                              ? null
+                              : () => _cancelBooking(entry.$2),
                           onShare: () => _shareBooking(entry.$2, allItems),
                         ),
                       ),
@@ -120,10 +146,9 @@ class _MyEventsPageState extends ConsumerState<MyEventsPage> {
     final events = await ref.read(eventsProvider.future);
     final joinedEvents = events.where((event) => event.isJoined).toList();
     final rows = <_MyBookingItem>[];
+    final bookings = await ref.read(eventRepositoryProvider).fetchMyBookings();
     for (final event in joinedEvents) {
-      final participants = await ref
-          .read(eventRepositoryProvider)
-          .fetchParticipants(event.id);
+      final participants = bookings[event.id] ?? const <EventParticipant>[];
       for (final participant in participants.where((item) => item.isMe)) {
         rows.add(_MyBookingItem(event: event, participant: participant));
       }
@@ -138,8 +163,8 @@ class _MyEventsPageState extends ConsumerState<MyEventsPage> {
 
   Future<void> _refresh() async {
     ref.invalidate(eventParticipantsProvider);
-    final _ = await ref.refresh(eventsProvider.future);
-    setState(() => _itemsFuture = _loadMyBookings());
+    ref.invalidate(eventsProvider);
+    if (mounted) setState(() => _itemsFuture = _loadMyBookings());
   }
 
   Future<void> _editBooking(_MyBookingItem item) async {
@@ -162,9 +187,14 @@ class _MyEventsPageState extends ConsumerState<MyEventsPage> {
       builder: (context) => _CancelBookingDialog(item: item),
     );
     if (confirmed != true) return;
-    await ref
-        .read(eventRepositoryProvider)
-        .removeBooking(item.event.id, dayIndex: item.participant.dayIndex);
+    if (!mounted) return;
+    final removed = await runUserAction(
+      context,
+      () => ref
+          .read(eventRepositoryProvider)
+          .removeBooking(item.event.id, dayIndex: item.participant.dayIndex),
+    );
+    if (!removed || !mounted) return;
     await _refresh();
   }
 
@@ -470,8 +500,8 @@ class _MyBookingCard extends StatelessWidget {
   });
 
   final _MyBookingItem item;
-  final VoidCallback onEdit;
-  final VoidCallback onCancel;
+  final VoidCallback? onEdit;
+  final VoidCallback? onCancel;
   final VoidCallback onShare;
 
   @override
@@ -672,8 +702,8 @@ class _MyBookingActionRow extends StatelessWidget {
     required this.onShare,
   });
 
-  final VoidCallback onEdit;
-  final VoidCallback onCancel;
+  final VoidCallback? onEdit;
+  final VoidCallback? onCancel;
   final VoidCallback onShare;
 
   @override

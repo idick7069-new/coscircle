@@ -1,0 +1,8 @@
+[Unit]
+Description=Renew CosCircle IP TLS certificate
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/coscircle/certbot-venv/bin/certbot renew --quiet --no-random-sleep-on-renew --deploy-hook "nginx -t && systemctl reload nginx"

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/providers/event_providers.dart';
+import '../../../core/providers/friendship_providers.dart';
 import '../../current_event/presentation/current_event_page.dart';
 import '../../events/presentation/event_list_page.dart';
 import '../../profile/presentation/profile_page.dart';
@@ -17,9 +18,31 @@ class HomeShellPage extends ConsumerStatefulWidget {
   ConsumerState<HomeShellPage> createState() => _HomeShellPageState();
 }
 
-class _HomeShellPageState extends ConsumerState<HomeShellPage> {
+class _HomeShellPageState extends ConsumerState<HomeShellPage>
+    with WidgetsBindingObserver {
   int _index = 1;
+  final Set<int> _visited = {1};
   bool _showingExitConfirm = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _visited.contains(3)) {
+      ref.invalidate(friendshipsProvider);
+    }
+  }
+
   static const _destinations = [
     _HomeNavDestination(
       icon: Icons.badge_outlined,
@@ -60,10 +83,14 @@ class _HomeShellPageState extends ConsumerState<HomeShellPage> {
           ref
               .read(selectedCurrentEventTargetProvider.notifier)
               .select(item.event.id, dayIndex: item.dayIndex);
-          setState(() => _index = 2);
+          setState(() {
+            _visited.add(2);
+            _index = 2;
+          });
         },
       ),
       CurrentEventPage(
+        isVisible: _index == 2,
         eventId: selectedCurrentEventTarget?.eventId,
         dayIndex: selectedCurrentEventTarget?.dayIndex ?? 1,
         onOpenEvents: () => setState(() => _index = 1),
@@ -81,7 +108,17 @@ class _HomeShellPageState extends ConsumerState<HomeShellPage> {
         _handleBackPressed();
       },
       child: Scaffold(
-        body: SafeArea(child: pages[_index]),
+        body: SafeArea(
+          child: IndexedStack(
+            index: _index,
+            children: [
+              for (var index = 0; index < pages.length; index++)
+                _visited.contains(index)
+                    ? pages[index]
+                    : const SizedBox.shrink(),
+            ],
+          ),
+        ),
         bottomNavigationBar: SafeArea(
           top: false,
           child: Padding(
@@ -104,8 +141,14 @@ class _HomeShellPageState extends ConsumerState<HomeShellPage> {
                           selected: _index == entry.$1,
                           onTap: () {
                             if (_index == entry.$1) return;
+                            if (entry.$1 == 3) {
+                              ref.invalidate(friendshipsProvider);
+                            }
                             HapticFeedback.selectionClick();
-                            setState(() => _index = entry.$1);
+                            setState(() {
+                              _visited.add(entry.$1);
+                              _index = entry.$1;
+                            });
                           },
                         ),
                       ),

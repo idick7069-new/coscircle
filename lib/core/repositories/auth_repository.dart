@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dio/dio.dart';
+import '../services/auth_state.dart';
 
 import '../api/api_client.dart';
 import '../config/app_environment.dart';
@@ -39,6 +41,23 @@ enum SocialLoginProvider {
   final String label;
 }
 
+class AuthEmailStatus {
+  const AuthEmailStatus({
+    this.email,
+    required this.verified,
+    required this.available,
+  });
+  final String? email;
+  final bool verified;
+  final bool available;
+  factory AuthEmailStatus.fromJson(Map<String, dynamic> json) =>
+      AuthEmailStatus(
+        email: json['email'] as String?,
+        verified: json['verified'] == true,
+        available: json['available'] == true,
+      );
+}
+
 class AuthRepository {
   AuthRepository({required ApiClient apiClient}) : _apiClient = apiClient;
 
@@ -55,7 +74,8 @@ class AuthRepository {
     try {
       await _apiClient.get('/me');
       return token;
-    } catch (_) {
+    } on DioException catch (error) {
+      if (error.response?.statusCode != 401) rethrow;
       await prefs.remove(tokenKey);
       _apiClient.setAuthToken(null);
       return null;
@@ -106,6 +126,10 @@ class AuthRepository {
       await _saveToken(session.token);
       return session;
     }
+    if (provider == SocialLoginProvider.line &&
+        !Uri.parse(_apiClient.baseUrl).isScheme('https')) {
+      throw Exception('LINE 登入需要 HTTPS 後端，請先完成正式連線設定');
+    }
     final session = await _authenticate(
       '/auth/social',
       data: {'provider': provider.apiValue, 'accessToken': accessToken},
@@ -114,16 +138,75 @@ class AuthRepository {
     return session;
   }
 
-  Future<void> logout() async {
+  Future<void> logout({String? pushToken}) async {
     try {
       if (!appDemoMode) {
-        await _apiClient.post('/auth/logout');
+        await _apiClient.post('/auth/logout', data: {'pushToken': pushToken});
       }
+    } catch (_) {
+      // Local logout must finish even when the server is unavailable.
     } finally {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(tokenKey);
       _apiClient.setAuthToken(null);
     }
+  }
+
+  Future<List<String>> loginMethods() async {
+    final response = await _apiClient.get('/me/auth-identities');
+    return (response.data as List)
+        .map((row) => (row as Map)['provider'].toString())
+        .toList();
+  }
+
+  Future<AuthEmailStatus> emailStatus() async {
+    final response = await _apiClient.get('/me/email-status');
+    return AuthEmailStatus.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<void> requestEmailVerification() async {
+    await _apiClient.post(
+      '/me/email-verification',
+      receiveTimeout: const Duration(seconds: 20),
+    );
+  }
+
+  Future<void> forgotPassword(String email) async {
+    await _apiClient.post('/auth/forgot-password', data: {'email': email});
+  }
+
+  Future<void> verifyEmail(String token) async {
+    await _apiClient.post('/auth/verify-email', data: {'token': token});
+  }
+
+  Future<void> resetPassword({
+    required String token,
+    required String password,
+  }) async {
+    await _apiClient.post(
+      '/auth/reset-password',
+      data: {'token': token, 'password': password},
+    );
+    await clearLocalSession();
+  }
+
+  Future<void> clearLocalSession() async {
+    await (await SharedPreferences.getInstance()).remove(tokenKey);
+    _apiClient.setAuthToken(null);
+    sessionExpired.value = false;
+  }
+
+  Future<void> linkLine({
+    required String accessToken,
+    required String password,
+  }) async {
+    if (!Uri.parse(_apiClient.baseUrl).isScheme('https')) {
+      throw Exception('綁定 LINE 需要 HTTPS 後端，請先完成正式連線設定');
+    }
+    await _apiClient.post(
+      '/me/auth-identities/line',
+      data: {'accessToken': accessToken, 'password': password},
+    );
   }
 
   Future<AuthSession> _authenticate(
@@ -138,6 +221,7 @@ class AuthRepository {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(tokenKey, token);
     _apiClient.setAuthToken(token);
+    sessionExpired.value = false;
   }
 
   static const _demoToken = 'coscircle-demo-token';

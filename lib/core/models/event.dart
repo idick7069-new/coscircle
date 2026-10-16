@@ -21,6 +21,10 @@ class CosEvent {
     this.joinedDayIndexes = const [],
     this.hasFollowedParticipants = false,
     this.hasCircleMembers = false,
+    this.followedDayIndexes = const [],
+    this.circleDayIndexes = const [],
+    this.hasFriends = false,
+    this.friendDayIndexes = const [],
   });
 
   final String id;
@@ -42,6 +46,10 @@ class CosEvent {
   final List<int> joinedDayIndexes;
   final bool hasFollowedParticipants;
   final bool hasCircleMembers;
+  final List<int> followedDayIndexes;
+  final List<int> circleDayIndexes;
+  final bool hasFriends;
+  final List<int> friendDayIndexes;
 
   factory CosEvent.fromJson(Map<String, dynamic> json) {
     final startDate = _parseDateOnly(json['startDate'].toString());
@@ -71,6 +79,10 @@ class CosEvent {
       reviewStatus: json['status']?.toString() ?? 'approved',
       isJoined: json['isJoined'] == true || json['isJoined'] == 1,
       joinedDayIndexes: _intList(json['joinedDayIndexes']),
+      followedDayIndexes: _intList(json['followedDayIndexes']),
+      circleDayIndexes: _intList(json['circleDayIndexes']),
+      friendDayIndexes: _intList(json['friendDayIndexes']),
+      hasFriends: json['hasFriends'] == true || json['hasFriends'] == 1,
       hasFollowedParticipants:
           json['hasFollowedParticipants'] == true ||
           json['hasFollowedParticipants'] == 1,
@@ -111,6 +123,10 @@ class CosEvent {
       joinedDayIndexes: joinedDayIndexes ?? this.joinedDayIndexes,
       hasFollowedParticipants: hasFollowedParticipants,
       hasCircleMembers: hasCircleMembers,
+      followedDayIndexes: followedDayIndexes,
+      circleDayIndexes: circleDayIndexes,
+      hasFriends: hasFriends,
+      friendDayIndexes: friendDayIndexes,
     );
   }
 }

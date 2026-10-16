@@ -1,4 +1,5 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LocalNotificationService {
   LocalNotificationService._();
@@ -52,6 +53,12 @@ class LocalNotificationService {
   }
 
   Future<void> showRecognitionRequest(String message) async {
+    if ((await SharedPreferences.getInstance()).getBool(
+          'recognition_notifications_enabled',
+        ) ==
+        false) {
+      return;
+    }
     await initialize();
     await _requestPermissionIfNeeded();
     await _plugin.show(

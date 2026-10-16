@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import '../../../core/services/auth_state.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/models/profile.dart';
 import '../../../core/repositories/profile_repository.dart';
 import '../../../core/services/oobe_service.dart';
 import '../../../core/utils/error_message.dart';
@@ -96,7 +96,13 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
             child: PageView(
               controller: _pageController,
               onPageChanged: (value) => setState(() => _page = value),
-              children: pages,
+              children: pages
+                  .map(
+                    (page) => page is _GuideStep
+                        ? SingleChildScrollView(child: page)
+                        : page,
+                  )
+                  .toList(),
             ),
           ),
           if (_errorText != null) ...[
@@ -104,16 +110,16 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
             _OnboardingErrorBanner(message: _errorText!),
           ],
           const SizedBox(height: 16),
-          Row(
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 8,
+            runSpacing: 8,
             children: [
               if (_page > 0)
                 OutlinedButton(
                   onPressed: _saving ? null : _previous,
                   child: const Text('上一步'),
-                )
-              else
-                const SizedBox(width: 88),
-              const Spacer(),
+                ),
               FilledButton.icon(
                 onPressed: _saving
                     ? null
@@ -154,24 +160,32 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
   }
 
   Future<void> _loadInitialProfile() async {
-    final profile = await ref.read(profileRepositoryProvider).currentProfile();
-    if (!mounted || profile == null) return;
-    setState(() {
-      if (_nicknameController.text.trim().isEmpty &&
-          profile.nickname.trim().isNotEmpty) {
-        _nicknameController.text = profile.nickname.trim();
+    try {
+      final profile = await ref
+          .read(profileRepositoryProvider)
+          .currentProfile();
+      if (!mounted || profile == null) return;
+      setState(() {
+        if (_nicknameController.text.trim().isEmpty &&
+            profile.nickname.trim().isNotEmpty) {
+          _nicknameController.text = profile.nickname.trim();
+        }
+        if (_regions.isEmpty && profile.regions.isNotEmpty) {
+          _regions.addAll(profile.regions);
+        }
+        if (profile.profileRoles.isNotEmpty) {
+          _roles
+            ..clear()
+            ..addAll(
+              profile.profileRoles.where((role) => _roleOptions.contains(role)),
+            );
+        }
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _errorText = '個人資料載入失敗：${userFacingError(error)}');
       }
-      if (_regions.isEmpty && profile.regions.isNotEmpty) {
-        _regions.addAll(profile.regions);
-      }
-      if (profile.profileRoles.isNotEmpty) {
-        _roles
-          ..clear()
-          ..addAll(
-            profile.profileRoles.where((role) => _roleOptions.contains(role)),
-          );
-      }
-    });
+    }
   }
 
   Future<void> _finish() async {
@@ -180,9 +194,10 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
       _errorText = null;
     });
     try {
-      final current =
-          await ref.read(profileRepositoryProvider).currentProfile() ??
-          const UserProfile(id: 'me', nickname: '圈圈新朋友');
+      final current = await ref
+          .read(profileRepositoryProvider)
+          .currentProfile();
+      if (current == null) throw Exception('無法取得個人資料，請重新登入');
       final nickname = _nicknameController.text.trim().isEmpty
           ? current.nickname
           : _nicknameController.text.trim();
@@ -193,13 +208,18 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
               nickname: nickname.isEmpty ? '圈圈新朋友' : nickname,
               bio: current.bio.isEmpty ? '剛加入 CosCircle，活動現場歡迎認親！' : null,
               profileRoles: _roles.toList(),
+              onboardingCompleted: true,
               regions: _regions.isEmpty ? current.regions : _regions.toList(),
             ),
           );
       await ref
           .read(oobeServiceProvider)
           .markCompleted(current.id.isEmpty ? 'me' : current.id);
-      if (mounted) context.go('/');
+      if (mounted) {
+        context.go(
+          safeReturnPath(GoRouterState.of(context).uri.queryParameters['next']),
+        );
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() => _errorText = '新手設定儲存失敗：${userFacingError(error)}');

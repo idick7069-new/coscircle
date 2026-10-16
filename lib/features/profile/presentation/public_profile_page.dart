@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/utils/user_action.dart';
 
 import '../../../core/models/work.dart';
 import '../../../core/models/profile.dart';
@@ -9,6 +11,7 @@ import '../../../core/utils/participant_role_style.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../social/presentation/friendship_widgets.dart';
 
 const _profileRoleOptions = ['coser', 'photographer', 'manager', 'self'];
 
@@ -18,9 +21,16 @@ final publicProfileProvider = FutureProvider.autoDispose
     });
 
 class PublicProfilePage extends ConsumerWidget {
-  const PublicProfilePage({super.key, required this.publicCode});
+  const PublicProfilePage({
+    super.key,
+    required this.publicCode,
+    this.eventId,
+    this.dayIndex,
+  });
 
   final String publicCode;
+  final String? eventId;
+  final int? dayIndex;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -56,17 +66,23 @@ class PublicProfilePage extends ConsumerWidget {
               CosReveal(
                 child: _PublicProfileHero(
                   profile: value,
-                  onFollowToggle: value.id.isEmpty
+                  onFollowToggle: value.id.isEmpty || value.isMe
                       ? null
                       : () async {
-                          if (value.isFollowed) {
-                            await ref
-                                .read(profileRepositoryProvider)
-                                .unfollowUser(value.id);
-                          } else {
-                            await ref
-                                .read(profileRepositoryProvider)
-                                .followUser(value.id);
+                          if (!await _requireLogin(context)) return;
+                          if (!context.mounted) return;
+                          if (!await runUserAction(context, () async {
+                            if (value.isFollowed) {
+                              await ref
+                                  .read(profileRepositoryProvider)
+                                  .unfollowUser(value.id);
+                            } else {
+                              await ref
+                                  .read(profileRepositoryProvider)
+                                  .followUser(value.id);
+                            }
+                          })) {
+                            return;
                           }
                           ref.invalidate(publicProfileProvider(publicCode));
                           if (!context.mounted) return;
@@ -78,9 +94,11 @@ class PublicProfilePage extends ConsumerWidget {
                             ),
                           );
                         },
-                  onBlock: value.id.isEmpty
+                  onBlock: value.id.isEmpty || value.isMe
                       ? null
                       : () async {
+                          if (!await _requireLogin(context)) return;
+                          if (!context.mounted) return;
                           final confirmed = await showDialog<bool>(
                             context: context,
                             builder: (context) => CosSafetyConfirmDialog(
@@ -93,10 +111,17 @@ class PublicProfilePage extends ConsumerWidget {
                             ),
                           );
                           if (confirmed != true) return;
-                          await ref
-                              .read(profileRepositoryProvider)
-                              .blockUser(value.id);
                           if (!context.mounted) return;
+                          if (!await runUserAction(
+                            context,
+                            () => ref
+                                .read(profileRepositoryProvider)
+                                .blockUser(value.id),
+                          )) {
+                            return;
+                          }
+                          if (!context.mounted) return;
+                          refreshFriendships(ref);
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('已封鎖使用者')),
                           );
@@ -105,6 +130,15 @@ class PublicProfilePage extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 14),
+              if (!value.isMe && value.id.isNotEmpty) ...[
+                ProfileFriendshipActions(
+                  userId: value.id,
+                  requireLogin: () => _requireLogin(context),
+                  eventId: eventId,
+                  dayIndex: dayIndex,
+                ),
+                const SizedBox(height: 14),
+              ],
               CosReveal(
                 delay: const Duration(milliseconds: 45),
                 child: _PublicProfileConversationCard(profile: value),
@@ -246,6 +280,32 @@ class PublicProfilePage extends ConsumerWidget {
         loading: () => const _PublicProfileLoadingState(),
       ),
     );
+  }
+
+  Future<bool> _requireLogin(BuildContext context) async {
+    final token = (await SharedPreferences.getInstance()).getString(
+      'auth_token',
+    );
+    if (token != null && token.isNotEmpty) return true;
+    if (context.mounted) {
+      context.go(
+        Uri(
+          path: '/login',
+          queryParameters: {
+            'next': Uri(
+              path: '/profiles/$publicCode',
+              queryParameters: eventId == null
+                  ? null
+                  : {
+                      'eventId': eventId!,
+                      if (dayIndex != null) 'dayIndex': '$dayIndex',
+                    },
+            ).toString(),
+          },
+        ).toString(),
+      );
+    }
+    return false;
   }
 }
 

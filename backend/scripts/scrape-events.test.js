@@ -5,8 +5,104 @@ import {
   parseAcostaEventFromHtml,
   parseCosmosOenEventFromHtml,
   parseEventsFromHtml,
-  rejectMissingDoujinEvents,
+  collectEventSources,
+  importEvents as rawImportEvents,
+  isLikelySameEvent,
 } from './scrape-events.js';
+
+function transactionPool(execute, lifecycle = []) {
+  return {execute, getConnection: async () => ({execute,
+    beginTransaction: async () => lifecycle.push('begin'),
+    commit: async () => lifecycle.push('commit'),
+    rollback: async () => lifecycle.push('rollback'),
+    release: () => lifecycle.push('release'),
+  })};
+}
+
+function importEvents(pool, ...args) {
+  return rawImportEvents(pool.getConnection ? pool : transactionPool(pool.execute.bind(pool)), ...args);
+}
+
+test('co-located independent fairs do not merge', () => {
+  assert.equal(isLikelySameEvent(
+    {name: 'IF8', venue: 'Taipei Expo', sourceUrl: 'https://www.doujin.com.tw/events/info/2537'},
+    {name: 'BIO14', venue: 'Taipei Expo', sourceUrl: 'https://www.doujin.com.tw/events/info/2538'},
+  ), false);
+  assert.equal(isLikelySameEvent({name: 'IF8', venue: 'Taipei Expo'},
+    {name: 'BIO14', venue: 'Taipei Expo'}), false);
+});
+
+test('distinct Doujin IDs stay independent even when names match', () => {
+  assert.equal(isLikelySameEvent(
+    {name: 'Fair', venue: 'Expo', sourceUrl: 'https://www.doujin.com.tw/events/info/1'},
+    {name: 'Fair', venue: 'Expo', sourceUrl: 'https://www.doujin.com.tw/events/info/2'},
+  ), false);
+});
+
+test('matching cross-source names and venues can still merge', () => {
+  assert.equal(isLikelySameEvent({name: 'COSMOS Fair', venue: 'Expo'},
+    {name: 'COSMOS Fair', venue: 'Expo'}), true);
+  assert.equal(isLikelySameEvent({name: 'COSMOS Fair', venue: 'Expo'},
+    {name: 'COSMOS Fair', venue: 'Other Venue'}), false);
+});
+
+test('records each source independently when Doujin is blocked', async () => {
+  const reports = [];
+  const pool = {execute: async () => [[]]};
+  await importEvents(pool, {
+    doujin: async () => { throw Object.assign(new Error('blocked'), {response: {status: 403, headers: {'cf-mitigated': 'challenge'}}}); },
+    cosmos: async () => [],
+    acosta: async () => [{sourceKey: 'acosta-qa', sourceType: 5, sourceName: 'acosta!', sourceUrl: 'https://example.com/qa',
+      name: 'QA', startDate: '2099-01-01', endDate: '2099-01-01', category: 'QA', venue: 'QA',
+      imageUrl: '', fee: '', organizer: '', description: '', status: 'approved'}],
+  }, async (report) => reports.push(report));
+  assert.equal(reports.length, 3);
+  assert.equal(reports[0].sourceKey, 'doujin-source');
+  assert.equal(reports[0].status, 'failure');
+  assert.equal(reports[0].errorCode, '403');
+  assert.match(reports[0].errorMessage, /Cloudflare/);
+  assert.equal(reports[0].importedCount, 0);
+  assert.equal(reports[1].status, 'success');
+  assert.equal(reports[2].status, 'success');
+  assert.equal(reports[2].importedCount, 1);
+});
+
+test('failed Doujin source preserves records while supplemental events import', async () => {
+  const statements = [];
+  const event = {sourceKey: 'cosmos-qa', sourceType: 4, sourceName: 'COSMOS', sourceUrl: 'https://example.com/qa',
+    name: 'QA', startDate: '2099-01-01', endDate: '2099-01-01', category: 'QA', venue: 'QA',
+    imageUrl: '', fee: '', organizer: '', description: '', status: 'approved'};
+  const pool = {execute: async (sql) => { statements.push(sql); return [[]]; }};
+  const rows = await importEvents(pool, {doujin: async () => { throw new Error('403'); }, supplemental: async () => [event]});
+  assert.equal(rows.length, 1);
+  assert.ok(statements.some((sql) => sql.includes('INSERT INTO events')));
+  assert.ok(!statements.some((sql) => /SET status = 'rejected'/.test(sql)));
+});
+
+test('all sources failing is visible rather than a successful empty sync', async () => {
+  await assert.rejects(() => collectEventSources({doujin: async () => {throw new Error('403');}, supplemental: async () => []}), /all_event_sources_unavailable/);
+});
+
+test('all blocked sources still persist three failure reports', async () => {
+  const reports = [];
+  const blocked = async () => {throw new Error('blocked');};
+  await assert.rejects(() => importEvents({execute: async () => [[]]}, {
+    doujin: blocked, cosmos: blocked, acosta: blocked,
+  }, async (report) => reports.push(report)), /all_event_sources_unavailable/);
+  assert.equal(reports.length, 3);
+  assert.ok(reports.every((report) => report.status === 'failure' && report.importedCount === 0));
+});
+
+test('database failures cannot be reported as successful imports', async () => {
+  const reports = [];
+  await importEvents({execute: async () => {throw new Error('DB unavailable');}}, {
+    doujin: async () => [{sourceUrl: 'https://www.doujin.com.tw/events/info/2545'}],
+    cosmos: async () => [], acosta: async () => [],
+  }, async (report) => reports.push(report));
+  assert.equal(reports[0].status, 'failure');
+  assert.equal(reports[0].importedCount, 0);
+  assert.match(reports[0].errorMessage, /DB unavailable/);
+});
 
 test('parses Doujin event list JSON-LD and merges visible HTML details', () => {
   const html = `
@@ -195,23 +291,24 @@ test('parses public acosta Taiwan event page', () => {
   assert.equal(event.fee, '1,600 円');
 });
 
-test('missing Doujin sync only rejects current or future events', async () => {
-  const executed = [];
-  const pool = {
-    async execute(sql, params) {
-      executed.push({ sql, params });
-    },
-  };
+test('source import commits atomically and never unpublishes absent records', async () => {
+  const statements = [], lifecycle = [];
+  const event = {sourceKey: 'doujin-1', sourceType: 1, sourceName: '同人誌中心', sourceUrl: 'https://www.doujin.com.tw/events/info/1',
+    name: 'QA', startDate: '2099-01-01', endDate: '2099-01-01', category: 'QA', venue: 'QA',
+    imageUrl: '', fee: '', organizer: '', description: '', status: 'approved'};
+  const pool = transactionPool(async (sql) => {statements.push(sql);return [[]];}, lifecycle);
+  await importEvents(pool, {doujin: async () => [event], cosmos: async () => [], acosta: async () => []});
+  assert.ok(lifecycle.includes('commit'));
+  assert.ok(!lifecycle.includes('rollback'));
+  assert.ok(!statements.some((sql) => sql.includes('source_url NOT IN')));
+});
 
-  await rejectMissingDoujinEvents(pool, [
-    {
-      sourceUrl: 'https://www.doujin.com.tw/events/info/2356',
-    },
-  ]);
-
-  assert.equal(executed.length, 1);
-  assert.match(executed[0].sql, /end_date >= CURRENT_DATE\(\)/);
-  assert.deepEqual(executed[0].params, [
-    'https://www.doujin.com.tw/events/info/2356',
-  ]);
+test('a write failure rolls back the source instead of reporting partial writes as imported', async () => {
+  const lifecycle = [], reports = [];
+  const pool = transactionPool(async () => {throw new Error('write failure');}, lifecycle);
+  await importEvents(pool, {doujin: async () => [{sourceUrl: 'https://www.doujin.com.tw/events/info/1'}], cosmos: async () => [], acosta: async () => []},
+    (report) => reports.push(report));
+  assert.deepEqual(lifecycle.slice(0, 3), ['begin', 'rollback', 'release']);
+  assert.equal(reports[0].status, 'failure');
+  assert.equal(reports[0].importedCount, 0);
 });

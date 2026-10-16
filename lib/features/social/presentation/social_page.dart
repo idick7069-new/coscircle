@@ -6,8 +6,11 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../../core/models/circle.dart';
 import '../../../core/repositories/social_repository.dart';
 import '../../../core/utils/error_message.dart';
+import '../../../core/utils/user_action.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../../core/providers/friendship_providers.dart';
+import 'friendship_widgets.dart';
 
 final circlesProvider = FutureProvider.autoDispose<List<CircleGroup>>((ref) {
   return ref.watch(socialRepositoryProvider).fetchCircles();
@@ -24,9 +27,17 @@ class SocialPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final circles = ref.watch(circlesProvider);
     final following = ref.watch(followingProvider);
+    final incomingCount =
+        ref
+            .watch(friendshipsProvider)
+            .asData
+            ?.value
+            .where((item) => item.isIncoming)
+            .length ??
+        0;
 
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Column(
         children: [
           CosPageHeader(
@@ -44,6 +55,7 @@ class SocialPage extends ConsumerWidget {
                 onPressed: () {
                   ref.invalidate(circlesProvider);
                   ref.invalidate(followingProvider);
+                  ref.invalidate(friendshipsProvider);
                 },
                 icon: const Icon(Icons.refresh),
               ),
@@ -70,6 +82,9 @@ class SocialPage extends ConsumerWidget {
                 ],
               ),
               child: TabBar(
+                onTap: (index) {
+                  if (index == 2) ref.invalidate(friendshipsProvider);
+                },
                 dividerColor: Colors.transparent,
                 indicatorSize: TabBarIndicatorSize.tab,
                 indicator: BoxDecoration(
@@ -82,9 +97,19 @@ class SocialPage extends ConsumerWidget {
                 ).colorScheme.onSurfaceVariant,
                 labelStyle: Theme.of(context).textTheme.labelLarge,
                 padding: const EdgeInsets.all(6),
-                tabs: const [
-                  Tab(text: '小圈圈', icon: Icon(Icons.groups_outlined)),
-                  Tab(text: '已關注', icon: Icon(Icons.favorite_border)),
+                tabs: [
+                  const Tab(text: '小圈圈', icon: Icon(Icons.groups_outlined)),
+                  const Tab(text: '已關注', icon: Icon(Icons.favorite_border)),
+                  Tab(
+                    text: '戳友',
+                    icon: Badge(
+                      isLabelVisible: incomingCount > 0,
+                      label: Text(
+                        incomingCount > 99 ? '99+' : '$incomingCount',
+                      ),
+                      child: const Icon(Icons.people_outline),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -241,6 +266,7 @@ class SocialPage extends ConsumerWidget {
                     ),
                   ),
                 ),
+                const FriendshipList(),
               ],
             ),
           ),
@@ -265,7 +291,13 @@ class SocialPage extends ConsumerWidget {
       ),
     );
     if (confirmed != true) return;
-    await ref.read(socialRepositoryProvider).unfollowUser(user.userId);
+    if (!context.mounted) return;
+    if (!await runUserAction(
+      context,
+      () => ref.read(socialRepositoryProvider).unfollowUser(user.userId),
+    )) {
+      return;
+    }
     ref.invalidate(followingProvider);
     if (!context.mounted) return;
     ScaffoldMessenger.of(
@@ -313,9 +345,15 @@ class SocialPage extends ConsumerWidget {
       ),
     );
     if (confirmed != true) return;
-    await ref
-        .read(socialRepositoryProvider)
-        .removeCircleMember(circleId: circle.id, userId: member.userId);
+    if (!context.mounted) return;
+    if (!await runUserAction(
+      context,
+      () => ref
+          .read(socialRepositoryProvider)
+          .removeCircleMember(circleId: circle.id, userId: member.userId),
+    )) {
+      return;
+    }
     ref.invalidate(circlesProvider);
     if (!context.mounted) return;
     ScaffoldMessenger.of(
@@ -332,20 +370,30 @@ class SocialPage extends ConsumerWidget {
       context: context,
       builder: (context) => CosSafetyConfirmDialog(
         icon: Icons.logout_outlined,
-        title: '離開小圈圈',
-        message: '確定要離開「${circle.name}」？離開後就不會收到這個小圈圈的集合訊號。',
+        title: circle.isOwner ? '解散小圈圈' : '離開小圈圈',
+        message: circle.isOwner
+            ? '確定要解散「${circle.name}」？所有成員會失去這個小圈圈，集合點也會刪除，無法復原。'
+            : '確定要離開「${circle.name}」？離開後就不會收到這個小圈圈的集合訊號。',
         cancelLabel: '保留',
-        actionLabel: '離開',
+        actionLabel: circle.isOwner ? '解散' : '離開',
         destructive: true,
       ),
     );
     if (confirmed != true) return;
-    await ref.read(socialRepositoryProvider).leaveCircle(circle.id);
+    if (!context.mounted) return;
+    if (!await runUserAction(
+      context,
+      () => circle.isOwner
+          ? ref.read(socialRepositoryProvider).dissolveCircle(circle.id)
+          : ref.read(socialRepositoryProvider).leaveCircle(circle.id),
+    )) {
+      return;
+    }
     ref.invalidate(circlesProvider);
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('已離開小圈圈')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(circle.isOwner ? '已解散小圈圈' : '已離開小圈圈')),
+    );
   }
 }
 
@@ -462,6 +510,14 @@ class _CircleDialogState extends ConsumerState<_CircleDialog> {
                               }
                               ref.invalidate(circlesProvider);
                               if (context.mounted) Navigator.pop(context);
+                            } catch (error) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(userFacingError(error)),
+                                  ),
+                                );
+                              }
                             } finally {
                               if (mounted) setState(() => _submitting = false);
                             }
@@ -917,9 +973,12 @@ class _CircleCardState extends State<_CircleCard> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 4,
                                 children: [
-                                  Expanded(
+                                  SizedBox(
+                                    width: double.infinity,
                                     child: Text(
                                       circle.name,
                                       maxLines: 1,
@@ -980,9 +1039,9 @@ class _CircleCardState extends State<_CircleCard> {
                                 value: 'edit',
                                 child: Text('編輯'),
                               ),
-                            const PopupMenuItem(
+                            PopupMenuItem(
                               value: 'leave',
-                              child: Text('離開'),
+                              child: Text(circle.isOwner ? '解散' : '離開'),
                             ),
                           ],
                         ),

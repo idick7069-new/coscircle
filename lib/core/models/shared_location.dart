@@ -20,6 +20,7 @@ class SharedLocation {
     this.isMe = false,
     this.isFollowed = false,
     this.isCircleMember = false,
+    this.isFriend = false,
   });
 
   final String userId;
@@ -42,6 +43,7 @@ class SharedLocation {
   final bool isMe;
   final bool isFollowed;
   final bool isCircleMember;
+  final bool isFriend;
 
   factory SharedLocation.fromJson(Map<String, dynamic> json) {
     return SharedLocation(
@@ -51,9 +53,13 @@ class SharedLocation {
       dayIndex: _intValue(json['dayIndex'], fallback: 1),
       latitude: double.parse(json['latitude'].toString()),
       longitude: double.parse(json['longitude'].toString()),
-      sharedAt: DateTime.parse(json['sharedAt'].toString()),
+      sharedAt:
+          _epochDateTime(json['sharedAtEpoch']) ??
+          DateTime.parse(json['sharedAt'].toString()),
       visibility: json['visibility']?.toString() ?? 'circle',
-      expiresAt: _nullableDateTime(json['expiresAt']),
+      expiresAt:
+          _epochDateTime(json['expiresAtEpoch']) ??
+          _nullableDateTime(json['expiresAt']),
       publicCode: json['publicCode']?.toString() ?? '',
       avatarUrl: json['avatarUrl']?.toString() ?? '',
       characterName: json['characterName']?.toString() ?? '',
@@ -64,6 +70,7 @@ class SharedLocation {
       presenceStatus: json['presenceStatus']?.toString() ?? 'open',
       isMe: json['isMe'] == true || json['isMe'] == 1,
       isFollowed: json['isFollowed'] == true || json['isFollowed'] == 1,
+      isFriend: json['isFriend'] == true || json['isFriend'] == 1,
       isCircleMember:
           json['isCircleMember'] == true || json['isCircleMember'] == 1,
     );
@@ -78,6 +85,13 @@ class SharedLocation {
     if (expiry == null) return null;
     return expiry.difference(now).inMinutes.clamp(0, 99999);
   }
+}
+
+DateTime? _epochDateTime(Object? value) {
+  final seconds = num.tryParse(value?.toString() ?? '');
+  return seconds == null
+      ? null
+      : DateTime.fromMillisecondsSinceEpoch((seconds * 1000).round());
 }
 
 int _intValue(Object? value, {required int fallback}) {

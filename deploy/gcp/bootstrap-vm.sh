@@ -15,7 +15,7 @@ fi
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update
-apt-get install -y ca-certificates curl gnupg nginx mysql-server rsync tar
+apt-get install -y ca-certificates curl gnupg nginx mysql-server rsync tar python3-venv
 
 if ! command -v node >/dev/null 2>&1 || ! node --version | grep -q '^v22\.'; then
   install -d -m 0755 /etc/apt/keyrings

@@ -4,11 +4,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/repositories/auth_repository.dart';
 import '../../../core/repositories/profile_repository.dart';
-import '../../../core/services/oobe_service.dart';
+import '../../../core/services/auth_state.dart';
+import '../../../core/services/line_login_service.dart';
 import '../../../core/services/push_notification_service.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../../shared/widgets/cos_animated_logo.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -24,6 +26,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   bool _isRegister = false;
   bool _loading = false;
   String? _errorText;
+  bool _restoreFailed = false;
+  bool _restoringSession = true;
 
   @override
   void initState() {
@@ -41,6 +45,54 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_restoringSession || _restoreFailed) {
+      return Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 360),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_restoringSession) ...[
+                      const CosAnimatedLogo(),
+                      const SizedBox(height: 20),
+                      const Text('正在確認登入狀態'),
+                    ] else ...[
+                      Icon(
+                        Icons.wifi_off_outlined,
+                        size: 40,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _errorText ?? '無法確認登入狀態',
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: _restoreSession,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('重新連線'),
+                      ),
+                      TextButton(
+                        onPressed: () => setState(() {
+                          _restoreFailed = false;
+                          _errorText = null;
+                        }),
+                        child: const Text('使用其他帳號登入'),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     return AppPage(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
       child: ListView(
@@ -64,21 +116,56 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             onSubmit: _submit,
           ),
           const SizedBox(height: 16),
-          _SocialLoginPanel(
-            loading: _loading,
-            onFacebook: () =>
-                _showSocialTokenDialog(SocialLoginProvider.facebook),
-            onLine: () => _showSocialTokenDialog(SocialLoginProvider.line),
-          ),
+          if (ref.watch(lineLoginEnabledProvider) &&
+              ref.watch(lineLoginServiceProvider).supported)
+            OutlinedButton.icon(
+              onPressed: _loading ? null : _lineLogin,
+              icon: const Icon(Icons.login),
+              label: const Text('使用 LINE 登入'),
+            ),
+          if (const bool.fromEnvironment('ENABLE_SOCIAL_TOKEN_LOGIN'))
+            _SocialLoginPanel(
+              loading: _loading,
+              onFacebook: () =>
+                  _showSocialTokenDialog(SocialLoginProvider.facebook),
+              onLine: () => _showSocialTokenDialog(SocialLoginProvider.line),
+            ),
         ],
       ),
     );
   }
 
   Future<void> _restoreSession() async {
-    final token = await ref.read(authRepositoryProvider).restoreToken();
-    if (!mounted || token == null || token.isEmpty) return;
-    await _goAfterRestoredAuth();
+    var navigating = false;
+    try {
+      if (mounted) {
+        setState(() {
+          _loading = true;
+          _restoringSession = true;
+          _restoreFailed = false;
+          _errorText = null;
+        });
+      }
+      final token = await ref.read(authRepositoryProvider).restoreToken();
+      if (!mounted || token == null || token.isEmpty) return;
+      await _goAfterRestoredAuth();
+      navigating = true;
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _restoreFailed = true;
+          _errorText = '無法恢復登入：${userFacingError(error)}';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          // Keep the form hidden while asynchronous router redirects finish.
+          if (!navigating) _restoringSession = false;
+        });
+      }
+    }
   }
 
   Future<void> _submit() async {
@@ -134,6 +221,28 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     await _socialLogin(provider, token.trim());
   }
 
+  Future<void> _lineLogin() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _errorText = null;
+    });
+    try {
+      final token = await ref.read(lineLoginServiceProvider).authorize();
+      if (!mounted || token == null) return;
+      final session = await ref
+          .read(authRepositoryProvider)
+          .socialLogin(provider: SocialLoginProvider.line, accessToken: token);
+      if (mounted) await _goAfterAuth(session);
+    } catch (error) {
+      if (mounted) {
+        setState(() => _errorText = 'LINE 登入失敗：${userFacingError(error)}');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   Future<void> _socialLogin(
     SocialLoginProvider provider,
     String accessToken,
@@ -159,28 +268,38 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   Future<void> _goAfterRestoredAuth() async {
     final profile = await ref.read(profileRepositoryProvider).currentProfile();
-    if (!mounted || profile == null) return;
+    if (!mounted) return;
+    if (profile == null) throw Exception('無法讀取帳號資料，請重新連線');
     await ref
         .read(pushNotificationServiceProvider)
         .initializeForAuthenticatedUser();
-    final completed = await ref
-        .read(oobeServiceProvider)
-        .isCompleted(profile.id);
+    final completed = profile.onboardingCompleted;
     if (!mounted) return;
-    context.go(completed ? '/' : '/onboarding');
+    _navigateAfterAuth(completed);
   }
 
   Future<void> _goAfterAuth(AuthSession session) async {
     await ref
         .read(pushNotificationServiceProvider)
         .initializeForAuthenticatedUser();
-    final oobe = ref.read(oobeServiceProvider);
-    if (!session.isNewUser) {
-      await oobe.markCompleted(session.user.id);
-    }
-    final completed = await oobe.isCompleted(session.user.id);
+    final completed = session.user.onboardingCompleted;
     if (!mounted) return;
-    context.go(session.isNewUser || !completed ? '/onboarding' : '/');
+    _navigateAfterAuth(completed);
+  }
+
+  void _navigateAfterAuth(bool completed) {
+    final next = safeReturnPath(
+      ref.read(pushNotificationServiceProvider).takeInitialTarget() ??
+          GoRouterState.of(context).uri.queryParameters['next'],
+    );
+    context.go(
+      completed
+          ? next
+          : Uri(
+              path: '/onboarding',
+              queryParameters: {'next': next},
+            ).toString(),
+    );
   }
 }
 
@@ -280,6 +399,23 @@ class _LoginAccessCard extends StatelessWidget {
               label: Text(isRegister ? '建立帳號' : '登入'),
             ),
           ),
+          if (!isRegister)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: loading
+                    ? null
+                    : () => context.push(
+                        Uri(
+                          path: '/forgot-password',
+                          queryParameters: {
+                            'email': emailController.text.trim(),
+                          },
+                        ).toString(),
+                      ),
+                child: const Text('忘記密碼？'),
+              ),
+            ),
         ],
       ),
     );

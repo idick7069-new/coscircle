@@ -14,6 +14,10 @@ class EventDayItem {
   String get title => eventDayTitle(event, dayIndex);
 
   bool get isJoined => event.joinedDayIndexes.contains(dayIndex);
+  bool get hasFollowedParticipants =>
+      event.followedDayIndexes.contains(dayIndex);
+  bool get hasCircleMembers => event.circleDayIndexes.contains(dayIndex);
+  bool get hasFriends => event.friendDayIndexes.contains(dayIndex);
 
   EventStatus status(DateTime now) {
     final today = DateTime(now.year, now.month, now.day);

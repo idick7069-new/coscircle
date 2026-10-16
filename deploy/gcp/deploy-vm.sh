@@ -3,13 +3,30 @@ set -euo pipefail
 
 VM_NAME="${VM_NAME:?Set VM_NAME, for example coscircle-free-vm.}"
 ZONE="${ZONE:?Set ZONE, for example us-west1-b.}"
+GCP_PROJECT="${GCP_PROJECT:?Set the intended GCP project.}"
+GCP_ACCOUNT="${GCP_ACCOUNT:?Set the intended GCP account.}"
 API_BASE_URL="${API_BASE_URL:?Set API_BASE_URL, for example http://EXTERNAL_IP/api or https://your-domain/api.}"
 APP_API_BASE_URL="${APP_API_BASE_URL:-${API_BASE_URL}}"
 ADMIN_API_BASE_URL="${ADMIN_API_BASE_URL:-${API_BASE_URL}}"
 WEB_SERVER_NAME="${WEB_SERVER_NAME:-_}"
 ADMIN_SERVER_NAME="${ADMIN_SERVER_NAME:-admin.coscircle.local}"
 ALLOW_INSECURE_API="${ALLOW_INSECURE_API:-false}"
+PUBLIC_APP_URL="${PUBLIC_APP_URL:-${APP_API_BASE_URL%/api}/app}"
+BUG_REPORT_URL="${BUG_REPORT_URL:-}"
+FEEDBACK_FORM_URL="${FEEDBACK_FORM_URL:-https://forms.gle/WGFe57Y1AFW1LQda8}"
 RUN_MIGRATIONS="${RUN_MIGRATIONS:-true}"
+ENABLE_LINE_LOGIN="${ENABLE_LINE_LOGIN:-false}"
+TLS_CERT_PATH="${TLS_CERT_PATH:-}"
+TLS_KEY_PATH="${TLS_KEY_PATH:-}"
+TLS_LISTEN=""
+TLS_CONFIG=""
+if [[ "${API_BASE_URL}" == https://* ]]; then
+  : "${TLS_CERT_PATH:?HTTPS deployment requires TLS_CERT_PATH.}"
+  : "${TLS_KEY_PATH:?HTTPS deployment requires TLS_KEY_PATH.}"
+  [[ "${TLS_CERT_PATH}" =~ ^/[A-Za-z0-9_./-]+$ && "${TLS_KEY_PATH}" =~ ^/[A-Za-z0-9_./-]+$ ]] || exit 1
+  TLS_LISTEN="listen 443 ssl default_server;"
+  TLS_CONFIG="ssl_certificate ${TLS_CERT_PATH}; ssl_certificate_key ${TLS_KEY_PATH}; ssl_protocols TLSv1.2 TLSv1.3;"
+fi
 
 RELEASE_ID="$(date +%Y%m%d%H%M%S)"
 TMP_DIR="$(mktemp -d)"
@@ -26,6 +43,10 @@ flutter build web \
   --release \
   --base-href=/app/ \
   --dart-define=API_BASE_URL="${APP_API_BASE_URL}" \
+  --dart-define=PUBLIC_APP_URL="${PUBLIC_APP_URL}" \
+  --dart-define=BUG_REPORT_URL="${BUG_REPORT_URL}" \
+  --dart-define=FEEDBACK_FORM_URL="${FEEDBACK_FORM_URL}" \
+  --dart-define=ENABLE_LINE_LOGIN="${ENABLE_LINE_LOGIN}" \
   --dart-define=ALLOW_INSECURE_API="${ALLOW_INSECURE_API}"
 
 mkdir -p "${TMP_DIR}/api" "${TMP_DIR}/web"
@@ -60,6 +81,8 @@ rsync -a build/web/ "${TMP_DIR}/web/admin/"
 sed \
   -e "s/__WEB_SERVER_NAME__/${WEB_SERVER_NAME}/g" \
   -e "s/__ADMIN_SERVER_NAME__/${ADMIN_SERVER_NAME}/g" \
+  -e "s|__TLS_LISTEN__|${TLS_LISTEN}|g" \
+  -e "s|__TLS_CONFIG__|${TLS_CONFIG}|g" \
   deploy/gcp/nginx-coscircle.conf >"${TMP_DIR}/nginx-coscircle.conf"
 
 tar -C "${TMP_DIR}/api" -czf "${TMP_DIR}/coscircle-api-${RELEASE_ID}.tar.gz" .
@@ -70,9 +93,10 @@ gcloud compute scp \
   "${TMP_DIR}/coscircle-web-${RELEASE_ID}.tar.gz" \
   "${TMP_DIR}/nginx-coscircle.conf" \
   "${VM_NAME}:/tmp/" \
-  --zone "${ZONE}"
+  --zone "${ZONE}" \
+  --project "${GCP_PROJECT}" --account "${GCP_ACCOUNT}"
 
-gcloud compute ssh "${VM_NAME}" --zone "${ZONE}" --command "
+gcloud compute ssh "${VM_NAME}" --zone "${ZONE}" --project "${GCP_PROJECT}" --account "${GCP_ACCOUNT}" --command "
 set -euo pipefail
 sudo mkdir -p /opt/coscircle/api/releases/${RELEASE_ID} /var/www/coscircle/releases/${RELEASE_ID} /var/lib/coscircle/uploads
 sudo chown -R coscircle:coscircle /var/lib/coscircle/uploads
@@ -81,15 +105,15 @@ sudo tar -xzf /tmp/coscircle-web-${RELEASE_ID}.tar.gz -C /var/www/coscircle/rele
 sudo rm -rf /opt/coscircle/api/releases/${RELEASE_ID}/uploads
 sudo ln -sfn /var/lib/coscircle/uploads /opt/coscircle/api/releases/${RELEASE_ID}/uploads
 sudo chown -R coscircle:coscircle /opt/coscircle/api/releases/${RELEASE_ID}
-sudo ln -sfn /opt/coscircle/api/releases/${RELEASE_ID} /opt/coscircle/api/current
-sudo ln -sfn /var/www/coscircle/releases/${RELEASE_ID} /var/www/coscircle/current
-sudo install -m 0644 /tmp/nginx-coscircle.conf /etc/nginx/sites-available/coscircle
-cd /opt/coscircle/api/current
+sudo python3 -m venv /opt/coscircle/api/releases/${RELEASE_ID}/.crawler-venv
+sudo /opt/coscircle/api/releases/${RELEASE_ID}/.crawler-venv/bin/python -m pip install -r /opt/coscircle/api/releases/${RELEASE_ID}/scripts/requirements-crawler.txt
+sudo -u coscircle /opt/coscircle/api/releases/${RELEASE_ID}/.crawler-venv/bin/python -c 'import curl_cffi; print(curl_cffi.__version__)'
+cd /opt/coscircle/api/releases/${RELEASE_ID}
 sudo -u coscircle npm ci --omit=dev
 if [[ '${RUN_MIGRATIONS}' == 'true' ]]; then
   sudo bash -c '
     set -euo pipefail
-    cd /opt/coscircle/api/current
+    cd /opt/coscircle/api/releases/${RELEASE_ID}
     set -a
     . /etc/coscircle/api.env
     set +a
@@ -101,9 +125,12 @@ if [[ '${RUN_MIGRATIONS}' == 'true' ]]; then
     fi
   '
 fi
+sudo install -m 0644 /tmp/nginx-coscircle.conf /etc/nginx/sites-available/coscircle
+sudo nginx -t
+sudo ln -sfn /opt/coscircle/api/releases/${RELEASE_ID} /opt/coscircle/api/current
+sudo ln -sfn /var/www/coscircle/releases/${RELEASE_ID} /var/www/coscircle/current
 sudo systemctl daemon-reload
 sudo systemctl restart coscircle-api
-sudo nginx -t
 sudo systemctl reload nginx
 for attempt in \$(seq 1 20); do
   if curl -fsS http://127.0.0.1:8080/api/health; then

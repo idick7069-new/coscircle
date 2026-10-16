@@ -15,19 +15,21 @@ class EventCard extends ConsumerWidget {
     required this.event,
     this.title,
     this.dateText,
-    required this.onTap,
     required this.onBookingPressed,
     required this.onDetailPressed,
     this.isJoinedOverride,
+    this.statusOverride,
+    this.dayIndex,
   });
 
   final CosEvent event;
   final String? title;
   final String? dateText;
-  final VoidCallback? onTap;
   final VoidCallback? onBookingPressed;
   final VoidCallback onDetailPressed;
   final bool? isJoinedOverride;
+  final EventStatus? statusOverride;
+  final int? dayIndex;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -36,10 +38,16 @@ class EventCard extends ConsumerWidget {
         (event.startDate == event.endDate
             ? DateFormat('yyyy/MM/dd E', 'zh_TW').format(event.startDate)
             : '${DateFormat('yyyy/MM/dd').format(event.startDate)} - ${DateFormat('MM/dd').format(event.endDate)}');
-    final status = event.status(DateTime.now());
+    final status = statusOverride ?? event.status(DateTime.now());
     final isEnded = status == EventStatus.ended;
     final isJoined = isJoinedOverride ?? event.isJoined;
-    final participants = ref.watch(eventParticipantsProvider(event.id));
+    final participants = ref
+        .watch(eventParticipantsProvider(event.id))
+        .whenData(
+          (items) => dayIndex == null
+              ? items
+              : items.where((item) => item.dayIndex == dayIndex).toList(),
+        );
     final statusText = switch (status) {
       EventStatus.ended => '已結束',
       EventStatus.active => '正在進行',
@@ -53,7 +61,7 @@ class EventCard extends ConsumerWidget {
     return Opacity(
       opacity: isEnded ? 0.72 : 1,
       child: CosCard(
-        onTap: isEnded ? null : onTap,
+        onTap: onDetailPressed,
         padding: const EdgeInsets.all(10),
         child: DefaultTextStyle.merge(
           style: TextStyle(color: textColor),
@@ -93,6 +101,14 @@ class EventCard extends ConsumerWidget {
                                 icon: _sourceIcon(event.sourceType),
                                 color: scheme.tertiary,
                               ),
+                              if (dayIndex == null
+                                  ? event.hasFriends
+                                  : event.friendDayIndexes.contains(dayIndex))
+                                CosBadge(
+                                  label: '戳友會去',
+                                  icon: Icons.people_outline,
+                                  color: scheme.secondary,
+                                ),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -119,14 +135,11 @@ class EventCard extends ConsumerWidget {
                             text: event.venue,
                           ),
                           const SizedBox(height: 10),
-                          Row(
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Expanded(
-                                child: _ParticipantStrip(
-                                  participants: participants,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
+                              _ParticipantStrip(participants: participants),
+                              const SizedBox(height: 8),
                               Wrap(
                                 spacing: 6,
                                 runSpacing: 6,

@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../core/utils/user_action.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../core/models/event.dart';
+import '../../../core/models/event_day_item.dart';
 import '../../../core/models/participant.dart';
 import '../../../core/providers/event_providers.dart';
 import '../../../core/repositories/event_repository.dart';
@@ -15,10 +19,11 @@ import '../../../core/utils/participant_role_style.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/cos_ui.dart';
 import 'event_booking_share_page.dart';
+import 'event_booking_sheet.dart';
 
 final eventDetailProvider = FutureProvider.autoDispose
     .family<CosEvent?, String>((ref, eventId) async {
-      final events = await ref.watch(eventRepositoryProvider).fetchEvents();
+      final events = await ref.watch(eventsProvider.future);
       return events.where((item) => item.id == eventId).firstOrNull;
     });
 
@@ -55,6 +60,40 @@ class EventDetailPage extends ConsumerWidget {
             children: [
               _EventDetailHero(event: value),
               const SizedBox(height: 14),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final day in expandEventDays([value]))
+                      OutlinedButton.icon(
+                        key: ValueKey('detail-booking-${day.dayIndex}'),
+                        onPressed:
+                            day.status(DateTime.now()) == EventStatus.ended
+                            ? null
+                            : () => showEventBookingSheet(
+                                context,
+                                ref,
+                                value,
+                                dayIndex: day.dayIndex,
+                              ),
+                        icon: Icon(
+                          day.isJoined
+                              ? Icons.edit_calendar_outlined
+                              : Icons.event_available_outlined,
+                        ),
+                        label: Text(
+                          '${DateFormat('MM/dd').format(day.date)} · D${day.dayIndex} · ${day.status(DateTime.now()) == EventStatus.ended
+                              ? '已結束'
+                              : day.isJoined
+                              ? '修改預定'
+                              : '我會去'}',
+                        ),
+                      ),
+                  ],
+                ),
+              ),
               _InfoGrid(
                 rows: [
                   _InfoRow.text('活動日期', _dateText(value)),
@@ -73,14 +112,23 @@ class EventDetailPage extends ConsumerWidget {
                         : Align(
                             alignment: Alignment.centerLeft,
                             child: OutlinedButton.icon(
-                              onPressed: () => Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => EventSourceWebViewPage(
-                                    title: value.name,
-                                    url: value.sourceUrl,
-                                  ),
-                                ),
-                              ),
+                              onPressed: () => kIsWeb
+                                  ? runUserAction(context, () async {
+                                      if (!await launchUrl(
+                                        Uri.parse(value.sourceUrl),
+                                        mode: LaunchMode.externalApplication,
+                                      )) {
+                                        throw Exception('無法開啟活動來源');
+                                      }
+                                    })
+                                  : Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) => EventSourceWebViewPage(
+                                          title: value.name,
+                                          url: value.sourceUrl,
+                                        ),
+                                      ),
+                                    ),
                               icon: const Icon(Icons.open_in_browser),
                               label: const Text('開啟原活動頁'),
                             ),
@@ -610,7 +658,7 @@ class _ParticipantsSection extends ConsumerWidget {
                       children: [
                         CosIconBubble(icon: Icons.person_search_outlined),
                         SizedBox(width: 12),
-                        Expanded(child: Text('目前還沒有人公開預訂，加入後你會成為第一個訊號。')),
+                        Expanded(child: Text('目前沒有可顯示的預定。')),
                       ],
                     ),
                   ),
@@ -721,7 +769,15 @@ class _ParticipantsSection extends ConsumerWidget {
                               return;
                             }
                             Navigator.of(context).pop();
-                            context.push('/profiles/${participant.publicCode}');
+                            context.push(
+                              Uri(
+                                path: '/profiles/${participant.publicCode}',
+                                queryParameters: {
+                                  'eventId': eventId,
+                                  'dayIndex': '${participant.dayIndex}',
+                                },
+                              ).toString(),
+                            );
                           },
                           icon: const Icon(Icons.info_outline),
                           label: const Text('詳細資料'),

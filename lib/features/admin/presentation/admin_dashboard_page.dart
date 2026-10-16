@@ -9,6 +9,7 @@ import '../../../core/models/admin_user.dart';
 import '../../../core/models/event.dart';
 import '../../../core/models/event_submission.dart';
 import '../../../core/repositories/admin_repository.dart';
+import '../../../core/providers/admin_sync_provider.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../shared/widgets/cos_ui.dart';
 
@@ -51,6 +52,17 @@ class AdminDashboardPage extends ConsumerWidget {
     final submissions = ref.watch(adminSubmissionsProvider);
     final syncRuns = ref.watch(adminSyncRunsProvider);
     final syncCheck = ref.watch(adminDoujinSyncCheckProvider);
+    final syncJob = ref.watch(adminSyncJobProvider);
+    final syncing = syncJob.isLoading || syncJob.value?.isRunning == true;
+    ref.listen(adminSyncJobProvider, (previous, next) {
+      if ((previous?.value?.isRunning == true || previous?.isLoading == true) &&
+          next.value?.isRunning == false) {
+        ref.invalidate(adminStatsProvider);
+        ref.invalidate(adminEventsProvider);
+        ref.invalidate(adminSyncRunsProvider);
+        ref.invalidate(adminDoujinSyncCheckProvider);
+      }
+    });
 
     return Scaffold(
       appBar: AppBar(
@@ -67,9 +79,15 @@ class AdminDashboardPage extends ConsumerWidget {
             icon: const Icon(Icons.link),
           ),
           IconButton(
-            tooltip: '同步同人誌中心',
-            onPressed: () => _syncDoujinEvents(context, ref),
-            icon: const Icon(Icons.cloud_sync_outlined),
+            tooltip: '同步所有活動來源',
+            onPressed: syncing ? null : () => _syncDoujinEvents(context, ref),
+            icon: syncing
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.cloud_sync_outlined),
           ),
           IconButton(
             tooltip: '重新整理',
@@ -105,6 +123,31 @@ class AdminDashboardPage extends ConsumerWidget {
                   dense: wide,
                   child: Column(
                     children: [
+                      if (syncing) const LinearProgressIndicator(),
+                      if (syncJob.value != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            syncJob.value!.isRunning
+                                ? '同步中 · ${syncJob.value!.sources.length} 個來源已完成'
+                                : syncJob.value!.status == 'success'
+                                ? '最近同步完成'
+                                : syncJob.value!.status == 'partial'
+                                ? '部分來源同步失敗，請查看來源狀態'
+                                : '最近同步失敗，請查看來源狀態',
+                          ),
+                        ),
+                      if (syncJob.hasError)
+                        _ErrorPanel(
+                          message:
+                              '同步進度讀取失敗：${userFacingError(syncJob.error!)}',
+                        ),
+                      if (syncJob.hasError)
+                        TextButton.icon(
+                          onPressed: () => ref.invalidate(adminSyncJobProvider),
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('重新讀取進度'),
+                        ),
                       syncCheck.when(
                         data: (check) =>
                             _DoujinSyncCheckCard(check: check, compact: wide),
@@ -220,13 +263,21 @@ class AdminDashboardPage extends ConsumerWidget {
 
   Future<void> _syncDoujinEvents(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(const SnackBar(content: Text('正在同步同人誌中心活動...')));
+    messenger.showSnackBar(const SnackBar(content: Text('正在同步各活動來源...')));
     try {
-      final count = await ref.read(adminRepositoryProvider).syncDoujinEvents();
-      await _refresh(ref);
+      await ref.read(adminSyncJobProvider.notifier).start();
       if (!context.mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text('同人誌中心同步完成：$count 筆活動')));
+      final result = ref.read(adminSyncJobProvider);
+      final message = result.hasError
+          ? '同步任務啟動失敗：${userFacingError(result.error!)}'
+          : result.value?.isRunning == true
+          ? '同步任務已啟動，可在來源區查看進度'
+          : '已有最近的同步結果，請查看來源狀態';
+      messenger.showSnackBar(
+        SnackBar(content: Text(message), duration: const Duration(seconds: 8)),
+      );
     } catch (error) {
+      ref.invalidate(adminSyncRunsProvider);
       if (!context.mounted) return;
       messenger.showSnackBar(SnackBar(content: Text('同步失敗：$error')));
     }
@@ -1730,7 +1781,11 @@ class _DoujinSyncCheckCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      check.isFullyMatched ? '同步一致' : '同步需要處理',
+                      !check.sourceAvailable
+                          ? '尚無可比對的同步快照'
+                          : check.isFullyMatched
+                          ? '同步一致'
+                          : '同步需要處理',
                       style:
                           (compact
                                   ? Theme.of(context).textTheme.titleSmall
@@ -1740,16 +1795,22 @@ class _DoujinSyncCheckCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       check.sourceAvailable
-                          ? '來源頁與正式 DB 已完成即時比對'
-                          : '正式後端目前無法讀取同人誌中心來源頁',
+                          ? '最近成功快照與正式 DB 比對${check.checkedAt.isEmpty ? '' : ' · ${DateFormat('MM/dd HH:mm').format(DateTime.parse(check.checkedAt).toLocal())}'}'
+                          : sourceError?.message ?? '請先執行來源同步',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
               ),
               CosBadge(
-                label: check.isCountMatched ? '數量一致' : '數量不一致',
-                icon: check.isCountMatched
+                label: !check.sourceAvailable
+                    ? '無法比對'
+                    : check.isCountMatched
+                    ? '數量一致'
+                    : '數量不一致',
+                icon: !check.sourceAvailable
+                    ? Icons.help_outline
+                    : check.isCountMatched
                     ? Icons.check_circle_outline
                     : Icons.error_outline,
                 highlighted: true,
@@ -2038,24 +2099,35 @@ class _SyncRunList extends StatelessWidget {
       );
     }
     final scheme = Theme.of(context).colorScheme;
+    final latest = <String, AdminSyncRun>{};
+    for (final run in runs) {
+      latest.putIfAbsent(run.sourceGroup, () => run);
+    }
+    final displayedRuns = latest.values;
     if (compact) {
       return _AdminTableShell(
         children: [
-          for (final run in runs.take(4))
+          for (final run in displayedRuns.take(4))
             _AdminCompactRow(
               children: [
                 Icon(
-                  run.isSuccess
+                  run.isLegacyAggregate
+                      ? Icons.help_outline
+                      : run.isSuccess
                       ? Icons.cloud_done_outlined
                       : Icons.cloud_off_outlined,
-                  color: run.isSuccess ? scheme.secondary : scheme.error,
+                  color: run.isLegacyAggregate
+                      ? scheme.onSurfaceVariant
+                      : run.isSuccess
+                      ? scheme.secondary
+                      : scheme.error,
                   size: 18,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   flex: 3,
                   child: Text(
-                    run.sourceKey.isEmpty ? '資料同步' : run.sourceKey,
+                    run.sourceName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -2066,8 +2138,8 @@ class _SyncRunList extends StatelessWidget {
                 Expanded(
                   flex: 2,
                   child: Text(
-                    run.isSuccess ? '匯入 ${run.importedCount} 筆' : run.errorCode,
-                    maxLines: 1,
+                    run.resultLabel,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
@@ -2089,7 +2161,7 @@ class _SyncRunList extends StatelessWidget {
     }
     return Column(
       children: [
-        for (final run in runs.take(5))
+        for (final run in displayedRuns.take(5))
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: CosCard(
@@ -2098,10 +2170,16 @@ class _SyncRunList extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   CosIconBubble(
-                    icon: run.isSuccess
+                    icon: run.isLegacyAggregate
+                        ? Icons.help_outline
+                        : run.isSuccess
                         ? Icons.cloud_done_outlined
                         : Icons.cloud_off_outlined,
-                    color: run.isSuccess ? scheme.secondary : scheme.error,
+                    color: run.isLegacyAggregate
+                        ? scheme.onSurfaceVariant
+                        : run.isSuccess
+                        ? scheme.secondary
+                        : scheme.error,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -2109,16 +2187,14 @@ class _SyncRunList extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          run.sourceKey.isEmpty ? '資料同步' : run.sourceKey,
+                          run.sourceName,
                           style: Theme.of(context).textTheme.titleSmall
                               ?.copyWith(fontWeight: FontWeight.w900),
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          run.isSuccess
-                              ? '${run.createdAt} · 匯入 ${run.importedCount} 筆'
-                              : '${run.createdAt} · ${run.errorCode}',
-                          maxLines: 1,
+                          '${run.createdAt} · ${run.resultLabel}',
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodySmall,
                         ),

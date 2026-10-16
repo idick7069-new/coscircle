@@ -1,4 +1,5 @@
 CREATE TABLE users (
+  onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE,
   id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   provider VARCHAR(32) NOT NULL,
   provider_user_id VARCHAR(191) NOT NULL,
@@ -27,6 +28,19 @@ CREATE TABLE users (
   UNIQUE KEY uniq_user_public_code (public_code),
   UNIQUE KEY uniq_user_email (email),
   UNIQUE KEY uniq_session_token (session_token)
+);
+
+CREATE TABLE user_auth_identities (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  provider VARCHAR(32) NOT NULL,
+  provider_user_id VARCHAR(191) NOT NULL,
+  password_hash TEXT NULL,
+  verified_at DATETIME NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_auth_provider_subject (provider, provider_user_id),
+  UNIQUE KEY uniq_auth_user_provider (user_id, provider),
+  CONSTRAINT fk_auth_identity_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE works (
@@ -66,6 +80,30 @@ CREATE TABLE events (
   status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'approved',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE friendships (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_low_id BIGINT UNSIGNED NOT NULL,
+  user_high_id BIGINT UNSIGNED NOT NULL,
+  requester_id BIGINT UNSIGNED NOT NULL,
+  recipient_id BIGINT UNSIGNED NOT NULL,
+  status ENUM('pending','ignored','accepted') NOT NULL DEFAULT 'pending',
+  introduction VARCHAR(200) NOT NULL,
+  event_id BIGINT UNSIGNED NULL,
+  day_index INT UNSIGNED NULL,
+  event_name VARCHAR(255) NULL,
+  event_date DATE NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  accepted_at TIMESTAMP NULL,
+  UNIQUE KEY uq_friend_pair (user_low_id, user_high_id),
+  KEY idx_friend_inbox (recipient_id, status),
+  KEY idx_friend_outbox (requester_id, status),
+  FOREIGN KEY (user_low_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_high_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (requester_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE SET NULL
 );
 
 CREATE TABLE event_bookings (
@@ -192,6 +230,20 @@ CREATE TABLE source_sync_runs (
   KEY idx_source_sync_runs_status_created (status, created_at)
 );
 
+CREATE TABLE IF NOT EXISTS email_action_tokens (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  identity_id BIGINT UNSIGNED NOT NULL,
+  kind VARCHAR(32) NOT NULL,
+  token_hash CHAR(64) NOT NULL,
+  email_snapshot VARCHAR(191) NOT NULL,
+  created_at_ms BIGINT UNSIGNED NOT NULL,
+  expires_at_ms BIGINT UNSIGNED NOT NULL,
+  consumed_at_ms BIGINT UNSIGNED NULL,
+  UNIQUE KEY uniq_email_action_hash (token_hash),
+  KEY idx_email_action_identity_time (identity_id, kind, created_at_ms),
+  CONSTRAINT fk_email_action_identity FOREIGN KEY (identity_id) REFERENCES user_auth_identities(id) ON DELETE CASCADE
+);
+
 CREATE TABLE device_push_tokens (
   id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   user_id BIGINT UNSIGNED NOT NULL,
@@ -216,4 +268,23 @@ CREATE TABLE event_submissions (
   review_status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (submitter_user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE event_sync_jobs (
+  id VARCHAR(36) PRIMARY KEY,
+  scheduled_date DATE NULL,
+  status ENUM('running','success','partial','failure') NOT NULL,
+  attempts INT UNSIGNED NOT NULL DEFAULT 1,
+  sources_json JSON NULL,
+  error_code VARCHAR(80) NULL,
+  started_at DATETIME NOT NULL,
+  finished_at DATETIME NULL,
+  UNIQUE KEY uniq_event_sync_daily (scheduled_date),
+  KEY idx_event_sync_status (status, started_at)
+);
+
+CREATE TABLE event_source_snapshots (
+  source_key VARCHAR(80) PRIMARY KEY,
+  events_json JSON NOT NULL,
+  fetched_at DATETIME NOT NULL
 );
