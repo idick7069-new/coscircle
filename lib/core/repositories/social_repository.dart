@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_client.dart';
 import '../models/circle.dart';
 import '../models/friendship.dart';
+import '../models/same_work_user.dart';
+import '../models/partner_work.dart';
 
 final socialRepositoryProvider = Provider<SocialRepository>((ref) {
   return SocialRepository(apiClient: ref.watch(apiClientProvider));
@@ -12,6 +14,37 @@ class SocialRepository {
   SocialRepository({required ApiClient apiClient}) : _apiClient = apiClient;
 
   final ApiClient _apiClient;
+
+  Future<PartnerWorkPage> fetchPartnerWorks({
+    required PartnerWorkScope scope,
+    String q = '',
+    int offset = 0,
+  }) async {
+    final response = await _apiClient.get(
+      '/social/partner-works',
+      query: {'scope': scope.name, 'q': q, 'offset': offset, 'limit': 20},
+    );
+    return PartnerWorkPage.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<SameWorkPage> fetchPartnerWorkUsers(
+    String workId, {
+    int offset = 0,
+  }) async {
+    final response = await _apiClient.get(
+      '/social/partner-works/${Uri.encodeComponent(workId)}/users',
+      query: {'offset': offset, 'limit': 20},
+    );
+    return SameWorkPage.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<SameWorkPage> fetchSameWorkUsers({int offset = 0}) async {
+    final response = await _apiClient.get(
+      '/social/same-works',
+      query: {'offset': offset, 'limit': 20},
+    );
+    return SameWorkPage.fromJson(response.data as Map<String, dynamic>);
+  }
 
   Future<List<Friendship>> fetchFriendships() async {
     final response = await _apiClient.get('/friends');

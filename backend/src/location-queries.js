@@ -57,6 +57,7 @@ export const sharedLocationsQuery = `SELECT shared_locations.user_id AS userId,
               AND my_members.user_id = ?
          ) AS circle_members ON circle_members.user_id = shared_locations.user_id
         WHERE shared_locations.event_id = ?
+          AND users.account_status = 'active'
           AND (
             shared_locations.expires_at IS NULL
             OR shared_locations.expires_at > CURRENT_TIMESTAMP

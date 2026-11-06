@@ -8,15 +8,29 @@ import '../../../core/models/event_day_item.dart';
 import '../../../core/models/friendship.dart';
 import '../../../core/providers/event_providers.dart';
 import '../../../core/providers/friendship_providers.dart';
+import '../../../core/providers/same_work_providers.dart';
+import '../../../core/providers/partner_discovery_providers.dart';
 import '../../../core/repositories/social_repository.dart';
 import '../../../core/repositories/location_repository.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../core/utils/user_action.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../profile/presentation/profile_page.dart';
+import '../../profile/presentation/public_profile_page.dart';
+import 'social_page.dart';
 
+/// Refresh relationship-dependent views after a successful social mutation.
 void refreshFriendships(WidgetRef ref) {
+  ref.invalidate(followingProvider);
+  ref.invalidate(circlesProvider);
+  ref.invalidate(blockedUsersProvider);
+  ref.invalidate(bookingFollowersProvider);
+  ref.invalidate(publicProfileProvider);
   ref.invalidate(friendshipsProvider);
+  ref.invalidate(sameWorkUsersProvider);
+  ref.invalidate(partnerWorksProvider);
+  ref.invalidate(partnerWorkUsersProvider);
   ref.invalidate(eventsProvider);
   ref.invalidate(eventParticipantsProvider);
   ref.invalidate(locationRepositoryProvider);
@@ -331,6 +345,7 @@ class _FriendInviteDialogState extends ConsumerState<FriendInviteDialog> {
   Future<void> _send(List<EventDayItem> days) async {
     if (!_formKey.currentState!.validate() || _busy) return;
     final day = days.where((day) => day.id == _eventKey).firstOrNull;
+    if (_eventKey != null && _eventKey!.isNotEmpty && day == null) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -372,7 +387,8 @@ class _FriendInviteDialogState extends ConsumerState<FriendInviteDialog> {
   Widget build(BuildContext context) {
     final events = ref.watch(eventsProvider);
     final days = expandEventDays(events.asData?.value ?? []);
-    final selected = days.any((day) => day.id == _eventKey) ? _eventKey : null;
+    final selected = _eventKey ?? '';
+    final selectionAvailable = days.any((day) => day.id == selected);
     return PopScope(
       canPop: !_busy,
       child: AlertDialog(
@@ -403,11 +419,24 @@ class _FriendInviteDialogState extends ConsumerState<FriendInviteDialog> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
+                    key: ValueKey(selected),
                     initialValue: selected,
                     isExpanded: true,
-                    decoration: const InputDecoration(labelText: '認識的場次'),
+                    decoration: const InputDecoration(
+                      labelText: '認識的場次',
+                      helperText: '選填，可不指定場次',
+                    ),
                     items: [
                       const DropdownMenuItem(value: '', child: Text('未指定場次')),
+                      if (selected.isNotEmpty && !selectionAvailable)
+                        DropdownMenuItem(
+                          value: selected,
+                          child: Text(
+                            events.isLoading || events.hasError
+                                ? '已選場次（待載入）'
+                                : '已選場次（已無法選取）',
+                          ),
+                        ),
                       for (final day in days)
                         DropdownMenuItem(
                           value: day.id,
@@ -424,7 +453,9 @@ class _FriendInviteDialogState extends ConsumerState<FriendInviteDialog> {
                   if (events.isLoading) const LinearProgressIndicator(),
                   if (events.hasError)
                     TextButton.icon(
-                      onPressed: () => ref.invalidate(eventsProvider),
+                      onPressed: _busy
+                          ? null
+                          : () => ref.invalidate(eventsProvider),
                       icon: const Icon(Icons.refresh),
                       label: const Text('場次載入失敗，重試'),
                     ),
@@ -446,7 +477,7 @@ class _FriendInviteDialogState extends ConsumerState<FriendInviteDialog> {
             child: const Text('取消'),
           ),
           FilledButton.icon(
-            onPressed: _busy || events.isLoading || events.hasError
+            onPressed: _busy || (selected.isNotEmpty && !selectionAvailable)
                 ? null
                 : () => _send(days),
             icon: _busy

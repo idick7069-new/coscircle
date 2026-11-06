@@ -41,7 +41,7 @@ export async function linkLineIdentity(pool, {userId, lineUserId, password, veri
       const [[email]] = await db.execute(`SELECT password_hash AS passwordHash FROM user_auth_identities
         WHERE user_id=? AND provider='email'`, [userId]);
       if (!email?.passwordHash || !await verifyPassword(password, email.passwordHash)) {
-        fail('reauthentication_required', 401);
+        fail('reauthentication_required', 403);
       }
       const [[existing]] = await db.execute(`SELECT user_id AS userId FROM user_auth_identities
         WHERE provider='line' AND provider_user_id=?`, [lineUserId]);

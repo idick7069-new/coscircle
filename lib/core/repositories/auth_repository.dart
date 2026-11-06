@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 import '../services/auth_state.dart';
 
@@ -10,6 +9,14 @@ import '../models/profile.dart';
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepository(apiClient: ref.watch(apiClientProvider));
 });
+
+String? normalizeRegistrationEmail(String value) {
+  final email = value.trim().toLowerCase();
+  return email.length <= 191 &&
+          RegExp(r'^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$').hasMatch(email)
+      ? email
+      : null;
+}
 
 class AuthSession {
   const AuthSession({
@@ -66,19 +73,18 @@ class AuthRepository {
   final ApiClient _apiClient;
 
   Future<String?> restoreToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString(tokenKey);
+    final token = await _apiClient.restoreAuthToken();
     if (token == null || token.isEmpty) return null;
-    _apiClient.setAuthToken(token);
     if (appDemoMode && token == _demoToken) return token;
+    final session = _apiClient.captureSession();
     try {
-      await _apiClient.get('/me');
+      await _apiClient.get('/me', session: session);
       return token;
     } on DioException catch (error) {
       if (error.response?.statusCode != 401) rethrow;
-      await prefs.remove(tokenKey);
-      _apiClient.setAuthToken(null);
       return null;
+    } finally {
+      session.cancel();
     }
   }
 
@@ -86,16 +92,17 @@ class AuthRepository {
     required String email,
     required String password,
   }) async {
+    final version = _apiClient.sessionVersion;
     if (appDemoMode) {
       final session = _demoSession(isNewUser: false);
-      await _saveToken(session.token);
+      await _saveToken(session.token, version);
       return session;
     }
     final session = await _authenticate(
       '/auth/login',
       data: {'email': email, 'password': password},
     );
-    await _saveToken(session.token);
+    await _saveToken(session.token, version);
     return session;
   }
 
@@ -104,16 +111,23 @@ class AuthRepository {
     required String email,
     required String password,
   }) async {
+    final version = _apiClient.sessionVersion;
+    final normalizedEmail = normalizeRegistrationEmail(email);
+    if (normalizedEmail == null) throw ArgumentError('請輸入有效 Email');
     if (appDemoMode) {
       final session = _demoSession(isNewUser: true);
-      await _saveToken(session.token);
+      await _saveToken(session.token, version);
       return session;
     }
     final session = await _authenticate(
       '/auth/register',
-      data: {'nickname': nickname, 'email': email, 'password': password},
+      data: {
+        'nickname': nickname,
+        'email': normalizedEmail,
+        'password': password,
+      },
     );
-    await _saveToken(session.token);
+    await _saveToken(session.token, version);
     return session;
   }
 
@@ -121,9 +135,10 @@ class AuthRepository {
     required SocialLoginProvider provider,
     required String accessToken,
   }) async {
+    final version = _apiClient.sessionVersion;
     if (appDemoMode) {
       final session = _demoSession(isNewUser: false);
-      await _saveToken(session.token);
+      await _saveToken(session.token, version);
       return session;
     }
     if (provider == SocialLoginProvider.line &&
@@ -134,22 +149,23 @@ class AuthRepository {
       '/auth/social',
       data: {'provider': provider.apiValue, 'accessToken': accessToken},
     );
-    await _saveToken(session.token);
+    await _saveToken(session.token, version);
     return session;
   }
 
-  Future<void> logout({String? pushToken}) async {
+  Future<bool> logout({String? pushToken}) async {
+    _apiClient.cancelSessionOperations();
+    final version = _apiClient.sessionVersion;
     try {
       if (!appDemoMode) {
         await _apiClient.post('/auth/logout', data: {'pushToken': pushToken});
       }
     } catch (_) {
       // Local logout must finish even when the server is unavailable.
-    } finally {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(tokenKey);
-      _apiClient.setAuthToken(null);
     }
+    if (_apiClient.sessionVersion != version) return false;
+    await _apiClient.persistAuthToken(null);
+    return _apiClient.sessionVersion == version + 1;
   }
 
   Future<List<String>> loginMethods() async {
@@ -191,8 +207,7 @@ class AuthRepository {
   }
 
   Future<void> clearLocalSession() async {
-    await (await SharedPreferences.getInstance()).remove(tokenKey);
-    _apiClient.setAuthToken(null);
+    await _apiClient.persistAuthToken(null);
     sessionExpired.value = false;
   }
 
@@ -217,10 +232,14 @@ class AuthRepository {
     return AuthSession.fromJson(response.data as Map<String, dynamic>);
   }
 
-  Future<void> _saveToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(tokenKey, token);
-    _apiClient.setAuthToken(token);
+  Future<void> _saveToken(String token, int expectedVersion) async {
+    if (_apiClient.sessionVersion != expectedVersion) {
+      throw StateError('登入狀態已變更，請重新操作');
+    }
+    await _apiClient.persistAuthToken(token);
+    if (_apiClient.sessionVersion != expectedVersion + 1) {
+      throw StateError('登入狀態已變更，請重新操作');
+    }
     sessionExpired.value = false;
   }
 

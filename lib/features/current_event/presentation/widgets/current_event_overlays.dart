@@ -21,7 +21,9 @@ class MeetupNoticeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final timeText = DateFormat('HH:mm').format(meetup.meetAt);
+    final timeText = DateFormat(
+      'MM/dd HH:mm',
+    ).format(taipeiDateTime(meetup.meetAt));
     final scheme = Theme.of(context).colorScheme;
     return CosCard(
       padding: const EdgeInsets.all(12),
@@ -101,16 +103,34 @@ class RecognitionNoticeCard extends StatelessWidget {
     required this.request,
     required this.onCome,
     required this.onBusy,
+    this.onDismiss,
   });
 
   final RecognitionRequest request;
   final VoidCallback onCome;
   final VoidCallback onBusy;
+  final VoidCallback? onDismiss;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     if (request.isRequester && request.status != RecognitionStatus.pending) {
+      final expired = request.status == RecognitionStatus.expired;
+      final cancelled = request.status == RecognitionStatus.cancelled;
+      final label = expired
+          ? '認親已逾時'
+          : cancelled
+          ? '認親已取消'
+          : '認親回覆';
+      final message = expired
+          ? '對方未在期限內回覆'
+          : cancelled
+          ? '這次認親已取消'
+          : request.responseMessage.isNotEmpty
+          ? request.responseMessage
+          : request.status == RecognitionStatus.accepted
+          ? '快來'
+          : '當前不方便';
       return CosCard(
         child: Row(
           children: [
@@ -121,24 +141,28 @@ class RecognitionNoticeCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${request.targetNickname} 回覆',
+                    expired || cancelled
+                        ? label
+                        : '${request.targetNickname} 回覆',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                  Text(
-                    request.responseMessage,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  Text(message, maxLines: 2, overflow: TextOverflow.ellipsis),
                 ],
               ),
             ),
             CosBadge(
-              label: '認親回覆',
+              label: label,
               icon: Icons.waving_hand_outlined,
               color: scheme.secondary,
             ),
+            if (onDismiss != null)
+              IconButton(
+                tooltip: '關閉認親回覆',
+                onPressed: onDismiss,
+                icon: const Icon(Icons.close),
+              ),
           ],
         ),
       );

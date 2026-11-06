@@ -49,8 +49,9 @@ class _MyEventsPageState extends ConsumerState<MyEventsPage> {
                       Text('活動載入失敗：${userFacingError(snapshot.error!)}'),
                       const SizedBox(height: 12),
                       OutlinedButton.icon(
-                        onPressed: () =>
-                            setState(() => _itemsFuture = _loadMyBookings()),
+                        onPressed: () => setState(() {
+                          _itemsFuture = _loadMyBookings();
+                        }),
                         icon: const Icon(Icons.refresh),
                         label: const Text('重試'),
                       ),
@@ -164,14 +165,19 @@ class _MyEventsPageState extends ConsumerState<MyEventsPage> {
   Future<void> _refresh() async {
     ref.invalidate(eventParticipantsProvider);
     ref.invalidate(eventsProvider);
-    if (mounted) setState(() => _itemsFuture = _loadMyBookings());
+    if (mounted) {
+      setState(() {
+        _itemsFuture = _loadMyBookings();
+      });
+    }
   }
 
   Future<void> _editBooking(_MyBookingItem item) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      showDragHandle: true,
+      enableDrag: false,
+      showDragHandle: false,
       builder: (context) => BookingSheet(
         event: item.event,
         initialDayIndex: item.participant.dayIndex,
@@ -295,12 +301,7 @@ class _MyBookingSkeletonCard extends StatelessWidget {
         children: [
           DecoratedBox(
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  scheme.primary.withValues(alpha: 0.12),
-                  scheme.surfaceContainerLowest,
-                ],
-              ),
+              color: scheme.primaryContainer,
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(CosUi.radiusLg),
               ),
@@ -519,12 +520,7 @@ class _MyBookingCard extends StatelessWidget {
           children: [
             DecoratedBox(
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    roleColor.withValues(alpha: 0.18),
-                    scheme.surfaceContainerLowest,
-                  ],
-                ),
+                color: roleColor.withValues(alpha: 0.12),
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(CosUi.radiusLg),
                 ),

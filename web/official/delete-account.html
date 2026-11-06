@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'">
+  <meta name="description" content="不用安裝 App，透過 Email 與密碼刪除 CosCircle 帳號。LINE 帳號及無法登入的使用者可申請人工核驗。">
+  <title>刪除帳號 | CosCircle</title>
+  <link rel="stylesheet" href="legal.css">
+  <link rel="icon" href="/favicon.png">
+  <script src="delete-account.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#content">跳至本文</a>
+  <header class="site-header">
+    <a class="brand" href="/"><img src="/icons/Icon-192.png" width="32" height="32" alt="">CosCircle</a>
+    <nav aria-label="法律與帳號"><a href="/privacy.html">隱私政策</a><a href="/terms.html">使用條款</a><a href="/delete-account.html" aria-current="page">刪除帳號</a></nav>
+  </header>
+  <main id="content">
+    <h1>刪除 CosCircle 帳號</h1>
+    <p>不必安裝 App。使用 Email 與密碼登入後，還需要再次確認才會刪除。開啟本頁或登入都不會自動刪除帳號，也不需要先同意使用條款。</p>
+    <aside class="notice warning" aria-labelledby="consequences">
+      <h2 id="consequences">刪除後無法復原</h2>
+      <ul>
+        <li>移除帳號、登入方式、名片、出席、關注與戳友關係、位置、認親等關聯資料。有上傳歸屬紀錄的照片會排入清理，失敗時由背景作業重試。舊版未記錄歸屬的照片需由營運團隊核實後清理。</li>
+        <li>與帳號相關的檢舉個人資料會立即清除。一般檢舉快照、詳細說明與審查備註保留 90 天，到期定期清理。</li>
+        <li>你擁有的小圈圈會解散，相關成員關係與集合點一併移除，影響圈內其他成員。</li>
+        <li>他人保存的分享圖、截圖及轉傳內容不會自動消失。刪除 CosCircle 帳號不會刪除 LINE 帳號。</li>
+        <li>照片允許公開快取最長 30 天。刪除原始檔案後，既有快取仍可能在到期前顯示。</li>
+        <li>備份與系統紀錄的具體保留期限、清除週期尚未確認。依法必要保留或處理爭議、安全事件所需的紀錄可能另行保存，詳見<a href="/privacy.html#retention">隱私政策</a>。</li>
+      </ul>
+    </aside>
+    <p id="status" role="status" aria-live="polite" aria-atomic="true"></p>
+    <noscript><p class="notice">線上刪除需要 JavaScript。你仍可使用下方聯絡表單提出人工刪除請求，營運團隊會先核對帳號所有權。</p></noscript>
+    <form id="login-form" method="post" action="/api/auth/login" hidden aria-labelledby="login-title">
+      <h2 id="login-title">1. 登入要刪除的帳號</h2>
+      <p>請使用 CosCircle 的 Email 登入方式。此操作可能使原裝置的登入狀態失效。</p>
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="username" inputmode="email" required maxlength="191" autocapitalize="none" spellcheck="false">
+      <label for="login-password">CosCircle 密碼</label>
+      <input id="login-password" name="password" type="password" autocomplete="current-password" required maxlength="1024">
+      <div class="actions"><button id="login-button" type="submit">登入並查看刪除確認</button></div>
+      <p class="hint">本頁不把登入憑證寫入瀏覽器儲存空間，亦不載入分析或追蹤程式。關閉或重新整理本頁後需重新登入。</p>
+    </form>
+    <form id="delete-form" method="post" action="/api/me/delete-account" hidden aria-labelledby="delete-title">
+      <h2 id="delete-title" tabindex="-1">2. 再次確認永久刪除</h2>
+      <p>即將刪除的帳號為 <strong id="account-label"></strong>。</p>
+      <label for="delete-password">再次輸入目前帳號密碼</label>
+      <input id="delete-password" name="password" type="password" autocomplete="current-password" required maxlength="1024">
+      <label for="confirmation">輸入 DELETE 確認刪除</label>
+      <input id="confirmation" name="confirmation" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" required pattern="DELETE" maxlength="6" aria-describedby="confirmation-hint">
+      <p class="hint" id="confirmation-hint">請輸入大寫 DELETE。送出後無法復原。</p>
+      <label class="checkbox-label" for="understood"><input id="understood" type="checkbox" required><span>我了解帳號與資料將被刪除，我擁有的小圈圈會解散，且無法復原。</span></label>
+      <div class="actions"><button id="delete-button" class="danger" type="submit" disabled>永久刪除帳號</button><button id="cancel-button" class="secondary" type="button">取消並離開此帳號</button></div>
+    </form>
+    <section id="done" hidden aria-labelledby="done-title"><h2 id="done-title" tabindex="-1">帳號已刪除</h2><p>CosCircle 已確認刪除完成。你可以關閉本頁。</p></section>
+    <section aria-labelledby="manual-title">
+      <h2 id="manual-title">僅使用 LINE 或無法登入</h2>
+      <p>本頁的線上刪除僅支援 Email 與密碼。僅使用 LINE、忘記密碼且無法復原，或無法完成線上操作時，可透過既有聯絡表單向 CosCircle 營運團隊提出人工刪除請求。</p>
+      <ol><li>開啟聯絡表單，註明「刪除 CosCircle 帳號」。</li><li>提供 CosCircle 暱稱、公開名片代碼或註冊 Email 等可辨識帳號的資訊，以及可回覆的聯絡方式。僅提供你可確認屬於自己的帳號資訊。</li><li>營運團隊會另行核對帳號所有權，確認後才處理刪除。提交表單不會自動刪除帳號；本頁不承諾固定完成天數。</li></ol>
+      <p>請勿提供 CosCircle 或 LINE 密碼、登入權杖、驗證碼或密碼重設連結。</p>
+      <p><a href="https://forms.gle/WGFe57Y1AFW1LQda8" rel="noreferrer noopener">提出人工刪除請求（Google Forms）</a></p>
+    </section>
+  </main>
+  <footer>CosCircle 營運團隊 · <a href="/privacy.html">隱私政策</a> · <a href="/terms.html">使用條款</a></footer>
+</body>
+</html>

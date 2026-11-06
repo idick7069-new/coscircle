@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/config/app_environment.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -12,6 +13,7 @@ import '../../../core/repositories/admin_repository.dart';
 import '../../../core/providers/admin_sync_provider.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import 'report_management_page.dart';
 
 final adminStatsProvider = FutureProvider.autoDispose<AdminStats>((ref) {
   return ref.watch(adminRepositoryProvider).fetchStats();
@@ -71,8 +73,24 @@ class AdminDashboardPage extends ConsumerWidget {
           onPressed: () => Navigator.of(context).maybePop(),
           icon: const BackButtonIcon(),
         ),
-        title: const Text('後台管理'),
+        title: const Row(
+          children: [
+            CosLogoMark(size: 28),
+            SizedBox(width: 8),
+            Flexible(
+              child: Text('後台管理', maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
         actions: [
+          if (accountSafetyEnabled)
+            IconButton(
+              tooltip: '檢舉審核',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ReportManagementPage()),
+              ),
+              icon: const Icon(Icons.flag_outlined),
+            ),
           IconButton(
             tooltip: 'API 位址',
             onPressed: () => _showApiInfo(context, ref),
@@ -1058,6 +1076,18 @@ class _StatsGrid extends StatelessWidget {
       ),
       ('小圈圈', stats.circles, Icons.groups_outlined, scheme.tertiary),
       ('投稿', stats.eventSubmissions, Icons.post_add_outlined, scheme.primary),
+      (
+        '照片待清理',
+        stats.uploadCleanup,
+        Icons.cleaning_services_outlined,
+        scheme.secondary,
+      ),
+      (
+        '舊照待核實',
+        stats.legacyUploadReview,
+        Icons.image_search_outlined,
+        scheme.error,
+      ),
     ];
 
     return LayoutBuilder(

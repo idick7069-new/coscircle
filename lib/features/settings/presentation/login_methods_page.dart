@@ -5,6 +5,7 @@ import '../../../core/repositories/auth_repository.dart';
 import '../../../core/services/line_login_service.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../shared/widgets/app_page.dart';
+import '../../../shared/widgets/cos_ui.dart';
 import 'email_verification_section.dart';
 
 final loginMethodsProvider = FutureProvider.autoDispose<List<String>>((ref) {
@@ -41,6 +42,12 @@ class _LoginMethodsPageState extends ConsumerState<LoginMethodsPage> {
         ),
         data: (values) => ListView(
           children: [
+            const CosPageHeader(
+              title: '你的登入方式',
+              subtitle: '管理目前帳號的登入與信箱驗證',
+              leading: CosIconBubble(icon: Icons.manage_accounts_outlined),
+            ),
+            const SizedBox(height: 16),
             if (values.contains('email'))
               const EmailVerificationSection()
             else
@@ -50,7 +57,10 @@ class _LoginMethodsPageState extends ConsumerState<LoginMethodsPage> {
                 subtitle: Text(values.contains('email') ? '已設定' : '未設定'),
               ),
             ListTile(
-              leading: const Icon(Icons.chat_bubble_outline),
+              leading: CosIconBubble(
+                icon: Icons.chat_bubble_outline,
+                color: Theme.of(context).colorScheme.secondary,
+              ),
               title: const Text('LINE'),
               subtitle: Text(values.contains('line') ? '已綁定' : '未綁定'),
             ),

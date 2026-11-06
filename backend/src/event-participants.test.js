@@ -15,7 +15,7 @@ function fixture() {
   const db = new DatabaseSync(':memory:');
   db.exec(`
     CREATE TABLE users(id INTEGER, public_code TEXT, nickname TEXT, avatar_url TEXT,
-      facebook_url TEXT, bio TEXT, booking_visibility TEXT);
+      facebook_url TEXT, bio TEXT, booking_visibility TEXT, account_status TEXT DEFAULT 'active');
     CREATE TABLE event_bookings(event_id INTEGER, user_id INTEGER, day_index INTEGER,
       role TEXT, work_id INTEGER, character_name TEXT, outfit_image_url TEXT,
       interaction_tags TEXT, available_time TEXT, presence_status TEXT, message TEXT,
@@ -48,6 +48,15 @@ test('browsing without a booking shows public bookings, keeps dates and event se
     db.exec('INSERT INTO event_bookings(event_id, user_id, day_index) VALUES (10, 1, 3)');
     assert.equal(read(db).filter((row) => row.userId === 2).length, 2);
     assert.equal(read(db).find((row) => row.userId === 1).isMe, 1);
+  } finally { db.close(); }
+});
+
+test('moderation suspension hides public bookings', () => {
+  const db = fixture();
+  try {
+    assert.equal(read(db).length, 2);
+    db.exec("UPDATE users SET account_status='suspended' WHERE id=2");
+    assert.equal(read(db).length, 0);
   } finally { db.close(); }
 });
 

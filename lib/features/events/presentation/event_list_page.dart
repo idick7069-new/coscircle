@@ -11,6 +11,7 @@ import '../../../core/providers/event_providers.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../../shared/widgets/cos_illustration.dart';
 import 'my_events_page.dart';
 import 'widgets/event_card.dart';
 import 'event_booking_sheet.dart';
@@ -57,25 +58,30 @@ class _EventListPageState extends ConsumerState<EventListPage> {
           return CustomScrollView(
             slivers: [
               SliverToBoxAdapter(
-                child: CosPageHeader(
-                  title: '活動發現',
-                  subtitle: '用日期、作品和同好快速找到下一場',
-                  actions: [
-                    IconButton.filledTonal(
-                      tooltip: '我的活動',
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const MyEventsPage(),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: CosPageHeader(
+                    title: '活動發現',
+                    subtitle: '下一場，和同好一起出發',
+                    actions: [
+                      IconButton.filledTonal(
+                        tooltip: '我的活動',
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const MyEventsPage(),
+                          ),
                         ),
+                        icon: const Icon(Icons.event_available_outlined),
                       ),
-                      icon: const Icon(Icons.event_available_outlined),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               SliverToBoxAdapter(
                 child: _DiscoveryStats(events: items, filtered: filtered),
               ),
+              SliverToBoxAdapter(child: _calendar(expanded)),
+              SliverToBoxAdapter(child: _filterChips()),
               if (filtered.isNotEmpty)
                 SliverToBoxAdapter(
                   child: _EventSpotlightCard(
@@ -87,8 +93,6 @@ class _EventListPageState extends ConsumerState<EventListPage> {
                         context.push('/events/${event.id}'),
                   ),
                 ),
-              SliverToBoxAdapter(child: _calendar(expanded)),
-              SliverToBoxAdapter(child: _filterChips()),
               if (filtered.isEmpty)
                 const SliverToBoxAdapter(child: _EmptyEventResult())
               else
@@ -163,6 +167,7 @@ class _EventListPageState extends ConsumerState<EventListPage> {
             ),
             const SizedBox(height: 8),
             TableCalendar<EventDayItem>(
+              locale: 'zh_TW',
               firstDay: firstDay,
               lastDay: lastDay,
               focusedDay: focusedDay,
@@ -211,6 +216,10 @@ class _EventListPageState extends ConsumerState<EventListPage> {
               calendarFormat: CalendarFormat.month,
               availableCalendarFormats: const {CalendarFormat.month: '月'},
               availableGestures: AvailableGestures.horizontalSwipe,
+              onPageChanged: (focusedDay) {
+                _focusedDay = focusedDay;
+                _saveFilters();
+              },
               onDaySelected: (selectedDay, focusedDay) {
                 _updateFilters(
                   selectedDay: selectedDay,
@@ -705,29 +714,12 @@ class _EventSpotlightCard extends StatelessWidget {
                   top: Radius.circular(CosUi.radiusLg),
                 ),
                 child: AspectRatio(
-                  aspectRatio: 1.95,
+                  aspectRatio: 3.4,
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
                       if (imageProvider == null)
-                        DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                scheme.primaryContainer,
-                                scheme.secondaryContainer,
-                                scheme.tertiaryContainer,
-                              ],
-                            ),
-                          ),
-                          child: Icon(
-                            Icons.photo_camera_outlined,
-                            size: 58,
-                            color: scheme.primary,
-                          ),
-                        )
+                        const CosIllustration(kind: CosIllustrationKind.event)
                       else
                         Image(image: imageProvider, fit: BoxFit.cover),
                       DecoratedBox(

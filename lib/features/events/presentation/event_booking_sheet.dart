@@ -42,7 +42,8 @@ Future<void> showEventBookingSheet(
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    showDragHandle: true,
+    enableDrag: false,
+    showDragHandle: false,
     builder: (_) => BookingSheet(
       event: event,
       initialDayIndex: dayIndex,
@@ -177,6 +178,16 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
                 shrinkWrap: true,
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 children: [
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: IconButton(
+                      tooltip: '關閉',
+                      onPressed: _submitting
+                          ? null
+                          : () => Navigator.of(context).maybePop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ),
                   CosReveal(
                     child: CosGradientPanel(
                       icon: Icons.badge_outlined,

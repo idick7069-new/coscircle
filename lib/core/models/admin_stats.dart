@@ -8,6 +8,8 @@ class AdminStats {
     required this.sharedLocations,
     required this.circles,
     required this.eventSubmissions,
+    this.uploadCleanup = 0,
+    this.legacyUploadReview = 0,
   });
 
   final int users;
@@ -18,6 +20,8 @@ class AdminStats {
   final int sharedLocations;
   final int circles;
   final int eventSubmissions;
+  final int uploadCleanup;
+  final int legacyUploadReview;
 
   factory AdminStats.fromJson(Map<String, dynamic> json) {
     return AdminStats(
@@ -29,6 +33,8 @@ class AdminStats {
       sharedLocations: _asInt(json['sharedLocations']),
       circles: _asInt(json['circles']),
       eventSubmissions: _asInt(json['eventSubmissions']),
+      uploadCleanup: _asInt(json['uploadCleanup']),
+      legacyUploadReview: _asInt(json['legacyUploadReview']),
     );
   }
 }

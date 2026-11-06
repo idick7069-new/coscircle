@@ -42,6 +42,7 @@ class CircleMember {
     required this.nickname,
     this.avatarUrl = '',
     this.isOwner = false,
+    this.isBlocked = false,
   });
 
   final String userId;
@@ -49,6 +50,7 @@ class CircleMember {
   final String nickname;
   final String avatarUrl;
   final bool isOwner;
+  final bool isBlocked;
 
   factory CircleMember.fromJson(Map<String, dynamic> json) {
     return CircleMember(
@@ -57,6 +59,7 @@ class CircleMember {
       nickname: json['nickname']?.toString() ?? '',
       avatarUrl: json['avatarUrl']?.toString() ?? '',
       isOwner: json['isOwner'] == true || json['isOwner'] == 1,
+      isBlocked: json['isBlocked'] == true || json['isBlocked'] == 1,
     );
   }
 }

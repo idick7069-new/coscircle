@@ -9,7 +9,7 @@ function fixture() {
   db.function('LEAST', (a, b) => Math.min(a, b));
   db.function('GREATEST', (a, b) => Math.max(a, b));
   db.function('UNIX_TIMESTAMP', (date) => date == null ? null : Date.parse(`${date.replace(' ', 'T')}Z`) / 1000);
-  db.exec(`CREATE TABLE users(id INTEGER,public_code TEXT,nickname TEXT,avatar_url TEXT);
+  db.exec(`CREATE TABLE users(id INTEGER,public_code TEXT,nickname TEXT,avatar_url TEXT,account_status TEXT DEFAULT 'active');
     CREATE TABLE shared_locations(event_id INTEGER,user_id INTEGER,day_index INTEGER,latitude REAL,longitude REAL,visibility TEXT,shared_at TEXT,expires_at TEXT);
     CREATE TABLE event_bookings(event_id INTEGER,user_id INTEGER,day_index INTEGER,role TEXT,work_id INTEGER,character_name TEXT,outfit_image_url TEXT,interaction_tags TEXT,available_time TEXT,presence_status TEXT);
     CREATE TABLE works(id INTEGER,name TEXT);
@@ -17,7 +17,7 @@ function fixture() {
     CREATE TABLE user_blocks(blocker_user_id INTEGER,blocked_user_id INTEGER);
     CREATE TABLE circle_members(circle_id INTEGER,user_id INTEGER);
     CREATE TABLE friendships(user_low_id INTEGER,user_high_id INTEGER,status TEXT);
-    INSERT INTO users VALUES (1,'one','viewer',''),(2,'two','peer','');
+    INSERT INTO users(id,public_code,nickname,avatar_url) VALUES (1,'one','viewer',''),(2,'two','peer','');
     INSERT INTO shared_locations VALUES (10,2,2,25,121,'circle','2026-01-01 00:00:00','2099-01-01 00:00:00');
     INSERT INTO event_bookings(event_id,user_id,day_index) VALUES (10,1,2),(10,2,2);
     INSERT INTO circle_members VALUES (1,1),(1,2),(2,1),(2,2);`);
@@ -32,6 +32,15 @@ test('two shared circles still produce exactly one location per peer/day', () =>
     assert.equal(rows[0].userId, 2);
     assert.equal(rows[0].dayIndex, 2);
   } finally {db.close();}
+});
+
+test('suspended accounts no longer appear on the live map', () => {
+  const db = fixture();
+  try {
+    assert.equal(db.prepare(sharedLocationsQuery).all(1,1,1,1,1,1,1,1,10,1).length, 1);
+    db.exec("UPDATE users SET account_status='suspended' WHERE id=2");
+    assert.equal(db.prepare(sharedLocationsQuery).all(1,1,1,1,1,1,1,1,10,1).length, 0);
+  } finally { db.close(); }
 });
 
 test('blocks and public-location same-day attendance remain enforced', () => {

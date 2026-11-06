@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../core/config/app_environment.dart';
+import '../../safety/presentation/report_sheet.dart';
 import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/utils/user_action.dart';
@@ -18,6 +20,9 @@ import '../../../core/utils/picked_image_provider.dart';
 import '../../../core/utils/participant_role_style.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../../shared/widgets/cos_illustration.dart';
+import '../../social/presentation/friendship_widgets.dart'
+    show refreshFriendships;
 import 'event_booking_share_page.dart';
 import 'event_booking_sheet.dart';
 
@@ -358,24 +363,7 @@ class _EventDetailHero extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   if (imageProvider == null)
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            scheme.primaryContainer,
-                            scheme.secondaryContainer,
-                            scheme.tertiaryContainer,
-                          ],
-                        ),
-                      ),
-                      child: Icon(
-                        Icons.event_available_outlined,
-                        color: scheme.primary,
-                        size: 64,
-                      ),
-                    )
+                    const CosIllustration(kind: CosIllustrationKind.event)
                   else
                     Image(
                       image: imageProvider,
@@ -582,10 +570,22 @@ class _ParticipantsSection extends ConsumerWidget {
     return participants.when(
       data: (items) {
         final myBookings = items.where((item) => item.isMe).toList();
-        final followedCount = items.where((item) => item.isFollowed).length;
+        final participantCount = items
+            .map((item) => item.userId)
+            .toSet()
+            .length;
+        final followedCount = items
+            .where((item) => item.isFollowed)
+            .map((item) => item.userId)
+            .toSet()
+            .length;
         final circleSignals = items
             .where((item) => item.userId.isNotEmpty && !item.isMe)
+            .map((item) => item.userId)
+            .toSet()
             .length;
+        final days = items.map((item) => item.dayIndex).toSet().toList()
+          ..sort();
         final scheme = Theme.of(context).colorScheme;
         return CosCard(
           child: Column(
@@ -596,7 +596,7 @@ class _ParticipantsSection extends ConsumerWidget {
                 subtitle: '看誰會去、要出什麼角色，先找到可以開話題的人',
                 icon: Icons.diversity_3_outlined,
                 trailing: CosBadge(
-                  label: '${items.length} 位',
+                  label: '$participantCount 位',
                   icon: Icons.people_outline,
                   highlighted: true,
                 ),
@@ -663,12 +663,19 @@ class _ParticipantsSection extends ConsumerWidget {
                     ),
                   ),
                 ),
-              if (items.isNotEmpty)
+              for (final dayIndex in days) ...[
+                Text(
+                  'D$dayIndex · ${DateFormat('MM/dd', 'zh_TW').format(event.startDate.add(Duration(days: dayIndex - 1)))} · ${items.where((item) => item.dayIndex == dayIndex).map((item) => item.userId).toSet().length} 位',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
                 Wrap(
                   spacing: 12,
                   runSpacing: 12,
                   children: [
-                    for (final participant in items)
+                    for (final participant in items.where(
+                      (item) => item.dayIndex == dayIndex,
+                    ))
                       _ParticipantAvatar(
                         participant: participant,
                         onTap: () =>
@@ -676,6 +683,8 @@ class _ParticipantsSection extends ConsumerWidget {
                       ),
                   ],
                 ),
+                const SizedBox(height: 12),
+              ],
             ],
           ),
         );
@@ -708,6 +717,10 @@ class _ParticipantsSection extends ConsumerWidget {
               padding: const EdgeInsets.all(16),
               children: [
                 const _SheetGrabber(),
+                Text(
+                  'D${participant.dayIndex} · ${DateFormat('yyyy/MM/dd', 'zh_TW').format(event.startDate.add(Duration(days: participant.dayIndex - 1)))}',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
                 _ParticipantSheetHeader(
                   participant: participant,
                   roleText: _roleText(participant),
@@ -748,9 +761,7 @@ class _ParticipantsSection extends ConsumerWidget {
                                         .read(eventRepositoryProvider)
                                         .followUser(participant.userId);
                                   }
-                                  ref.invalidate(
-                                    eventParticipantsProvider(eventId),
-                                  );
+                                  refreshFriendships(ref);
                                   if (context.mounted) Navigator.pop(context);
                                 },
                           icon: Icon(
@@ -805,6 +816,20 @@ class _ParticipantsSection extends ConsumerWidget {
                 ),
                 if (!participant.isMe) ...[
                   const SizedBox(height: 10),
+                  if (accountSafetyEnabled)
+                    OutlinedButton.icon(
+                      onPressed: () => showReportSheet(
+                        context,
+                        targetType: 'booking',
+                        targetUserId: participant.userId,
+                        eventId: int.tryParse(eventId),
+                        dayIndex: participant.dayIndex,
+                        targetLabel:
+                            '${participant.nickname} 的 D${participant.dayIndex} 預定',
+                      ),
+                      icon: const Icon(Icons.flag_outlined),
+                      label: const Text('檢舉這筆預定'),
+                    ),
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
@@ -823,8 +848,7 @@ class _ParticipantsSection extends ConsumerWidget {
                         await ref
                             .read(eventRepositoryProvider)
                             .blockUser(participant.userId);
-                        ref.invalidate(eventParticipantsProvider(eventId));
-                        ref.invalidate(eventsProvider);
+                        refreshFriendships(ref);
                         if (!context.mounted) return;
                         Navigator.of(context).pop();
                         ScaffoldMessenger.of(

@@ -257,11 +257,7 @@ class _EventImage extends StatelessWidget {
       width: 96,
       height: 128,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [scheme.primaryContainer, scheme.secondaryContainer],
-        ),
+        color: scheme.secondaryContainer,
         border: Border.all(color: scheme.outlineVariant),
       ),
       child: Icon(Icons.photo_camera_outlined, size: 34, color: scheme.primary),

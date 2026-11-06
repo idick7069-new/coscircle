@@ -1,13 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dio/dio.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/api_client.dart';
 import '../config/app_environment.dart';
 import '../models/booking.dart';
 import '../models/event.dart';
 import '../models/participant.dart';
-import 'auth_repository.dart';
 
 final eventRepositoryProvider = Provider<EventRepository>((ref) {
   if (appDemoMode) return InMemoryEventRepository();
@@ -45,7 +42,7 @@ class ApiEventRepository implements EventRepository {
 
   @override
   Future<List<CosEvent>> fetchEvents() async {
-    final response = await _getWithRestoredToken('/events');
+    final response = await _apiClient.get('/events');
     final rows = response.data as List<dynamic>;
     return rows
         .map((row) => CosEvent.fromJson(row as Map<String, dynamic>))
@@ -100,19 +97,6 @@ class ApiEventRepository implements EventRepository {
       '/events/$eventId/bookings/me',
       query: dayIndex == null ? null : {'dayIndex': dayIndex},
     );
-  }
-
-  Future<Response<dynamic>> _getWithRestoredToken(String path) async {
-    try {
-      return await _apiClient.get(path);
-    } on DioException catch (error) {
-      if (error.response?.statusCode != 401) rethrow;
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString(AuthRepository.tokenKey);
-      if (token == null || token.isEmpty) rethrow;
-      _apiClient.setAuthToken(token);
-      return _apiClient.get(path);
-    }
   }
 }
 

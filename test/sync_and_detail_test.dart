@@ -107,7 +107,11 @@ class CoordinateClient extends ApiClient {
   Object? payload;
 
   @override
-  Future<Response<dynamic>> put(String path, {Object? data}) async {
+  Future<Response<dynamic>> put(
+    String path, {
+    Object? data,
+    ApiSession? session,
+  }) async {
     this.path = path;
     payload = data;
     return Response(

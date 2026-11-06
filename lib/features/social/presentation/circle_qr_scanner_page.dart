@@ -7,7 +7,7 @@ import '../../../core/repositories/social_repository.dart';
 import '../../../core/utils/app_qr_code.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../shared/widgets/cos_ui.dart';
-import 'social_page.dart';
+import 'friendship_widgets.dart' show refreshFriendships;
 
 class CircleQrScannerPage extends ConsumerStatefulWidget {
   const CircleQrScannerPage({super.key});
@@ -38,8 +38,8 @@ class _CircleQrScannerPageState extends ConsumerState<CircleQrScannerPage> {
               _handled = true;
               try {
                 await ref.read(socialRepositoryProvider).joinCircle(invite);
-                ref.invalidate(circlesProvider);
                 if (!context.mounted) return;
+                refreshFriendships(ref);
                 ScaffoldMessenger.of(
                   context,
                 ).showSnackBar(const SnackBar(content: Text('已加入小圈圈')));

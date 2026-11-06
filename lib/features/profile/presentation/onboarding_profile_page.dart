@@ -3,12 +3,14 @@ import '../../../core/services/auth_state.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/models/profile.dart';
 import '../../../core/repositories/profile_repository.dart';
 import '../../../core/services/oobe_service.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../core/utils/participant_role_style.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../../shared/widgets/cos_illustration.dart';
 
 class OnboardingProfilePage extends ConsumerStatefulWidget {
   const OnboardingProfilePage({super.key});
@@ -25,6 +27,9 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
   final Set<String> _regions = {};
   int _page = 0;
   bool _saving = false;
+  bool _loadingProfile = true;
+  UserProfile? _initialProfile;
+  ProfileOperation? _profileOperation;
   String? _errorText;
 
   static const _regionOptions = ['北部', '中部', '南部', '離島', '海外'];
@@ -38,6 +43,7 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
 
   @override
   void dispose() {
+    _profileOperation?.cancel();
     _pageController.dispose();
     _nicknameController.dispose();
     super.dispose();
@@ -64,13 +70,16 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
         message: '個人資料與小圈圈都能用 QRCode 分享，活動現場不用再慢慢搜尋帳號。',
         cues: const ['Cos 名片', '掃碼交換', '坑單比對'],
       ),
-      _ProfileSetupStep(
-        nicknameController: _nicknameController,
-        roleOptions: _roleOptions,
-        roles: _roles,
-        regionOptions: _regionOptions,
-        regions: _regions,
-        onChanged: () => setState(() {}),
+      IgnorePointer(
+        ignoring: _loadingProfile || _initialProfile == null || _saving,
+        child: _ProfileSetupStep(
+          nicknameController: _nicknameController,
+          roleOptions: _roleOptions,
+          roles: _roles,
+          regionOptions: _regionOptions,
+          regions: _regions,
+          onChanged: () => setState(() {}),
+        ),
       ),
     ];
 
@@ -79,7 +88,9 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
         title: const Text('第一次使用 CosCircle'),
         actions: [
           TextButton(
-            onPressed: _saving ? null : _finish,
+            onPressed: _saving || _loadingProfile || _initialProfile == null
+                ? null
+                : () => _finish(skip: true),
             child: const Text('略過'),
           ),
         ],
@@ -108,6 +119,12 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
           if (_errorText != null) ...[
             const SizedBox(height: 8),
             _OnboardingErrorBanner(message: _errorText!),
+            if (!_loadingProfile && _initialProfile == null)
+              TextButton.icon(
+                onPressed: _loadInitialProfile,
+                icon: const Icon(Icons.refresh),
+                label: const Text('重新載入個人資料'),
+              ),
           ],
           const SizedBox(height: 16),
           Wrap(
@@ -121,7 +138,10 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
                   child: const Text('上一步'),
                 ),
               FilledButton.icon(
-                onPressed: _saving
+                onPressed:
+                    _saving ||
+                        (_page == pages.length - 1 &&
+                            (_loadingProfile || _initialProfile == null))
                     ? null
                     : _page == pages.length - 1
                     ? _finish
@@ -160,12 +180,19 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
   }
 
   Future<void> _loadInitialProfile() async {
+    setState(() {
+      _loadingProfile = true;
+      _errorText = null;
+    });
     try {
-      final profile = await ref
-          .read(profileRepositoryProvider)
-          .currentProfile();
-      if (!mounted || profile == null) return;
+      _profileOperation?.cancel();
+      final operation = ref.read(profileRepositoryProvider).beginOperation();
+      _profileOperation = operation;
+      final profile = await operation.currentProfile();
+      if (!mounted) return;
+      if (profile == null) throw StateError('無法取得個人資料，請重新登入');
       setState(() {
+        _initialProfile = profile;
         if (_nicknameController.text.trim().isEmpty &&
             profile.nickname.trim().isNotEmpty) {
           _nicknameController.text = profile.nickname.trim();
@@ -173,48 +200,49 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
         if (_regions.isEmpty && profile.regions.isNotEmpty) {
           _regions.addAll(profile.regions);
         }
-        if (profile.profileRoles.isNotEmpty) {
-          _roles
-            ..clear()
-            ..addAll(
-              profile.profileRoles.where((role) => _roleOptions.contains(role)),
-            );
-        }
+        _roles
+          ..clear()
+          ..addAll(profile.profileRoles);
       });
     } catch (error) {
       if (mounted) {
         setState(() => _errorText = '個人資料載入失敗：${userFacingError(error)}');
       }
+    } finally {
+      if (mounted) setState(() => _loadingProfile = false);
     }
   }
 
-  Future<void> _finish() async {
+  Future<void> _finish({bool skip = false}) async {
+    final current = _initialProfile;
+    final operation = _profileOperation;
+    if (_loadingProfile || _saving || current == null || operation == null) {
+      return;
+    }
+    final oobe = ref.read(oobeServiceProvider);
     setState(() {
       _saving = true;
       _errorText = null;
     });
     try {
-      final current = await ref
-          .read(profileRepositoryProvider)
-          .currentProfile();
-      if (current == null) throw Exception('無法取得個人資料，請重新登入');
+      operation.checkActive();
       final nickname = _nicknameController.text.trim().isEmpty
           ? current.nickname
           : _nicknameController.text.trim();
-      await ref
-          .read(profileRepositoryProvider)
-          .saveProfile(
-            current.copyWith(
-              nickname: nickname.isEmpty ? '圈圈新朋友' : nickname,
-              bio: current.bio.isEmpty ? '剛加入 CosCircle，活動現場歡迎認親！' : null,
-              profileRoles: _roles.toList(),
-              onboardingCompleted: true,
-              regions: _regions.isEmpty ? current.regions : _regions.toList(),
-            ),
-          );
-      await ref
-          .read(oobeServiceProvider)
-          .markCompleted(current.id.isEmpty ? 'me' : current.id);
+      await operation.saveProfile(
+        skip
+            ? current.copyWith(onboardingCompleted: true)
+            : current.copyWith(
+                nickname: nickname.isEmpty ? '圈圈新朋友' : nickname,
+                bio: current.bio.isEmpty ? '剛加入 CosCircle，活動現場歡迎認親！' : null,
+                profileRoles: _roles.toList(),
+                onboardingCompleted: true,
+                regions: _regions.isEmpty ? current.regions : _regions.toList(),
+              ),
+      );
+      operation.checkActive();
+      await oobe.markCompleted(current.id.isEmpty ? 'me' : current.id);
+      operation.checkActive();
       if (mounted) {
         context.go(
           safeReturnPath(GoRouterState.of(context).uri.queryParameters['next']),
@@ -282,7 +310,14 @@ class _GuideStep extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: 16),
+            CosIllustration(
+              height: 148,
+              kind: icon == Icons.event_available || icon == Icons.map_outlined
+                  ? CosIllustrationKind.event
+                  : CosIllustrationKind.people,
+            ),
+            const SizedBox(height: 16),
             Text(
               title,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(

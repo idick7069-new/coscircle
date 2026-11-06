@@ -28,6 +28,30 @@ function getFirebaseApp() {
 }
 
 export async function sendRecognitionPush({ tokens, requestId, eventId, dayIndex, requesterName }) {
+  return sendEventPush({
+    tokens,
+    notification: {title: '有人想認親', body: `${requesterName || '有同好'} 想在現場找你認親`},
+    data: {type: 'recognition_request', requestId, eventId, dayIndex},
+  });
+}
+
+export async function sendRecognitionReplyPush({tokens, requestId, eventId, dayIndex, responderName, status}) {
+  return sendEventPush({
+    tokens,
+    notification: {title: '認親有回覆', body: `${responderName || '同好'}：${status === 'accepted' ? '快來' : '當前不方便'}`},
+    data: {type: 'recognition_response', requestId, eventId, dayIndex, status},
+  });
+}
+
+export async function sendMeetupPush({tokens, meetupId, eventId, dayIndex, creatorName}) {
+  return sendEventPush({
+    tokens,
+    notification: {title: '新的集合', body: `${creatorName || '小圈圈同好'} 建立了集合地點`},
+    data: {type: 'meetup_created', meetupId, eventId, dayIndex},
+  });
+}
+
+async function sendEventPush({tokens, notification, data}) {
   const app = getFirebaseApp();
   const activeTokens = [...new Set(tokens.map((token) => String(token).trim()))].filter(
     Boolean,
@@ -38,16 +62,8 @@ export async function sendRecognitionPush({ tokens, requestId, eventId, dayIndex
 
   const messages = activeTokens.map((token) => ({
     token,
-    notification: {
-      title: '有人想認親',
-      body: `${requesterName || '有同好'} 想在現場找你認親`,
-    },
-    data: {
-      type: 'recognition_request',
-      requestId: String(requestId),
-      eventId: String(eventId),
-      dayIndex: String(dayIndex),
-    },
+    notification,
+    data: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, String(value)])),
     android: {
       priority: 'high',
       notification: {
@@ -57,20 +73,26 @@ export async function sendRecognitionPush({ tokens, requestId, eventId, dayIndex
     },
   }));
 
-  const response = await getMessaging(app).sendEach(messages);
-  const invalidTokens = response.responses
-    .map((item, index) => {
-      const code = item.error?.code;
-      return code === 'messaging/registration-token-not-registered' ||
-        code === 'messaging/invalid-registration-token'
-        ? activeTokens[index]
-        : null;
-    })
-    .filter(Boolean);
+  return sendPushBatches(messages, getMessaging(app));
+}
 
-  return {
-    successCount: response.successCount,
-    failureCount: response.failureCount,
-    invalidTokens,
-  };
+export async function sendPushBatches(messages, messaging) {
+  const result = {successCount: 0, failureCount: 0, invalidTokens: []};
+  for (let offset = 0; offset < messages.length; offset += 500) {
+    const batch = messages.slice(offset, offset + 500);
+    try {
+      const response = await messaging.sendEach(batch);
+      result.successCount += response.successCount;
+      result.failureCount += response.failureCount;
+      response.responses.forEach((item, index) => {
+        if (['messaging/registration-token-not-registered', 'messaging/invalid-registration-token']
+          .includes(item.error?.code)) {
+          result.invalidTokens.push(batch[index].token);
+        }
+      });
+    } catch {
+      result.failureCount += batch.length;
+    }
+  }
+  return result;
 }

@@ -136,24 +136,33 @@ class FixtureSocial extends SocialRepository {
 }
 
 class FailingApi extends ApiClient {
-  FailingApi(this.status) : super(baseUrl: 'http://34.187.168.222/api');
+  FailingApi(int? status)
+    : super(
+        baseUrl: 'https://example.invalid/api',
+        adapter: _FailingAdapter(status),
+      );
+}
+
+class _FailingAdapter implements HttpClientAdapter {
+  _FailingAdapter(this.status);
   final int? status;
   @override
-  Future<Response<dynamic>> get(
-    String path, {
-    Map<String, dynamic>? query,
-  }) async {
-    final options = RequestOptions(path: path);
-    throw DioException(
-      requestOptions: options,
-      type: status == null
-          ? DioExceptionType.connectionError
-          : DioExceptionType.badResponse,
-      response: status == null
-          ? null
-          : Response(requestOptions: options, statusCode: status),
-    );
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    if (status == null) {
+      throw DioException(
+        requestOptions: options,
+        type: DioExceptionType.connectionError,
+      );
+    }
+    return ResponseBody.fromString('{}', status!);
   }
+
+  @override
+  void close({bool force = false}) {}
 }
 
 Widget host(
@@ -503,7 +512,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('名片'));
     await tester.pumpAndSettle();
-    expect(find.text('draft nickname'), findsOneWidget);
+    expect(
+      tester.widget<TextField>(nickname).controller!.text,
+      'draft nickname',
+    );
+    expect(find.byKey(const ValueKey('profile-edit')), findsOneWidget);
   });
   final pages = <String, Widget Function()>{
     'profile': () => const ProfilePage(),

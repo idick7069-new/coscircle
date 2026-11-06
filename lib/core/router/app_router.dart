@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_state.dart';
+import '../config/app_environment.dart';
 import '../../features/social/presentation/join_circle_page.dart';
 
 import '../../features/admin/presentation/admin_dashboard_page.dart';
@@ -13,6 +14,9 @@ import '../../features/profile/presentation/onboarding_profile_page.dart';
 import '../../features/profile/presentation/public_profile_page.dart';
 import '../../features/profile/presentation/profile_qr_scanner_page.dart';
 import '../../features/social/presentation/circle_qr_scanner_page.dart';
+import '../../features/safety/presentation/delete_account_page.dart';
+import '../../features/safety/presentation/legal_page.dart';
+import '../../features/safety/presentation/legal_acceptance_page.dart';
 
 final appRouter = GoRouter(
   initialLocation: '/login',
@@ -24,6 +28,8 @@ final appRouter = GoRouter(
           '/forgot-password',
           '/verify-email',
           '/reset-password',
+          '/privacy',
+          '/terms',
         ].contains(state.uri.path) ||
         state.uri.path.startsWith('/profiles/');
     if (publicRoute) return null;
@@ -41,10 +47,26 @@ final appRouter = GoRouter(
   routes: [
     GoRoute(
       path: '/join/:code',
-      builder: (context, state) =>
-          JoinCirclePage(inviteCode: state.pathParameters['code']!),
+      builder: (context, state) => LegalAcceptanceGate(
+        child: JoinCirclePage(inviteCode: state.pathParameters['code']!),
+      ),
     ),
     GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
+    GoRoute(
+      path: '/privacy',
+      builder: (context, state) =>
+          const LegalPage(document: LegalDocument.privacy),
+    ),
+    GoRoute(
+      path: '/terms',
+      builder: (context, state) =>
+          const LegalPage(document: LegalDocument.terms),
+    ),
+    if (accountSafetyEnabled)
+      GoRoute(
+        path: '/delete-account',
+        builder: (context, state) => const DeleteAccountPage(),
+      ),
     GoRoute(
       path: '/forgot-password',
       builder: (context, state) => EmailActionPage(
@@ -72,20 +94,28 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/onboarding',
-      builder: (context, state) => const OnboardingProfilePage(),
+      builder: (context, state) =>
+          const LegalAcceptanceGate(child: OnboardingProfilePage()),
     ),
-    GoRoute(path: '/', builder: (context, state) => const HomeShellPage()),
+    GoRoute(
+      path: '/',
+      builder: (context, state) =>
+          const LegalAcceptanceGate(child: HomeShellPage()),
+    ),
     GoRoute(
       path: '/events/:id',
-      builder: (context, state) =>
-          EventDetailPage(eventId: state.pathParameters['id']!),
+      builder: (context, state) => LegalAcceptanceGate(
+        child: EventDetailPage(eventId: state.pathParameters['id']!),
+      ),
     ),
     GoRoute(
       path: '/current/:id',
-      builder: (context, state) => CurrentEventPage(
-        eventId: state.pathParameters['id'],
-        dayIndex:
-            int.tryParse(state.uri.queryParameters['dayIndex'] ?? '') ?? 1,
+      builder: (context, state) => LegalAcceptanceGate(
+        child: CurrentEventPage(
+          eventId: state.pathParameters['id'],
+          dayIndex:
+              int.tryParse(state.uri.queryParameters['dayIndex'] ?? '') ?? 1,
+        ),
       ),
     ),
     GoRoute(
@@ -98,11 +128,13 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/scan-profile',
-      builder: (context, state) => const ProfileQrScannerPage(),
+      builder: (context, state) =>
+          const LegalAcceptanceGate(child: ProfileQrScannerPage()),
     ),
     GoRoute(
       path: '/scan-circle',
-      builder: (context, state) => const CircleQrScannerPage(),
+      builder: (context, state) =>
+          const LegalAcceptanceGate(child: CircleQrScannerPage()),
     ),
   ],
 );

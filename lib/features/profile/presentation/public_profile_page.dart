@@ -4,7 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/user_action.dart';
 
-import '../../../core/models/work.dart';
+import '../../../core/config/app_environment.dart';
+import '../../../core/api/api_client.dart';
 import '../../../core/models/profile.dart';
 import '../../../core/repositories/profile_repository.dart';
 import '../../../core/utils/participant_role_style.dart';
@@ -12,12 +13,21 @@ import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/cos_ui.dart';
 import '../../social/presentation/friendship_widgets.dart';
+import '../../safety/presentation/report_sheet.dart';
+import 'profile_work_radar.dart';
 
 const _profileRoleOptions = ['coser', 'photographer', 'manager', 'self'];
 
 final publicProfileProvider = FutureProvider.autoDispose
-    .family<UserProfile?, String>((ref, publicCode) {
-      return ref.watch(profileRepositoryProvider).fetchProfile(publicCode);
+    .family<UserProfile?, ({String code, int session})>((ref, key) async {
+      final client = ref.watch(apiClientProvider);
+      final repository = ref.watch(profileRepositoryProvider);
+      final token = await client.restoreAuthToken();
+      if (!ref.mounted || client.sessionVersion != key.session) return null;
+      if (token == null) return repository.fetchProfile(key.code);
+      final operation = repository.beginOperation();
+      ref.onDispose(operation.cancel);
+      return operation.fetchProfile(key.code);
     });
 
 class PublicProfilePage extends ConsumerWidget {
@@ -34,7 +44,37 @@ class PublicProfilePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(publicProfileProvider(publicCode));
+    return ValueListenableBuilder<int>(
+      valueListenable: ref.watch(apiClientProvider).sessionChanges,
+      builder: (context, version, _) => _PublicProfileContent(
+        publicCode: publicCode,
+        eventId: eventId,
+        dayIndex: dayIndex,
+        version: version,
+      ),
+    );
+  }
+}
+
+class _PublicProfileContent extends ConsumerWidget {
+  const _PublicProfileContent({
+    required this.publicCode,
+    required this.version,
+    this.eventId,
+    this.dayIndex,
+  });
+  final String publicCode;
+  final int version;
+  final String? eventId;
+  final int? dayIndex;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final provider = publicProfileProvider((
+      code: publicCode,
+      session: version,
+    ));
+    final profile = ref.watch(provider);
     return AppPage(
       appBar: AppBar(
         leading: IconButton(
@@ -51,6 +91,8 @@ class PublicProfilePage extends ConsumerWidget {
         title: const Text('個人資訊'),
       ),
       child: profile.when(
+        skipLoadingOnRefresh: false,
+        skipLoadingOnReload: false,
         data: (value) {
           if (value == null) {
             return _PublicProfileMessageState(
@@ -84,8 +126,8 @@ class PublicProfilePage extends ConsumerWidget {
                           })) {
                             return;
                           }
-                          ref.invalidate(publicProfileProvider(publicCode));
                           if (!context.mounted) return;
+                          refreshFriendships(ref);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
@@ -131,6 +173,25 @@ class PublicProfilePage extends ConsumerWidget {
               ),
               const SizedBox(height: 14),
               if (!value.isMe && value.id.isNotEmpty) ...[
+                if (accountSafetyEnabled)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        if (!await _requireLogin(context) || !context.mounted) {
+                          return;
+                        }
+                        await showReportSheet(
+                          context,
+                          targetType: 'user',
+                          targetUserId: value.id,
+                          targetLabel: value.nickname,
+                        );
+                      },
+                      icon: const Icon(Icons.flag_outlined),
+                      label: const Text('檢舉名片或使用者'),
+                    ),
+                  ),
                 ProfileFriendshipActions(
                   userId: value.id,
                   requireLogin: () => _requireLogin(context),
@@ -141,7 +202,12 @@ class PublicProfilePage extends ConsumerWidget {
               ],
               CosReveal(
                 delay: const Duration(milliseconds: 45),
-                child: _PublicProfileConversationCard(profile: value),
+                child: Column(
+                  children: [
+                    ProfileCommonWorkNotice(profile: value),
+                    _PublicProfileConversationCard(profile: value),
+                  ],
+                ),
               ),
               if (value.bio.isNotEmpty) ...[
                 const SizedBox(height: 14),
@@ -219,32 +285,7 @@ class PublicProfilePage extends ConsumerWidget {
               const SizedBox(height: 14),
               CosReveal(
                 delay: const Duration(milliseconds: 140),
-                child: CosCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const CosSectionHeader(
-                        title: '坑單',
-                        subtitle: '共同作品是現場認親的捷徑',
-                        icon: Icons.label_important_outline,
-                      ),
-                      const SizedBox(height: 12),
-                      _PublicWorkTags(
-                        title: '深坑',
-                        works: value.deepPitWorks,
-                        emptyText: '尚未新增深坑',
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(height: 12),
-                      _PublicWorkTags(
-                        title: '淺坑',
-                        works: value.shallowPitWorks,
-                        emptyText: '尚未新增淺坑',
-                        color: Theme.of(context).colorScheme.secondary,
-                      ),
-                    ],
-                  ),
-                ),
+                child: ProfileWorkRadar(profile: value),
               ),
               const SizedBox(height: 14),
               CosReveal(
@@ -275,7 +316,7 @@ class PublicProfilePage extends ConsumerWidget {
           title: '個人資訊載入失敗',
           message: '$error',
           actionLabel: '重新整理',
-          onAction: () => ref.invalidate(publicProfileProvider(publicCode)),
+          onAction: () => ref.invalidate(provider),
         ),
         loading: () => const _PublicProfileLoadingState(),
       ),
@@ -560,7 +601,7 @@ class _PublicProfileAvatar extends StatelessWidget {
       padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(32),
-        gradient: LinearGradient(colors: [scheme.primary, scheme.secondary]),
+        color: scheme.secondary,
         boxShadow: [CosUi.softShadow(scheme.primary)],
       ),
       child: CircleAvatar(
@@ -683,10 +724,13 @@ class _PublicProfileRolePill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final foreground =
+        ThemeData.estimateBrightnessForColor(color) == Brightness.dark
+        ? Colors.white
+        : const Color(0xff182b30);
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.18),
+        color: color,
         borderRadius: BorderRadius.circular(CosUi.radiusMd),
         border: Border.all(color: color.withValues(alpha: 0.62), width: 1.4),
         boxShadow: [CosUi.softShadow(color)],
@@ -696,12 +740,12 @@ class _PublicProfileRolePill extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 22, color: color),
+            Icon(icon, size: 22, color: foreground),
             const SizedBox(width: 7),
             Text(
               label,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: scheme.onSurface,
+                color: foreground,
                 fontWeight: FontWeight.w900,
               ),
             ),
@@ -949,63 +993,6 @@ class _PublicInfoTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: CosInfoTile(icon: icon, label: label, value: value),
-    );
-  }
-}
-
-class _PublicWorkTags extends StatelessWidget {
-  const _PublicWorkTags({
-    required this.title,
-    required this.works,
-    required this.emptyText,
-    required this.color,
-  });
-
-  final String title;
-  final List<WorkTag> works;
-  final String emptyText;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 8),
-        if (works.isEmpty)
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(CosUi.radiusMd),
-              border: Border.all(color: color.withValues(alpha: 0.18)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  Icon(Icons.auto_awesome, color: color, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      emptyText,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          )
-        else
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final work in works)
-                CosBadge(label: work.name, color: color),
-            ],
-          ),
-      ],
     );
   }
 }

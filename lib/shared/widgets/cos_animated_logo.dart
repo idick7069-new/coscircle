@@ -86,7 +86,6 @@ class _CosAnimatedLogoState extends State<CosAnimatedLogo>
                           scale: scale,
                           child: CosLogoMark(
                             size: markSize,
-                            orbitRotation: _controller.value * math.pi * 2,
                             markOpacity: opacity,
                           ),
                         );

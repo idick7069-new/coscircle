@@ -152,7 +152,7 @@ class ApiLocationRepository implements LocationRepository {
         'latitude': latitude,
         'longitude': longitude,
         'description': description,
-        'meetAt': meetAt.toIso8601String(),
+        'meetAt': meetAt.toUtc().toIso8601String(),
       },
     );
   }
@@ -174,7 +174,7 @@ class ApiLocationRepository implements LocationRepository {
         'latitude': latitude,
         'longitude': longitude,
         'description': description,
-        'meetAt': meetAt.toIso8601String(),
+        'meetAt': meetAt.toUtc().toIso8601String(),
       },
     );
   }

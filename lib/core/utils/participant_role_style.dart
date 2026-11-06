@@ -17,11 +17,11 @@ Color participantRoleColorForScheme(String role, ColorScheme scheme) {
     return participantRoleColor(role);
   }
   return switch (role) {
-    'photographer' => const Color(0xff6f8fa6),
-    'coser' => const Color(0xffb58f8f),
-    'manager' => const Color(0xffb7a777),
-    'self' => const Color(0xff839a7c),
-    _ => const Color(0xff839a7c),
+    'photographer' => AppTheme.cyan,
+    'coser' => AppTheme.coral,
+    'manager' => const Color(0xff846000),
+    'self' => const Color(0xff38694d),
+    _ => const Color(0xff38694d),
   };
 }
 

@@ -31,12 +31,12 @@ class EventBookingSharePage extends StatefulWidget {
 
 class _EventBookingSharePageState extends State<EventBookingSharePage> {
   static const _backgroundColors = [
-    Color(0xffffd9a6),
-    Color(0xffd8e8ff),
-    Color(0xffead9ff),
-    Color(0xffdcefd2),
-    Color(0xffffd7df),
-    Color(0xfff0e3c7),
+    Color(0xffffe27d),
+    Color(0xffd8f1e9),
+    Color(0xffffe1df),
+    Color(0xffe3f2f5),
+    Color(0xfff7faf9),
+    Color(0xffe5e6ef),
   ];
   static const _labelBackgroundColors = [
     Color(0xff111111),
@@ -469,14 +469,22 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
   }
 
   Future<void> _shareImage() async {
+    if (_sharing) return;
     setState(() => _sharing = true);
     try {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
       final boundary =
           _boundaryKey.currentContext?.findRenderObject()
               as RenderRepaintBoundary?;
       if (boundary == null) return;
       final image = await boundary.toImage(pixelRatio: 2);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final ByteData? byteData;
+      try {
+        byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      } finally {
+        image.dispose();
+      }
       final bytes = byteData?.buffer.asUint8List();
       if (bytes == null) return;
       if (!mounted) return;
@@ -955,36 +963,9 @@ class _ShareCanvas extends StatelessWidget {
     final accent = _strongColor(backgroundColor);
     final secondary = _shiftHue(accent, 42);
     return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color.alphaBlend(
-              Colors.white.withValues(alpha: 0.18),
-              backgroundColor,
-            ),
-            backgroundColor,
-            Color.alphaBlend(accent.withValues(alpha: 0.24), backgroundColor),
-          ],
-        ),
-      ),
+      decoration: BoxDecoration(color: backgroundColor),
       child: Stack(
         children: [
-          Positioned(
-            left: -160,
-            top: -170,
-            width: 540,
-            height: 540,
-            child: _CanvasOrb(color: accent.withValues(alpha: 0.28)),
-          ),
-          Positioned(
-            right: -120,
-            bottom: -210,
-            width: 620,
-            height: 620,
-            child: _CanvasOrb(color: secondary.withValues(alpha: 0.2)),
-          ),
           Positioned(
             left: 42,
             right: 42,
@@ -1081,22 +1062,6 @@ class _ShareCanvas extends StatelessWidget {
   }
 }
 
-class _CanvasOrb extends StatelessWidget {
-  const _CanvasOrb({required this.color});
-
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(colors: [color, color.withValues(alpha: 0)]),
-      ),
-    );
-  }
-}
-
 class _TicketHeader extends StatelessWidget {
   const _TicketHeader({required this.event, required this.accent});
 
@@ -1135,7 +1100,7 @@ class _TicketHeader extends StatelessWidget {
                       color: Colors.white70,
                       fontSize: 24,
                       fontWeight: FontWeight.w800,
-                      letterSpacing: 1.4,
+                      letterSpacing: 0,
                     ),
                   ),
                   Text(
@@ -1254,7 +1219,7 @@ class _InfoPanel extends StatelessWidget {
                   width: 76,
                   height: 76,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(colors: [accent, secondary]),
+                    color: accent,
                     borderRadius: BorderRadius.circular(24),
                   ),
                   child: const Icon(
@@ -1519,7 +1484,7 @@ class _DayColumn extends StatelessWidget {
                     color: Colors.white,
                     fontSize: 28,
                     fontWeight: FontWeight.w900,
-                    letterSpacing: 1.2,
+                    letterSpacing: 0,
                   ),
                 ),
               ),
@@ -1603,39 +1568,49 @@ class _DayColumn extends StatelessWidget {
                           ),
                         ),
                       ),
-                    Positioned.fill(
-                      child: _TransformableLayer(
-                        transform: labelTransform,
-                        isSelected: selectedLayer == labelLayer,
-                        minScale: 0.5,
-                        maxScale: 4,
-                        onSelected: () => onLayerSelected(labelLayer),
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: labelBackgroundColor,
-                            borderRadius: BorderRadius.circular(
-                              labelBorderRadius,
+                    if (labelController.text.trim().isNotEmpty)
+                      Positioned.fill(
+                        child: _TransformableLayer(
+                          transform: labelTransform,
+                          isSelected: selectedLayer == labelLayer,
+                          minScale: 0.5,
+                          maxScale: 4,
+                          onSelected: () => onLayerSelected(labelLayer),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: labelBackgroundColor,
+                              borderRadius: BorderRadius.circular(
+                                labelBorderRadius,
+                              ),
                             ),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 8,
-                            ),
-                            child: Text(
-                              labelController.text.trim().isEmpty
-                                  ? participant?.characterName ?? ''
-                                  : labelController.text.trim(),
-                              style: TextStyle(
-                                color: _readableTextColor(labelBackgroundColor),
-                                fontSize: labelFontSize,
-                                fontWeight: FontWeight.w900,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
+                              child: SizedBox(
+                                width: max(1, constraints.maxWidth - 72),
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    labelController.text.trim(),
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    style: TextStyle(
+                                      color: _readableTextColor(
+                                        labelBackgroundColor,
+                                      ),
+                                      fontSize: labelFontSize,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
                     Positioned.fill(
                       child: IgnorePointer(
                         child: DecoratedBox(

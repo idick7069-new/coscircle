@@ -10,6 +10,7 @@ import '../../../core/services/push_notification_service.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../../shared/widgets/cos_illustration.dart';
 import '../../../shared/widgets/cos_animated_logo.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -130,6 +131,20 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   _showSocialTokenDialog(SocialLoginProvider.facebook),
               onLine: () => _showSocialTokenDialog(SocialLoginProvider.line),
             ),
+          const SizedBox(height: 16),
+          Wrap(
+            alignment: WrapAlignment.center,
+            children: [
+              TextButton(
+                onPressed: () => context.push('/privacy'),
+                child: const Text('隱私政策'),
+              ),
+              TextButton(
+                onPressed: () => context.push('/terms'),
+                child: const Text('服務條款'),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -175,7 +190,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         ? '圈圈新朋友'
         : _nickname.text.trim();
 
-    if (!email.contains('@') || password.length < 8) {
+    final validEmail = _isRegister
+        ? normalizeRegistrationEmail(email) != null
+        : email.contains('@');
+    if (!validEmail || password.length < 8) {
       setState(() => _errorText = '請輸入有效 Email，密碼至少 8 個字元');
       return;
     }
@@ -495,28 +513,10 @@ class _LoginStageHero extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(CosUi.radiusXl),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            scheme.primaryContainer,
-            scheme.secondaryContainer,
-            scheme.tertiaryContainer,
-          ],
-        ),
-        boxShadow: [CosUi.softShadow(scheme.shadow)],
+        color: scheme.surfaceContainerLowest,
       ),
       child: Stack(
         children: [
-          Positioned(
-            right: -30,
-            top: -20,
-            child: Icon(
-              Icons.auto_awesome,
-              size: 132,
-              color: scheme.onPrimaryContainer.withValues(alpha: 0.08),
-            ),
-          ),
           Padding(
             padding: const EdgeInsets.all(22),
             child: Column(
@@ -535,6 +535,8 @@ class _LoginStageHero extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 18),
+                const CosIllustration(height: 144),
+                const SizedBox(height: 18),
                 Text(
                   'CosCircle',
                   style: Theme.of(context).textTheme.displaySmall?.copyWith(
@@ -544,41 +546,10 @@ class _LoginStageHero extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '活動現場找同好、公開出席宣告、分享位置與管理小圈圈。',
+                  '在喜歡的場次，遇見同頻的你。',
                   style: Theme.of(
                     context,
                   ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 18),
-                Row(
-                  children: [
-                    Expanded(
-                      child: CosMetricTile(
-                        icon: Icons.radar_outlined,
-                        label: '現場雷達',
-                        value: '找人',
-                        color: scheme.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: CosMetricTile(
-                        icon: Icons.qr_code_2,
-                        label: '快速交換',
-                        value: '名片',
-                        color: scheme.secondary,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: CosMetricTile(
-                        icon: Icons.event_available_outlined,
-                        label: '活動預定',
-                        value: '約場',
-                        color: scheme.tertiary,
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),

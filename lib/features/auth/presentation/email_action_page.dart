@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/repositories/auth_repository.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../shared/widgets/app_page.dart';
+import '../../../shared/widgets/cos_ui.dart';
 
 enum EmailActionMode { forgot, verify, reset }
 
@@ -114,10 +115,16 @@ class _EmailActionPageState extends ConsumerState<EmailActionPage> {
             shrinkWrap: true,
             children: [
               const SizedBox(height: 24),
-              Icon(
-                _completed ? Icons.check_circle_outline : Icons.mail_outline,
-                size: 48,
-                color: Theme.of(context).colorScheme.primary,
+              Center(
+                child: CosIconBubble(
+                  icon: _completed
+                      ? Icons.check_circle_outline
+                      : Icons.mail_outline,
+                  size: 72,
+                  color: _completed
+                      ? Theme.of(context).colorScheme.secondary
+                      : Theme.of(context).colorScheme.primary,
+                ),
               ),
               const SizedBox(height: 24),
               if (_completed) ...[

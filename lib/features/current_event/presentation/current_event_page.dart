@@ -13,6 +13,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/models/circle.dart';
+import '../../../core/api/api_client.dart';
 import '../../../core/models/event.dart';
 import '../../../core/models/event_day_item.dart';
 import '../../../core/models/meetup_point.dart';
@@ -21,13 +22,15 @@ import '../../../core/models/shared_location.dart';
 import '../../../core/providers/event_providers.dart';
 import '../../../core/repositories/location_repository.dart';
 import '../../../core/repositories/profile_repository.dart';
-import '../../../core/repositories/social_repository.dart';
 import '../../../core/services/local_notification_service.dart';
 import '../../../core/utils/event_day_display.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../core/utils/participant_role_style.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../social/presentation/social_page.dart' show circlesProvider;
+import '../../social/presentation/friendship_widgets.dart'
+    show refreshFriendships;
 import 'widgets/current_event_overlays.dart';
 
 final sharedLocationsProvider = FutureProvider.autoDispose
@@ -47,12 +50,49 @@ final recognitionRequestsProvider = FutureProvider.autoDispose
       return ref.watch(locationRepositoryProvider).fetchRecognitions(eventId);
     });
 
-final currentEventCirclesProvider =
-    FutureProvider.autoDispose<List<CircleGroup>>((ref) {
-      return ref.watch(socialRepositoryProvider).fetchCircles();
-    });
-
 enum LocationFilter { all, followed, circle, friends }
+
+EventDayItem? resolveCurrentEventDay(
+  List<CosEvent> events,
+  CurrentEventTarget? target,
+  DateTime now,
+) {
+  final today = taipeiDateTime(now);
+  final active = expandEventDays(events)
+      .where((day) => day.isJoined && day.status(today) == EventStatus.active)
+      .toList();
+  return active
+          .where(
+            (day) =>
+                day.event.id == target?.eventId &&
+                day.dayIndex == target?.dayIndex,
+          )
+          .firstOrNull ??
+      active.firstOrNull;
+}
+
+RecognitionRequest? selectRecognitionNotice(
+  List<RecognitionRequest> requests, {
+  required int dayIndex,
+  required DateTime now,
+  Set<String> dismissed = const {},
+}) {
+  final eligible = requests
+      .where(
+        (request) =>
+            !dismissed.contains(request.id) &&
+            request.isNoticeAt(now, dayIndex),
+      )
+      .toList();
+  eligible.sort(
+    (a, b) =>
+        (b.respondedAt ?? b.createdAt).compareTo(a.respondedAt ?? a.createdAt),
+  );
+  return eligible
+          .where((request) => request.status == RecognitionStatus.pending)
+          .firstOrNull ??
+      eligible.firstOrNull;
+}
 
 class _LocationShareSettings {
   const _LocationShareSettings({
@@ -94,8 +134,9 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
   CurrentEventTarget? _selectedTarget;
   GoogleMapController? _mapController;
   Timer? _refreshTimer;
-  Map<String, MeetupPoint> _knownMeetups = const {};
-  bool _hasMeetupSnapshot = false;
+  MeetupSnapshot _meetupSnapshot = MeetupSnapshot();
+  String? _snapshotScope;
+  final Set<String> _dismissedRecognitions = {};
   final Map<String, BitmapDescriptor> _markerIcons = {};
   final Set<String> _loadingMarkerIcons = {};
 
@@ -163,6 +204,11 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
     final dayIndex = event == null
         ? 1
         : _currentDayIndex(event, effectiveTarget);
+    final snapshotScope = eventId == null ? null : '$eventId:$dayIndex';
+    if (_snapshotScope != snapshotScope) {
+      _resetEventScopedState();
+      _snapshotScope = snapshotScope;
+    }
     final isResolvingEvent = events.isLoading;
     final locations = event == null
         ? const AsyncData(<SharedLocation>[])
@@ -173,7 +219,7 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
     final recognitions = event == null
         ? const AsyncData(<RecognitionRequest>[])
         : ref.watch(recognitionRequestsProvider(event.id));
-    final circles = ref.watch(currentEventCirclesProvider);
+    final circles = ref.watch(circlesProvider);
     final circleItems =
         circles.whenOrNull(data: (items) => items) ?? const <CircleGroup>[];
 
@@ -189,14 +235,23 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
                 .where((item) => item.isMe)
                 .firstOrNull;
             _warmMarkerIcons(dayLocations);
-            final meetupItems =
-                meetups.whenOrNull(data: (items) => items) ??
-                const <MeetupPoint>[];
-            _detectMeetupNotifications(meetupItems);
+            _detectMeetupNotifications(
+              meetups.hasError || meetups.isLoading
+                  ? null
+                  : meetups.whenOrNull(data: (items) => items),
+            );
+            final meetupItems = _meetupSnapshot.items
+                .where((item) => item.isActiveAt(DateTime.now()))
+                .toList();
             final recognitionItems =
                 recognitions.whenOrNull(data: (items) => items) ??
                 const <RecognitionRequest>[];
-            final noticeRecognition = _activeRecognition(recognitionItems);
+            final noticeRecognition = selectRecognitionNotice(
+              recognitionItems,
+              dayIndex: dayIndex,
+              now: DateTime.now(),
+              dismissed: _dismissedRecognitions,
+            );
             final activeMeetup = _activeMeetup(meetupItems);
             return Stack(
               children: [
@@ -238,10 +293,7 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
                     ),
                     onTargetChanged: _selectCurrentTarget,
                     onFilterChanged: (value) => setState(() => _filter = value),
-                    onRefresh: eventId == null
-                        ? null
-                        : () =>
-                              ref.invalidate(sharedLocationsProvider(eventId)),
+                    onRefresh: _refreshCurrentEventData,
                   ),
                 ),
                 if (noticeRecognition != null)
@@ -251,6 +303,9 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
                     top: 86,
                     child: RecognitionNoticeCard(
                       request: noticeRecognition,
+                      onDismiss: () => setState(() {
+                        _dismissedRecognitions.add(noticeRecognition.id);
+                      }),
                       onCome: () => _respondRecognition(
                         noticeRecognition,
                         RecognitionStatus.accepted,
@@ -298,6 +353,22 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
                     top: 166,
                     child: _CurrentEventEmptyCard(
                       onOpenEvents: widget.onOpenEvents,
+                    ),
+                  ),
+                if (meetups.hasError && eventId != null)
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: 90,
+                    child: MaterialBanner(
+                      content: const Text('集合點更新失敗，保留上次資料'),
+                      actions: [
+                        TextButton(
+                          onPressed: () =>
+                              ref.invalidate(meetupPointsProvider(eventId)),
+                          child: const Text('重試'),
+                        ),
+                      ],
                     ),
                   ),
                 if (eventId != null)
@@ -351,13 +422,9 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
     );
   }
 
-  String? _defaultCurrentEventId(List<CosEvent>? events) {
-    if (events == null) return null;
-
-    return _currentEventTargets(events).firstOrNull?.event.id;
-  }
-
   void _refreshCurrentEventData() {
+    if (!mounted) return;
+    setState(() {});
     final events = ref.read(eventsProvider).whenOrNull(data: (items) => items);
     final event = _currentEvent(events, _effectiveTarget);
     if (event == null) return;
@@ -378,8 +445,7 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
 
   void _resetEventScopedState() {
     _draftMeetupPosition = null;
-    _knownMeetups = const {};
-    _hasMeetupSnapshot = false;
+    _meetupSnapshot = MeetupSnapshot();
   }
 
   CurrentEventTarget? get _effectiveTarget {
@@ -389,47 +455,27 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
     return CurrentEventTarget(eventId: eventId, dayIndex: widget.dayIndex);
   }
 
-  void _detectMeetupNotifications(List<MeetupPoint> meetups) {
-    final current = {for (final meetup in meetups) meetup.id: meetup};
-    if (!_hasMeetupSnapshot) {
-      _knownMeetups = current;
-      _hasMeetupSnapshot = true;
-      return;
-    }
-
-    for (final meetup in meetups) {
-      final previous = _knownMeetups[meetup.id];
-      if (previous == null || meetup.isMine) continue;
-      if (_meetupChanged(previous, meetup)) {
-        unawaited(
-          LocalNotificationService.instance.showMeetupChanged(
-            '${meetup.circleName} 更改了集合位置',
-          ),
-        );
-      }
-    }
-    for (final previous in _knownMeetups.values) {
-      if (previous.isMine || current.containsKey(previous.id)) continue;
+  void _detectMeetupNotifications(List<MeetupPoint>? meetups) {
+    for (final message in _meetupSnapshot.update(meetups, DateTime.now())) {
+      final api = ref.read(apiClientProvider);
+      final version = api.sessionVersion;
+      final scope = _snapshotScope;
       unawaited(
         LocalNotificationService.instance.showMeetupChanged(
-          '${previous.circleName} 取消了集合',
+          message,
+          canDeliver: () =>
+              mounted &&
+              widget.isVisible &&
+              api.sessionVersion == version &&
+              _snapshotScope == scope,
         ),
       );
     }
-    _knownMeetups = current;
-  }
-
-  bool _meetupChanged(MeetupPoint previous, MeetupPoint current) {
-    return previous.latitude != current.latitude ||
-        previous.longitude != current.longitude ||
-        previous.description != current.description ||
-        previous.meetAt != current.meetAt ||
-        previous.circleId != current.circleId;
   }
 
   List<EventDayItem> _currentEventTargets(List<CosEvent>? events) {
     if (events == null) return const [];
-    final now = DateTime.now();
+    final now = taipeiDateTime(DateTime.now());
     final targets = expandEventDays(events)
         .where(
           (item) => item.isJoined && item.status(now) == EventStatus.active,
@@ -441,37 +487,12 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
 
   CosEvent? _currentEvent(List<CosEvent>? events, CurrentEventTarget? target) {
     if (events == null) return null;
-    final now = DateTime.now();
-    final id = target?.eventId ?? _defaultCurrentEventId(events);
-    if (id == null) return null;
-    final event = events.where((event) => event.id == id).firstOrNull;
-    if (event == null || event.status(now) != EventStatus.active) return null;
-    final day = _currentDayIndex(event, target);
-    if (!event.joinedDayIndexes.contains(day) ||
-        EventDayItem(event: event, dayIndex: day).status(now) !=
-            EventStatus.active) {
-      return null;
-    }
-    return event;
+    return resolveCurrentEventDay(events, target, DateTime.now())?.event;
   }
 
   int _currentDayIndex(CosEvent event, CurrentEventTarget? target) {
-    if (target != null) {
-      return target.dayIndex.clamp(1, _eventDayCount(event));
-    }
-    final today = DateTime.now();
-    final date = DateTime(today.year, today.month, today.day);
-    final start = DateTime(
-      event.startDate.year,
-      event.startDate.month,
-      event.startDate.day,
-    );
-    return date.difference(start).inDays.clamp(0, _eventDayCount(event) - 1) +
+    return resolveCurrentEventDay([event], target, DateTime.now())?.dayIndex ??
         1;
-  }
-
-  int _eventDayCount(CosEvent event) {
-    return event.endDate.difference(event.startDate).inDays + 1;
   }
 
   Set<Marker> _markersFor(
@@ -511,7 +532,7 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
         infoWindow: InfoWindow(
           title: '集合：${meetup.circleName}',
           snippet:
-              '${DateFormat('HH:mm').format(meetup.meetAt)} · ${meetup.description}',
+              '${DateFormat('MM/dd HH:mm').format(taipeiDateTime(meetup.meetAt))} · ${meetup.description}',
         ),
         draggable: eventId != null && meetup.isMine,
         onDragEnd: eventId != null && meetup.isMine
@@ -712,27 +733,9 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
               meetup.meetAt.isAfter(now.subtract(const Duration(minutes: 10))),
         )
         .toList();
-    if (upcoming.isEmpty) return meetups.first;
+    if (upcoming.isEmpty) return null;
     upcoming.sort((a, b) => a.meetAt.compareTo(b.meetAt));
     return upcoming.first;
-  }
-
-  RecognitionRequest? _activeRecognition(List<RecognitionRequest> requests) {
-    final pendingForMe = requests
-        .where(
-          (request) =>
-              request.isTarget && request.status == RecognitionStatus.pending,
-        )
-        .toList();
-    if (pendingForMe.isNotEmpty) return pendingForMe.first;
-    final answeredForMe = requests
-        .where(
-          (request) =>
-              request.isRequester &&
-              request.status != RecognitionStatus.pending,
-        )
-        .toList();
-    return answeredForMe.firstOrNull;
   }
 
   Future<void> _navigateTo(double latitude, double longitude) async {
@@ -760,6 +763,7 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
           .respondRecognition(requestId: request.id, status: status);
       ref.invalidate(recognitionRequestsProvider(request.eventId));
       if (!mounted) return;
+      setState(() => _dismissedRecognitions.add(request.id));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -857,7 +861,9 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
                         : meetup.description,
                     icon: Icons.flag_circle_outlined,
                     trailing: CosBadge(
-                      label: DateFormat('HH:mm').format(meetup.meetAt),
+                      label: DateFormat(
+                        'MM/dd HH:mm',
+                      ).format(taipeiDateTime(meetup.meetAt)),
                       icon: Icons.schedule,
                       highlighted: true,
                       color: scheme.tertiary,
@@ -905,7 +911,7 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
                               Navigator.of(context).pop();
                               final circles =
                                   ref
-                                      .read(currentEventCirclesProvider)
+                                      .read(circlesProvider)
                                       .whenOrNull(data: (items) => items) ??
                                   const <CircleGroup>[];
                               if (circles.isEmpty) return;
@@ -966,7 +972,7 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('已取消集合並通知成員')));
+      ).showSnackBar(const SnackBar(content: Text('已取消集合點')));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -1059,9 +1065,7 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
                 if (!context.mounted) return;
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(meetup == null ? '已發出集合通知' : '已更新集合通知'),
-                  ),
+                  SnackBar(content: Text(meetup == null ? '已建立集合點' : '已更新集合點')),
                 );
               } catch (error) {
                 if (!context.mounted) return;
@@ -1100,7 +1104,9 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
                               subtitle: '把小圈圈要集合的位置、時間和提示一次講清楚',
                               icon: Icons.flag_circle_outlined,
                               trailing: CosBadge(
-                                label: DateFormat('HH:mm').format(meetAt),
+                                label: DateFormat(
+                                  'MM/dd HH:mm',
+                                ).format(taipeiDateTime(meetAt)),
                                 icon: Icons.schedule,
                                 highlighted: true,
                                 color: scheme.tertiary,
@@ -1239,16 +1245,18 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
                               onTap: () async {
                                 final picked = await showTimePicker(
                                   context: context,
-                                  initialTime: TimeOfDay.fromDateTime(meetAt),
+                                  initialTime: TimeOfDay.fromDateTime(
+                                    taipeiDateTime(meetAt),
+                                  ),
                                 );
                                 if (picked == null) return;
-                                final base = meetAt;
+                                final base = taipeiDateTime(meetAt);
                                 setSheetState(() {
-                                  meetAt = DateTime(
+                                  meetAt = DateTime.utc(
                                     base.year,
                                     base.month,
                                     base.day,
-                                    picked.hour,
+                                    picked.hour - 8,
                                     picked.minute,
                                   );
                                 });
@@ -1256,7 +1264,9 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
                               child: CosInfoTile(
                                 icon: Icons.schedule,
                                 label: '集合時間',
-                                value: DateFormat('HH:mm').format(meetAt),
+                                value: DateFormat(
+                                  'MM/dd HH:mm',
+                                ).format(taipeiDateTime(meetAt)),
                                 color: scheme.tertiary,
                               ),
                             ),
@@ -1876,8 +1886,8 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
     if (confirmed != true) return;
     try {
       await ref.read(profileRepositoryProvider).blockUser(location.userId);
-      ref.invalidate(sharedLocationsProvider(eventId));
       if (!mounted) return;
+      refreshFriendships(ref);
       Navigator.of(context).pop();
       ScaffoldMessenger.of(
         context,
@@ -2231,14 +2241,7 @@ class _CurrentEventStateCard extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(CosUi.radiusXl),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            scheme.surfaceContainerLowest.withValues(alpha: 0.96),
-            scheme.surfaceContainerHighest.withValues(alpha: 0.88),
-          ],
-        ),
+        color: scheme.surfaceContainerLowest,
         border: Border.all(color: accentColor.withValues(alpha: 0.28)),
         boxShadow: [CosUi.softShadow(scheme.shadow)],
       ),
@@ -2430,7 +2433,7 @@ class _EventMapHeader extends StatelessWidget {
           filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: scheme.surface.withValues(alpha: 0.86),
+              color: scheme.surfaceContainerLowest,
               borderRadius: BorderRadius.circular(CosUi.radiusLg),
               border: Border.all(
                 color: scheme.outlineVariant.withValues(alpha: 0.7),
@@ -2447,7 +2450,11 @@ class _EventMapHeader extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
               child: Row(
                 children: [
-                  Icon(Icons.location_on_outlined, color: scheme.primary),
+                  CosIconBubble(
+                    icon: Icons.location_on_rounded,
+                    color: scheme.secondary,
+                    size: 36,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Column(

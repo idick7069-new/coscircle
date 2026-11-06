@@ -18,7 +18,13 @@ import '../../../core/utils/public_app_link.dart';
 import '../../../core/utils/participant_role_style.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../../core/providers/same_work_providers.dart';
+import '../../../core/providers/partner_discovery_providers.dart';
+import '../../social/presentation/friendship_widgets.dart'
+    show refreshFriendships;
+import '../../../core/theme/app_theme.dart';
 import '../../works/presentation/work_selector.dart';
+import 'profile_readiness_celebration.dart';
 
 const _profileRegionOptions = ['北部', '中部', '南部', '離島', '海外'];
 const _genderLabels = {'male': '生理男', 'female': '生理女', 'private': '不公開'};
@@ -37,7 +43,9 @@ final blockedUsersProvider = FutureProvider.autoDispose<List<BlockedUser>>((
 });
 
 class ProfilePage extends ConsumerStatefulWidget {
-  const ProfilePage({super.key});
+  const ProfilePage({super.key, this.isVisible = true});
+
+  final bool isVisible;
 
   @override
   ConsumerState<ProfilePage> createState() => _ProfilePageState();
@@ -62,9 +70,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   List<String> _otherPhotoUrls = const [];
   final List<XFile?> _pickedOtherPhotos = List<XFile?>.filled(3, null);
   late Future<UserProfile?> _profileFuture;
+  ProfileOperation? _profileOperation;
   bool _initialized = false;
   bool _editing = false;
   bool _saving = false;
+  String? _saveError;
   String? _editTarget;
   final _fieldKeys = {
     for (final label in [
@@ -78,6 +88,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       '淺坑',
       '照片',
       '場次安全',
+      '雷點',
     ])
       label: GlobalKey(),
   };
@@ -90,6 +101,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   @override
   void dispose() {
+    _profileOperation?.cancel();
     _nickname.dispose();
     _facebook.dispose();
     _bio.dispose();
@@ -122,8 +134,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   ),
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
-                    onPressed: () =>
-                        setState(() => _profileFuture = _fetchProfile()),
+                    onPressed: () => setState(() {
+                      _profileFuture = _fetchProfile();
+                    }),
                     icon: const Icon(Icons.refresh),
                     label: const Text('重試'),
                   ),
@@ -137,114 +150,166 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           _loadProfile(profile);
         }
 
-        return ListView(
-          padding: const EdgeInsets.all(16),
+        return Column(
           children: [
-            CosPageHeader(
-              title: 'Cos 名片',
-              subtitle: '讓同好快速認識你的作品、地區和交流方式',
-              leading: const CosIconBubble(icon: Icons.badge_outlined),
-              actions: [
-                IconButton.filledTonal(
-                  tooltip: '分享個人資訊',
-                  onPressed: () => _showShareSheet(context, profile),
-                  icon: const Icon(Icons.qr_code_2),
-                ),
-                IconButton.filledTonal(
-                  tooltip: '掃描個人 QRCode',
-                  onPressed: () => context.push('/scan-profile'),
-                  icon: const Icon(Icons.qr_code_scanner),
-                ),
-                IconButton.filled(
-                  tooltip: _editing ? '取消編輯' : '編輯',
-                  onPressed: _saving
-                      ? null
-                      : () {
-                          setState(() {
-                            if (_editing) _loadProfile(profile);
-                            _editTarget = null;
-                            _editing = !_editing;
-                          });
-                        },
-                  icon: Icon(_editing ? Icons.close : Icons.edit),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 260),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              child: _editing
-                  ? AbsorbPointer(
-                      absorbing: _saving,
-                      child: _EditProfileForm(
-                        key: const ValueKey('profile-edit'),
-                        avatarUrl: _avatarUrl,
-                        pickedAvatar: _pickedAvatar,
-                        nickname: _nickname,
-                        facebook: _facebook,
-                        bio: _bio,
-                        age: _age,
-                        landmine: _landmine,
-                        deepPitWorks: _deepPitWorks,
-                        shallowPitWorks: _shallowPitWorks,
-                        regions: _regions,
-                        travelRegions: _travelRegions,
-                        travelSameRegion: _travelSameRegion,
-                        gender: _gender,
-                        profileRoles: _profileRoles,
-                        bookingVisibility: _bookingVisibility,
-                        otherPhotoUrls: _otherPhotoUrls,
-                        pickedOtherPhotos: _pickedOtherPhotos,
-                        onPickAvatar: _pickAvatar,
-                        onDeepPitWorksChanged: (works) =>
-                            setState(() => _deepPitWorks = works),
-                        onShallowPitWorksChanged: (works) =>
-                            setState(() => _shallowPitWorks = works),
-                        onRegionsChanged: (regions) =>
-                            setState(() => _regions = regions),
-                        onTravelRegionsChanged: (regions) => setState(() {
-                          _travelRegions = regions;
-                          _travelSameRegion = _sameStringSet(_regions, regions);
-                        }),
-                        onUseSameRegions: () => setState(() {
-                          _travelRegions = List<String>.from(_regions);
-                          _travelSameRegion = _regions.isNotEmpty;
-                        }),
-                        onGenderChanged: (value) =>
-                            setState(() => _gender = value),
-                        onProfileRolesChanged: (roles) =>
-                            setState(() => _profileRoles = roles),
-                        onBookingVisibilityChanged: (value) =>
-                            setState(() => _bookingVisibility = value),
-                        onPickOtherPhoto: _pickOtherPhoto,
-                        onRemoveOtherPhoto: _removeOtherPhoto,
-                        onSave: () => _saveProfile(context, profile),
-                        saving: _saving,
-                        fieldKeys: _fieldKeys,
-                        initialTarget: _editTarget,
+            Expanded(
+              child: ListView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.all(16),
+                children: [
+                  CosPageHeader(
+                    title: '我的名片',
+                    subtitle: '在場次裡，讓彼此更好認',
+                    leading: const CosIconBubble(icon: Icons.badge_outlined),
+                    actions: [
+                      IconButton.filledTonal(
+                        tooltip: '分享個人資訊',
+                        onPressed: () => _showShareSheet(context, profile),
+                        icon: const Icon(Icons.qr_code_2),
                       ),
-                    )
-                  : _ProfileSummary(
-                      key: const ValueKey('profile-summary'),
-                      profile: profile,
-                      onEditItem: _editProfileItem,
-                    ),
+                      IconButton.filledTonal(
+                        tooltip: '掃描個人 QRCode',
+                        onPressed: () => context.push('/scan-profile'),
+                        icon: const Icon(Icons.qr_code_scanner),
+                      ),
+                      IconButton.filled(
+                        tooltip: _editing ? '取消編輯' : '編輯',
+                        onPressed: _saving
+                            ? null
+                            : () {
+                                setState(() {
+                                  if (_editing) _loadProfile(profile);
+                                  _editTarget = null;
+                                  _saveError = null;
+                                  _editing = !_editing;
+                                });
+                              },
+                        icon: Icon(_editing ? Icons.close : Icons.edit),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 260),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    child: _editing
+                        ? AbsorbPointer(
+                            absorbing: _saving,
+                            child: _EditProfileForm(
+                              key: const ValueKey('profile-edit'),
+                              avatarUrl: _avatarUrl,
+                              pickedAvatar: _pickedAvatar,
+                              nickname: _nickname,
+                              facebook: _facebook,
+                              bio: _bio,
+                              age: _age,
+                              landmine: _landmine,
+                              deepPitWorks: _deepPitWorks,
+                              shallowPitWorks: _shallowPitWorks,
+                              regions: _regions,
+                              travelRegions: _travelRegions,
+                              travelSameRegion: _travelSameRegion,
+                              gender: _gender,
+                              profileRoles: _profileRoles,
+                              bookingVisibility: _bookingVisibility,
+                              otherPhotoUrls: _otherPhotoUrls,
+                              pickedOtherPhotos: _pickedOtherPhotos,
+                              onPickAvatar: _pickAvatar,
+                              onDeepPitWorksChanged: (works) =>
+                                  setState(() => _deepPitWorks = works),
+                              onShallowPitWorksChanged: (works) =>
+                                  setState(() => _shallowPitWorks = works),
+                              onRegionsChanged: (regions) =>
+                                  setState(() => _regions = regions),
+                              onTravelRegionsChanged: (regions) => setState(() {
+                                _travelRegions = regions;
+                                _travelSameRegion = _sameStringSet(
+                                  _regions,
+                                  regions,
+                                );
+                              }),
+                              onUseSameRegions: () => setState(() {
+                                _travelRegions = List<String>.from(_regions);
+                                _travelSameRegion = _regions.isNotEmpty;
+                              }),
+                              onGenderChanged: (value) =>
+                                  setState(() => _gender = value),
+                              onProfileRolesChanged: (roles) =>
+                                  setState(() => _profileRoles = roles),
+                              onBookingVisibilityChanged: (value) =>
+                                  setState(() => _bookingVisibility = value),
+                              onPickOtherPhoto: _pickOtherPhoto,
+                              onRemoveOtherPhoto: _removeOtherPhoto,
+                              saving: _saving,
+                              fieldKeys: _fieldKeys,
+                              initialTarget: _editTarget,
+                            ),
+                          )
+                        : _ProfileSummary(
+                            key: const ValueKey('profile-summary'),
+                            profile: profile,
+                            onEditItem: _editProfileItem,
+                            onShare: () => _showShareSheet(context, profile),
+                          ),
+                  ),
+                ],
+              ),
             ),
+            if (_editing)
+              Material(
+                key: const ValueKey('profile-save-bar'),
+                color: Theme.of(context).colorScheme.surfaceContainerLowest,
+                child: SafeArea(
+                  top: false,
+                  minimum: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (_saveError != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Text(
+                              _saveError!,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                          ),
+                        _ProfileSaveButton(
+                          saving: _saving,
+                          onPressed: _saving
+                              ? null
+                              : () => _saveProfile(context, profile),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
           ],
         );
       },
     );
   }
 
-  Future<UserProfile?> _fetchProfile() {
-    return ref.read(profileRepositoryProvider).currentProfile();
+  Future<UserProfile?> _fetchProfile() async {
+    _profileOperation?.cancel();
+    final operation = ref.read(profileRepositoryProvider).beginOperation();
+    _profileOperation = operation;
+    return operation.currentProfile();
   }
 
   Future<void> _editProfileItem(String label) async {
     setState(() {
       _editTarget = label;
+      _saveError = null;
       _editing = true;
     });
     // The outgoing summary must stop determining the scroll extent first.
@@ -291,13 +356,19 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   Future<void> _saveProfile(BuildContext context, UserProfile profile) async {
-    setState(() => _saving = true);
+    var becameReady = false;
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
     try {
-      final repository = ref.read(profileRepositoryProvider);
+      final repository = _profileOperation!;
+      repository.checkActive();
       var avatarUrl = _avatarUrl;
       final pickedAvatar = _pickedAvatar;
       if (pickedAvatar != null) {
         final image = await readUploadImage(pickedAvatar);
+        repository.checkActive();
         final uploadedUrl = await repository.uploadImage(
           bytes: image.bytes,
           mimeType: image.mimeType,
@@ -316,6 +387,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         final picked = _pickedOtherPhotos[index];
         if (picked == null) continue;
         final image = await readUploadImage(picked);
+        repository.checkActive();
         final uploadedUrl = await repository.uploadImage(
           bytes: image.bytes,
           mimeType: image.mimeType,
@@ -354,23 +426,42 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         ),
       );
       if (!mounted) return;
+      ref.invalidate(sameWorkUsersProvider);
+      ref.invalidate(partnerWorksProvider);
+      ref.invalidate(partnerWorkUsersProvider);
       setState(() {
         _editing = false;
         _loadProfile(saved);
         _profileFuture = Future.value(saved);
       });
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('已同步更新個人資訊')));
-      }
+      becameReady =
+          _profileReadinessCues(profile).any((cue) => !cue.ready) &&
+          _profileReadinessCues(saved).every((cue) => cue.ready);
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('個人資訊儲存失敗：${userFacingError(error)}')),
-      );
+      setState(() => _saveError = '個人資訊儲存失敗：${userFacingError(error)}');
+      return;
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+    if (!context.mounted ||
+        !widget.isVisible ||
+        ModalRoute.of(context)?.isCurrent == false) {
+      return;
+    }
+    if (becameReady) {
+      FocusManager.instance.primaryFocus?.unfocus();
+      showDialog<void>(
+        context: context,
+        animationStyle: MediaQuery.disableAnimationsOf(context)
+            ? AnimationStyle.noAnimation
+            : null,
+        builder: (_) => const ProfileReadinessCelebration(),
+      );
+    } else {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已同步更新個人資訊')));
     }
   }
 
@@ -525,10 +616,12 @@ class _ProfileSummary extends StatelessWidget {
     super.key,
     required this.profile,
     required this.onEditItem,
+    required this.onShare,
   });
 
   final UserProfile profile;
   final ValueChanged<String> onEditItem;
+  final VoidCallback onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -536,19 +629,26 @@ class _ProfileSummary extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        CosReveal(child: _ProfileHeroCard(profile: profile)),
-        const SizedBox(height: 14),
         CosReveal(
-          delay: const Duration(milliseconds: 45),
-          child: _ProfileReadinessCard(
+          child: _ProfileHeroCard(profile: profile, onShare: onShare),
+        ),
+        const SizedBox(height: 14),
+        if (_profileReadinessCues(profile).any((cue) => !cue.ready)) ...[
+          CosReveal(
+            delay: const Duration(milliseconds: 45),
+            child: _ProfileReadinessCard(
+              profile: profile,
+              onEditItem: onEditItem,
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        CosReveal(
+          delay: const Duration(milliseconds: 60),
+          child: _ProfileConnectionSignalCard(
             profile: profile,
             onEditItem: onEditItem,
           ),
-        ),
-        const SizedBox(height: 12),
-        CosReveal(
-          delay: const Duration(milliseconds: 60),
-          child: _ProfileConnectionSignalCard(profile: profile),
         ),
         const SizedBox(height: 12),
         CosReveal(
@@ -795,16 +895,16 @@ class _ProfileSkeletonLine extends StatelessWidget {
 }
 
 class _ProfileHeroCard extends StatelessWidget {
-  const _ProfileHeroCard({required this.profile});
+  const _ProfileHeroCard({required this.profile, required this.onShare});
 
   final UserProfile profile;
+  final VoidCallback onShare;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return CosGradientPanel(
-      icon: Icons.theater_comedy_outlined,
-      padding: const EdgeInsets.all(18),
+    return CosCard(
+      padding: const EdgeInsets.all(16),
       child: Column(
         children: [
           Row(
@@ -814,13 +914,11 @@ class _ProfileHeroCard extends StatelessWidget {
                 padding: const EdgeInsets.all(5),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(30),
-                  gradient: LinearGradient(
-                    colors: [scheme.primary, scheme.secondary],
-                  ),
+                  color: scheme.secondary,
                   boxShadow: [CosUi.softShadow(scheme.primary)],
                 ),
                 child: CircleAvatar(
-                  radius: 48,
+                  radius: 36,
                   backgroundColor: scheme.surfaceContainerLowest,
                   backgroundImage: pickedImageProvider(profile.avatarUrl),
                   child: profile.avatarUrl.isEmpty
@@ -833,46 +931,19 @@ class _ProfileHeroCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CosBadge(
-                      label: profile.publicCode.isEmpty ? '名片準備中' : '可交換名片',
-                      icon: Icons.qr_code_2,
-                      highlighted: true,
-                      color: scheme.primary,
-                    ),
-                    const SizedBox(height: 10),
                     Text(
                       profile.nickname.isEmpty ? '尚未設定暱稱' : profile.nickname,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.headlineMedium
+                      style: Theme.of(context).textTheme.headlineSmall
                           ?.copyWith(fontWeight: FontWeight.w900, height: 1.02),
                     ),
                     const SizedBox(height: 10),
-                    _ProfileRoleBadgeWrap(roles: profile.profileRoles),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        CosBadge(
-                          label: profile.regions.isEmpty
-                              ? '尚未設定座標'
-                              : profile.regions.join('、'),
-                          icon: Icons.explore_outlined,
-                        ),
-                        CosBadge(
-                          label: profile.deepPitWorks.isEmpty
-                              ? '深坑待補'
-                              : '${profile.deepPitWorks.length} 個深坑',
-                          icon: Icons.label_important_outline,
-                          color: scheme.secondary,
-                        ),
-                        CosBadge(
-                          label: _genderLabels[profile.gender] ?? '不公開',
-                          icon: Icons.person_outline,
-                          color: scheme.tertiary,
-                        ),
-                      ],
+                    Text(
+                      profile.bio.isEmpty ? '寫下一句自介，讓同好認識你' : profile.bio,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ],
                 ),
@@ -880,16 +951,69 @@ class _ProfileHeroCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: _ProfileRoleBadgeWrap(roles: profile.profileRoles),
+          ),
+          const SizedBox(height: 12),
           _ProfileSignalRow(profile: profile),
           if (profile.publicCode.isNotEmpty) ...[
             const SizedBox(height: 14),
-            _ProfileQrInvite(profile: profile),
+            _ProfileQrInvite(profile: profile, onShare: onShare),
           ],
         ],
       ),
     );
   }
 }
+
+List<_ProfileReadinessCue> _profileReadinessCues(UserProfile profile) => [
+  _ProfileReadinessCue(
+    label: '暱稱',
+    ready: profile.nickname.trim().isNotEmpty,
+    icon: Icons.badge_outlined,
+  ),
+  _ProfileReadinessCue(
+    label: '頭像',
+    ready: profile.avatarUrl.trim().isNotEmpty,
+    icon: Icons.face_retouching_natural_outlined,
+  ),
+  _ProfileReadinessCue(
+    label: '自介',
+    ready: profile.bio.trim().isNotEmpty,
+    icon: Icons.article_outlined,
+  ),
+  _ProfileReadinessCue(
+    label: '身份',
+    ready: profile.profileRoles.isNotEmpty,
+    icon: Icons.diversity_3_outlined,
+  ),
+  _ProfileReadinessCue(
+    label: '座標',
+    ready: profile.regions.isNotEmpty,
+    icon: Icons.explore_outlined,
+  ),
+  _ProfileReadinessCue(
+    label: '跑場',
+    ready: profile.travelRegions.isNotEmpty,
+    icon: Icons.directions_run_outlined,
+  ),
+  _ProfileReadinessCue(
+    label: '深坑',
+    ready: profile.deepPitWorks.isNotEmpty,
+    icon: Icons.label_important_outline,
+  ),
+  _ProfileReadinessCue(
+    label: '淺坑',
+    ready: profile.shallowPitWorks.isNotEmpty,
+    icon: Icons.sell_outlined,
+  ),
+  _ProfileReadinessCue(
+    label: '照片',
+    ready: profile.otherPhotoUrls.isNotEmpty,
+    icon: Icons.photo_library_outlined,
+  ),
+];
 
 class _ProfileReadinessCard extends StatelessWidget {
   const _ProfileReadinessCard({
@@ -903,58 +1027,13 @@ class _ProfileReadinessCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final cues = <_ProfileReadinessCue>[
-      _ProfileReadinessCue(
-        label: '暱稱',
-        ready: profile.nickname.trim().isNotEmpty,
-        icon: Icons.badge_outlined,
-      ),
-      _ProfileReadinessCue(
-        label: '頭像',
-        ready: profile.avatarUrl.trim().isNotEmpty,
-        icon: Icons.face_retouching_natural_outlined,
-      ),
-      _ProfileReadinessCue(
-        label: '自介',
-        ready: profile.bio.trim().isNotEmpty,
-        icon: Icons.article_outlined,
-      ),
-      _ProfileReadinessCue(
-        label: '身份',
-        ready: profile.profileRoles.isNotEmpty,
-        icon: Icons.diversity_3_outlined,
-      ),
-      _ProfileReadinessCue(
-        label: '座標',
-        ready: profile.regions.isNotEmpty,
-        icon: Icons.explore_outlined,
-      ),
-      _ProfileReadinessCue(
-        label: '跑場',
-        ready: profile.travelRegions.isNotEmpty,
-        icon: Icons.directions_run_outlined,
-      ),
-      _ProfileReadinessCue(
-        label: '深坑',
-        ready: profile.deepPitWorks.isNotEmpty,
-        icon: Icons.label_important_outline,
-      ),
-      _ProfileReadinessCue(
-        label: '淺坑',
-        ready: profile.shallowPitWorks.isNotEmpty,
-        icon: Icons.sell_outlined,
-      ),
-      _ProfileReadinessCue(
-        label: '照片',
-        ready: profile.otherPhotoUrls.isNotEmpty,
-        icon: Icons.photo_library_outlined,
-      ),
-    ];
+    final cues = _profileReadinessCues(profile);
     final readyCount = cues.where((cue) => cue.ready).length;
     final progress = readyCount / cues.length;
     final nextCue = cues.where((cue) => !cue.ready).firstOrNull;
 
     return CosCard(
+      color: scheme.tertiaryContainer,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -977,9 +1056,7 @@ class _ProfileReadinessCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      nextCue == null
-                          ? '名片資訊完整，現場交換時更容易被認出。'
-                          : '下一步補上「${nextCue.label}」，同好更快找到開話題的點。',
+                      nextCue == null ? '名片準備好了' : '下一步：${nextCue.label}',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall,
@@ -1073,10 +1150,13 @@ class _ProfileRolePill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final foreground =
+        ThemeData.estimateBrightnessForColor(color) == Brightness.dark
+        ? Colors.white
+        : AppTheme.ink;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.18),
+        color: color,
         borderRadius: BorderRadius.circular(CosUi.radiusMd),
         border: Border.all(color: color.withValues(alpha: 0.62), width: 1.4),
         boxShadow: [CosUi.softShadow(color)],
@@ -1086,13 +1166,13 @@ class _ProfileRolePill extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 22, color: color),
+            Icon(icon, size: 22, color: foreground),
             const SizedBox(width: 7),
             Flexible(
               child: Text(
                 label,
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: scheme.onSurface,
+                  color: foreground,
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -1173,9 +1253,13 @@ class _ProfileReadinessChip extends StatelessWidget {
 }
 
 class _ProfileConnectionSignalCard extends StatelessWidget {
-  const _ProfileConnectionSignalCard({required this.profile});
+  const _ProfileConnectionSignalCard({
+    required this.profile,
+    required this.onEditItem,
+  });
 
   final UserProfile profile;
+  final ValueChanged<String> onEditItem;
 
   @override
   Widget build(BuildContext context) {
@@ -1192,55 +1276,92 @@ class _ProfileConnectionSignalCard extends StatelessWidget {
         : profile.landmine.trim();
 
     return CosCard(
+      key: const ValueKey('profile-signals-edit'),
+      onTap: () => onEditItem('深坑'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const CosSectionHeader(
-            title: '同好訊號',
-            subtitle: '把最容易開場的資訊排在一起',
-            icon: Icons.diversity_3_outlined,
+          Row(
+            children: [
+              const Expanded(
+                child: CosSectionHeader(
+                  title: '同好訊號',
+                  subtitle: '把最容易開場的資訊排在一起',
+                  icon: Icons.diversity_3_outlined,
+                ),
+              ),
+              IconButton(
+                tooltip: '編輯同好訊號',
+                onPressed: () => onEditItem('深坑'),
+                icon: const Icon(Icons.edit_outlined),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
-          _ProfileConnectionHero(
-            title: favoriteWork == null ? '等你補上主坑' : favoriteWork.name,
-            subtitle: favoriteWork == null
-                ? '深坑或淺坑會成為同好最快的開場點'
-                : profile.deepPitWorks.contains(favoriteWork)
-                ? '主坑訊號，最適合拿來找同作品同好'
-                : '淺坑訊號，適合讓同好知道你也有興趣',
-            color: scheme.primary,
+          InkWell(
+            key: const ValueKey('profile-signal-works'),
+            onTap: () => onEditItem(
+              profile.deepPitWorks.isEmpty && profile.shallowPitWorks.isNotEmpty
+                  ? '淺坑'
+                  : '深坑',
+            ),
+            borderRadius: BorderRadius.circular(CosUi.radiusMd),
+            child: _ProfileConnectionHero(
+              title: favoriteWork == null ? '等你補上主坑' : favoriteWork.name,
+              subtitle: favoriteWork == null
+                  ? '深坑或淺坑會成為同好最快的開場點'
+                  : profile.deepPitWorks.contains(favoriteWork)
+                  ? '主坑訊號，最適合拿來找同作品同好'
+                  : '淺坑訊號，適合讓同好知道你也有興趣',
+              color: scheme.primary,
+            ),
           ),
           const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
-                child: _ProfileSignalCueTile(
-                  icon: Icons.directions_run_outlined,
-                  label: '跑場',
-                  value: travelText,
-                  color: scheme.secondary,
+                child: InkWell(
+                  key: const ValueKey('profile-signal-travel'),
+                  onTap: () => onEditItem('跑場'),
+                  borderRadius: BorderRadius.circular(CosUi.radiusMd),
+                  child: _ProfileSignalCueTile(
+                    icon: Icons.directions_run_outlined,
+                    label: '跑場',
+                    value: travelText,
+                    color: scheme.secondary,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: _ProfileSignalCueTile(
-                  icon: Icons.photo_library_outlined,
-                  label: '辨識',
-                  value: profile.otherPhotoUrls.isEmpty
-                      ? '照片待補'
-                      : '${profile.otherPhotoUrls.length} 張代表作',
-                  color: scheme.tertiary,
+                child: InkWell(
+                  key: const ValueKey('profile-signal-photos'),
+                  onTap: () => onEditItem('照片'),
+                  borderRadius: BorderRadius.circular(CosUi.radiusMd),
+                  child: _ProfileSignalCueTile(
+                    icon: Icons.photo_library_outlined,
+                    label: '辨識',
+                    value: profile.otherPhotoUrls.isEmpty
+                        ? '照片待補'
+                        : '${profile.otherPhotoUrls.length} 張代表作',
+                    color: scheme.tertiary,
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          _ProfileSignalCueTile(
-            icon: Icons.warning_amber_outlined,
-            label: '界線',
-            value: boundaryText,
-            color: scheme.error,
-            maxLines: 2,
+          InkWell(
+            key: const ValueKey('profile-signal-boundaries'),
+            onTap: () => onEditItem('雷點'),
+            borderRadius: BorderRadius.circular(CosUi.radiusMd),
+            child: _ProfileSignalCueTile(
+              icon: Icons.warning_amber_outlined,
+              label: '界線',
+              value: boundaryText,
+              color: scheme.error,
+              maxLines: 2,
+            ),
           ),
         ],
       ),
@@ -1297,30 +1418,44 @@ class _BookingPrivacyDashboard extends ConsumerWidget {
             blockedCount: blockedCount,
           ),
           const SizedBox(height: 14),
-          groups.when(
-            data: (items) {
-              if (items.isEmpty) {
-                return const _BookingPrivacyEmptyState();
-              }
-              return Column(
-                children: [
-                  for (final group in items) ...[
-                    _BookingFollowerGroupTile(
-                      group: group,
-                      isPublic: profile.bookingVisibility == 'public',
-                    ),
-                    if (group != items.last) const SizedBox(height: 10),
-                  ],
-                ],
-              );
-            },
-            error: (error, stack) => _BookingPrivacyMessage(
-              icon: Icons.wifi_off_outlined,
-              message: '追蹤資訊載入失敗',
-              actionLabel: '重新整理',
-              onAction: () => ref.invalidate(bookingFollowersProvider),
+          ExpansionTile(
+            key: const PageStorageKey('booking-followers-expanded'),
+            tilePadding: EdgeInsets.zero,
+            title: const Text('追蹤者'),
+            subtitle: Text(
+              followerCount == null
+                  ? '讀取中'
+                  : followerCount == 0
+                  ? '目前沒有追蹤者'
+                  : '$followerCount 筆追蹤資訊',
             ),
-            loading: () => const _BookingPrivacyLoadingState(),
+            children: [
+              groups.when(
+                data: (items) {
+                  if (items.isEmpty) {
+                    return const _BookingPrivacyEmptyState();
+                  }
+                  return Column(
+                    children: [
+                      for (final group in items) ...[
+                        _BookingFollowerGroupTile(
+                          group: group,
+                          isPublic: profile.bookingVisibility == 'public',
+                        ),
+                        if (group != items.last) const SizedBox(height: 10),
+                      ],
+                    ],
+                  );
+                },
+                error: (error, stack) => _BookingPrivacyMessage(
+                  icon: Icons.wifi_off_outlined,
+                  message: '追蹤資訊載入失敗',
+                  actionLabel: '重新整理',
+                  onAction: () => ref.invalidate(bookingFollowersProvider),
+                ),
+                loading: () => const _BookingPrivacyLoadingState(),
+              ),
+            ],
           ),
           const SizedBox(height: 14),
           Divider(color: scheme.outlineVariant.withValues(alpha: 0.5)),
@@ -1388,9 +1523,8 @@ class _BookingPrivacyDashboard extends ConsumerWidget {
     )) {
       return;
     }
-    ref.invalidate(blockedUsersProvider);
-    ref.invalidate(bookingFollowersProvider);
     if (!context.mounted) return;
+    refreshFriendships(ref);
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('已解除封鎖')));
@@ -1500,8 +1634,8 @@ class _BookingFollowerGroupTile extends ConsumerWidget {
     )) {
       return;
     }
-    ref.invalidate(bookingFollowersProvider);
     if (!context.mounted) return;
+    refreshFriendships(ref);
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('已移除追蹤者')));
@@ -1527,9 +1661,8 @@ class _BookingFollowerGroupTile extends ConsumerWidget {
     )) {
       return;
     }
-    ref.invalidate(bookingFollowersProvider);
-    ref.invalidate(blockedUsersProvider);
     if (!context.mounted) return;
+    refreshFriendships(ref);
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('已封鎖使用者')));
@@ -2028,33 +2161,34 @@ class _ProfileSignalRow extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final totalWorks =
         profile.deepPitWorks.length + profile.shallowPitWorks.length;
-    return Row(
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: [
-        Expanded(
-          child: CosMetricTile(
-            icon: Icons.label_important_outline,
-            label: '坑單',
-            value: '$totalWorks',
-            color: scheme.primary,
-          ),
+        CosBadge(
+          icon: Icons.place_outlined,
+          label: profile.regions.isEmpty ? '座標待補' : profile.regions.join('、'),
+          color: scheme.secondary,
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: CosMetricTile(
-            icon: Icons.photo_library_outlined,
-            label: '照片',
-            value: '${profile.otherPhotoUrls.length}',
-            color: scheme.secondary,
-          ),
+        CosBadge(
+          icon: Icons.person_outline,
+          label: _genderLabels[profile.gender] ?? '不公開',
+          color: scheme.secondary,
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: CosMetricTile(
-            icon: Icons.directions_run_outlined,
-            label: '跑場',
-            value: '${profile.travelRegions.length}',
-            color: scheme.tertiary,
-          ),
+        CosBadge(
+          icon: Icons.label_important_outline,
+          label: '坑單 $totalWorks',
+          color: scheme.primary,
+        ),
+        CosBadge(
+          icon: Icons.photo_library_outlined,
+          label: '照片 ${profile.otherPhotoUrls.length}',
+          color: scheme.secondary,
+        ),
+        CosBadge(
+          icon: Icons.directions_run_outlined,
+          label: '跑場 ${profile.travelRegions.length}',
+          color: scheme.tertiary,
         ),
       ],
     );
@@ -2062,63 +2196,19 @@ class _ProfileSignalRow extends StatelessWidget {
 }
 
 class _ProfileQrInvite extends StatelessWidget {
-  const _ProfileQrInvite({required this.profile});
+  const _ProfileQrInvite({required this.profile, required this.onShare});
 
   final UserProfile profile;
+  final VoidCallback onShare;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            scheme.primaryContainer.withValues(alpha: 0.7),
-            scheme.secondaryContainer.withValues(alpha: 0.55),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(22),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: QrImageView(
-                  data: profile.publicCode,
-                  version: QrVersions.auto,
-                  size: 72,
-                  backgroundColor: Colors.white,
-                ),
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '現場交換名片',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '讓同好掃描後追蹤、看坑單和照片牆。',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: profile.publicCode.isEmpty ? null : onShare,
+        icon: const Icon(Icons.qr_code_2_rounded),
+        label: const Text('我的 QRCode'),
       ),
     );
   }
@@ -2253,7 +2343,6 @@ class _EditProfileForm extends StatelessWidget {
     required this.onBookingVisibilityChanged,
     required this.onPickOtherPhoto,
     required this.onRemoveOtherPhoto,
-    required this.onSave,
     required this.saving,
   });
 
@@ -2287,7 +2376,6 @@ class _EditProfileForm extends StatelessWidget {
   final ValueChanged<String> onBookingVisibilityChanged;
   final ValueChanged<int> onPickOtherPhoto;
   final ValueChanged<int> onRemoveOtherPhoto;
-  final VoidCallback onSave;
   final bool saving;
 
   @override
@@ -2408,6 +2496,7 @@ class _EditProfileForm extends StatelessWidget {
         ),
         _ProfileFormSection(
           title: '社群與雷點',
+          initiallyExpanded: initialTarget == '雷點',
           icon: Icons.forum_outlined,
           children: [
             TextField(
@@ -2416,6 +2505,7 @@ class _EditProfileForm extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             TextField(
+              key: fieldKeys['雷點'],
               controller: landmine,
               decoration: const InputDecoration(labelText: '雷點'),
               maxLines: 3,
@@ -2449,14 +2539,6 @@ class _EditProfileForm extends StatelessWidget {
               onRemove: onRemoveOtherPhoto,
             ),
           ],
-        ),
-        const SizedBox(height: 14),
-        SizedBox(
-          width: double.infinity,
-          child: _ProfileSaveButton(
-            saving: saving,
-            onPressed: saving ? null : onSave,
-          ),
         ),
       ],
     );
@@ -2797,14 +2879,9 @@ class _ProfileFormSectionState extends State<_ProfileFormSection> {
                     curve: Curves.easeOutCubic,
                     padding: const EdgeInsets.fromLTRB(16, 12, 14, 12),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          scheme.primaryContainer.withValues(
-                            alpha: _expanded ? 0.42 : 0.22,
-                          ),
-                          scheme.surfaceContainerLowest,
-                        ],
-                      ),
+                      color: _expanded
+                          ? scheme.secondaryContainer
+                          : scheme.surfaceContainerLowest,
                     ),
                     child: Row(
                       children: [

@@ -77,7 +77,7 @@ class _HomeShellPageState extends ConsumerState<HomeShellPage>
       selectedCurrentEventTargetProvider,
     );
     final pages = [
-      const ProfilePage(),
+      ProfilePage(isVisible: _index == 0),
       EventListPage(
         onOpenCurrentEvent: (item) {
           ref
@@ -122,7 +122,7 @@ class _HomeShellPageState extends ConsumerState<HomeShellPage>
         bottomNavigationBar: SafeArea(
           top: false,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 6),
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: scheme.surfaceContainerLowest,
@@ -222,7 +222,7 @@ class _HomeNavButtonState extends State<_HomeNavButton> {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final selected = widget.selected;
     final destination = widget.destination;
-    final accent = selected ? scheme.primary : scheme.onSurfaceVariant;
+    final accent = selected ? scheme.secondary : scheme.onSurfaceVariant;
     return Semantics(
       button: true,
       selected: selected,
@@ -250,12 +250,12 @@ class _HomeNavButtonState extends State<_HomeNavButton> {
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
               decoration: BoxDecoration(
                 color: selected
-                    ? scheme.primaryContainer.withValues(alpha: 0.88)
+                    ? scheme.secondaryContainer
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(CosUi.radiusLg),
                 border: Border.all(
                   color: selected
-                      ? scheme.primary.withValues(alpha: 0.24)
+                      ? scheme.secondary.withValues(alpha: 0.24)
                       : Colors.transparent,
                 ),
               ),
@@ -277,7 +277,7 @@ class _HomeNavButtonState extends State<_HomeNavButton> {
                         opacity: selected ? 1 : 0,
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            color: scheme.primary,
+                            color: scheme.secondary,
                             borderRadius: BorderRadius.circular(99),
                           ),
                           child: const SizedBox(width: 22, height: 3),
@@ -309,7 +309,7 @@ class _HomeNavButtonState extends State<_HomeNavButton> {
                           style: Theme.of(context).textTheme.labelSmall
                               ?.copyWith(
                                 color: selected
-                                    ? scheme.onPrimaryContainer
+                                    ? scheme.onSecondaryContainer
                                     : accent,
                                 fontWeight: selected
                                     ? FontWeight.w900

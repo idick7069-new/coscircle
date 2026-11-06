@@ -1,16 +1,22 @@
 import 'package:flutter/material.dart';
+import '../../safety/presentation/report_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../core/models/circle.dart';
+import '../../../core/config/app_environment.dart';
 import '../../../core/repositories/social_repository.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../core/utils/user_action.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../../shared/widgets/cos_illustration.dart';
 import '../../../core/providers/friendship_providers.dart';
 import 'friendship_widgets.dart';
+import 'partner_discovery_page.dart';
+import '../../../core/providers/partner_discovery_providers.dart';
+import '../../../core/providers/same_work_providers.dart';
 
 final circlesProvider = FutureProvider.autoDispose<List<CircleGroup>>((ref) {
   return ref.watch(socialRepositoryProvider).fetchCircles();
@@ -25,6 +31,7 @@ class SocialPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(partnerDiscoverySessionProvider);
     final circles = ref.watch(circlesProvider);
     final following = ref.watch(followingProvider);
     final incomingCount =
@@ -36,30 +43,38 @@ class SocialPage extends ConsumerWidget {
             .length ??
         0;
 
+    final tabHeight = 40 + MediaQuery.textScalerOf(context).scale(14) * 3;
+
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Column(
         children: [
-          CosPageHeader(
-            title: '同好小圈圈',
-            subtitle: '用 QR、作品和群組把活動現場的人串起來',
-            leading: const CosIconBubble(icon: Icons.diversity_3_outlined),
-            actions: [
-              IconButton.filledTonal(
-                tooltip: '掃描個人 QRCode',
-                onPressed: () => context.push('/scan-profile'),
-                icon: const Icon(Icons.qr_code_scanner),
-              ),
-              IconButton(
-                tooltip: '重新整理',
-                onPressed: () {
-                  ref.invalidate(circlesProvider);
-                  ref.invalidate(followingProvider);
-                  ref.invalidate(friendshipsProvider);
-                },
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: CosPageHeader(
+              title: '同好小圈圈',
+              subtitle: '把場次的相遇，留到下一次',
+              leading: const CosIconBubble(icon: Icons.diversity_3_outlined),
+              actions: [
+                IconButton.filledTonal(
+                  tooltip: '掃描個人 QRCode',
+                  onPressed: () => context.push('/scan-profile'),
+                  icon: const Icon(Icons.qr_code_scanner),
+                ),
+                IconButton(
+                  tooltip: '重新整理',
+                  onPressed: () {
+                    ref.invalidate(circlesProvider);
+                    ref.invalidate(followingProvider);
+                    ref.invalidate(friendshipsProvider);
+                    ref.invalidate(sameWorkUsersProvider);
+                    ref.invalidate(partnerWorksProvider);
+                    ref.invalidate(partnerWorkUsersProvider);
+                  },
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
+            ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
@@ -82,8 +97,15 @@ class SocialPage extends ConsumerWidget {
                 ],
               ),
               child: TabBar(
+                isScrollable: false,
+                tabAlignment: TabAlignment.fill,
+                labelPadding: const EdgeInsets.symmetric(horizontal: 4),
                 onTap: (index) {
                   if (index == 2) ref.invalidate(friendshipsProvider);
+                  if (index == 3) {
+                    ref.invalidate(partnerWorksProvider);
+                    ref.invalidate(partnerWorkUsersProvider);
+                  }
                 },
                 dividerColor: Colors.transparent,
                 indicatorSize: TabBarIndicatorSize.tab,
@@ -98,16 +120,46 @@ class SocialPage extends ConsumerWidget {
                 labelStyle: Theme.of(context).textTheme.labelLarge,
                 padding: const EdgeInsets.all(6),
                 tabs: [
-                  const Tab(text: '小圈圈', icon: Icon(Icons.groups_outlined)),
-                  const Tab(text: '已關注', icon: Icon(Icons.favorite_border)),
                   Tab(
-                    text: '戳友',
+                    height: tabHeight,
+                    icon: const Icon(Icons.groups_outlined),
+                    child: const Text(
+                      '小圈圈',
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                    ),
+                  ),
+                  Tab(
+                    height: tabHeight,
+                    icon: const Icon(Icons.favorite_border),
+                    child: const Text(
+                      '已關注',
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                    ),
+                  ),
+                  Tab(
+                    height: tabHeight,
                     icon: Badge(
                       isLabelVisible: incomingCount > 0,
                       label: Text(
                         incomingCount > 99 ? '99+' : '$incomingCount',
                       ),
                       child: const Icon(Icons.people_outline),
+                    ),
+                    child: const Text(
+                      '戳友',
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                    ),
+                  ),
+                  Tab(
+                    height: tabHeight,
+                    icon: const Icon(Icons.auto_stories_outlined),
+                    child: const Text(
+                      '尋找夥伴',
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
                     ),
                   ),
                 ],
@@ -122,6 +174,10 @@ class SocialPage extends ConsumerWidget {
                   child: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
+                      if (MediaQuery.textScalerOf(context).scale(14) <= 21) ...[
+                        const CosIllustration(height: 110),
+                        const SizedBox(height: 12),
+                      ],
                       _SocialActionGrid(
                         actions: [
                           _SocialAction(
@@ -267,6 +323,7 @@ class SocialPage extends ConsumerWidget {
                   ),
                 ),
                 const FriendshipList(),
+                const PartnerDiscoveryPage(),
               ],
             ),
           ),
@@ -298,8 +355,8 @@ class SocialPage extends ConsumerWidget {
     )) {
       return;
     }
-    ref.invalidate(followingProvider);
     if (!context.mounted) return;
+    refreshFriendships(ref);
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('已取消關注')));
@@ -354,8 +411,8 @@ class SocialPage extends ConsumerWidget {
     )) {
       return;
     }
-    ref.invalidate(circlesProvider);
     if (!context.mounted) return;
+    refreshFriendships(ref);
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('已移除小圈圈成員')));
@@ -389,8 +446,8 @@ class SocialPage extends ConsumerWidget {
     )) {
       return;
     }
-    ref.invalidate(circlesProvider);
     if (!context.mounted) return;
+    refreshFriendships(ref);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(circle.isOwner ? '已解散小圈圈' : '已離開小圈圈')),
     );
@@ -508,8 +565,9 @@ class _CircleDialogState extends ConsumerState<_CircleDialog> {
                               } else {
                                 await repository.joinCircle(value);
                               }
-                              ref.invalidate(circlesProvider);
-                              if (context.mounted) Navigator.pop(context);
+                              if (!context.mounted) return;
+                              refreshFriendships(ref);
+                              Navigator.pop(context);
                             } catch (error) {
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -576,6 +634,8 @@ class _EmptyActionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const CosIllustration(height: 120),
+          const SizedBox(height: 12),
           CosIconBubble(icon: icon, color: scheme.primary),
           const SizedBox(height: 10),
           Text(
@@ -616,44 +676,10 @@ class _SocialSignalOverview extends StatelessWidget {
 
     return CosGradientPanel(
       icon: Icons.diversity_3_outlined,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              CosIconBubble(
-                icon: Icons.auto_awesome,
-                color: scheme.primary,
-                size: 42,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '同好訊號',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '先整理小圈圈和關注名單，活動現場更快找到朋友。',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
           LayoutBuilder(
             builder: (context, constraints) {
               final metrics = [
@@ -676,7 +702,7 @@ class _SocialSignalOverview extends StatelessWidget {
                   color: scheme.tertiary,
                 ),
               ];
-              if (constraints.maxWidth < 360) {
+              if (MediaQuery.textScalerOf(context).scale(14) > 21) {
                 return Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -723,12 +749,11 @@ class _SocialSignalMetric extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(CosUi.radiusMd),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
         child: Row(
           children: [
             Icon(icon, color: color, size: 18),
@@ -949,15 +974,11 @@ class _CircleCardState extends State<_CircleCard> {
                     curve: Curves.easeOutCubic,
                     padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          (circle.isOwner
-                                  ? scheme.primaryContainer
-                                  : scheme.secondaryContainer)
-                              .withValues(alpha: _expanded ? 0.44 : 0.24),
-                          scheme.surfaceContainerLowest,
-                        ],
-                      ),
+                      color: _expanded
+                          ? (circle.isOwner
+                                ? scheme.primaryContainer
+                                : scheme.secondaryContainer)
+                          : scheme.surfaceContainerLowest,
                     ),
                     child: Row(
                       children: [
@@ -1032,6 +1053,14 @@ class _CircleCardState extends State<_CircleCard> {
                           onSelected: (value) {
                             if (value == 'edit') widget.onEdit?.call();
                             if (value == 'leave') widget.onLeave();
+                            if (accountSafetyEnabled && value == 'report') {
+                              showReportSheet(
+                                context,
+                                targetType: 'circle',
+                                circleId: circle.id,
+                                targetLabel: circle.name,
+                              );
+                            }
                           },
                           itemBuilder: (context) => [
                             if (widget.onEdit != null)
@@ -1043,6 +1072,11 @@ class _CircleCardState extends State<_CircleCard> {
                               value: 'leave',
                               child: Text(circle.isOwner ? '解散' : '離開'),
                             ),
+                            if (accountSafetyEnabled && !circle.isOwner)
+                              const PopupMenuItem(
+                                value: 'report',
+                                child: Text('檢舉小圈圈'),
+                              ),
                           ],
                         ),
                         AnimatedRotation(
@@ -1069,7 +1103,7 @@ class _CircleCardState extends State<_CircleCard> {
                 alignment: Alignment.topCenter,
                 child: _expanded
                     ? Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
                         child: Column(
                           children: [
                             _CircleInviteBand(
@@ -1189,7 +1223,7 @@ class _CircleMemberRow extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(18),
-          onTap: onOpen,
+          onTap: member.isBlocked ? null : onOpen,
           child: Ink(
             decoration: BoxDecoration(
               color: scheme.surfaceContainerHighest.withValues(alpha: 0.42),
@@ -1275,12 +1309,7 @@ class _CircleInviteBand extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return DecoratedBox(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            scheme.primaryContainer.withValues(alpha: 0.62),
-            scheme.secondaryContainer.withValues(alpha: 0.5),
-          ],
-        ),
+        color: scheme.tertiaryContainer,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.7)),
       ),
@@ -1507,7 +1536,8 @@ class _SocialActionGrid extends StatelessWidget {
               ),
             ),
         ];
-        if (constraints.maxWidth < 360) {
+        if (constraints.maxWidth < 320 ||
+            MediaQuery.textScalerOf(context).scale(14) > 21) {
           return Wrap(
             spacing: 10,
             runSpacing: 10,

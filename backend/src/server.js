@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import crypto from 'node:crypto';
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -10,7 +9,8 @@ import {
   importEventsFromHtml,
 } from '../scripts/scrape-events.js';
 import { createPool } from './db.js';
-import { sendRecognitionPush } from './push-service.js';
+import { sendRecognitionPush, sendMeetupPush, sendRecognitionReplyPush } from './push-service.js';
+import { createEventNotifications } from './event-notifications.js';
 import { eventListQuery } from './event-queries.js';
 import { sharedLocationsQuery, updateLocationCoordinatesQuery } from './location-queries.js';
 import { createEventSyncService } from './event-sync-service.js';
@@ -18,14 +18,26 @@ import { fetchLineProfile } from './line-auth.js';
 import { ensureAuthIdentities, linkLineIdentity, authIdentityUserQuery } from './auth-identities.js';
 import { inTransaction } from './db-transaction.js';
 import { ensureFriendships, registerFriendRoutes } from './friendships.js';
+import { registerSameWorkRoutes } from './same-works.js';
 import {createMailService} from './mail-service.js';
-import {createEmailAccountService, emailActionTableSql, registerEmailAccountRoutes} from './email-account-service.js';
+import {createEmailAccountService, emailActionTableSql, registerEmailAccountRoutes, normalizeAccountEmail} from './email-account-service.js';
+import {createLegalService, registerLegalRoutes} from './legal-consent.js';
+import {communityConsentGuard} from './community-consent.js';
+import {registerReportRoutes, registerReportAdminRoutes, eraseReportPersonalData, purgeExpiredReportEvidence} from './content-reports.js';
+import {createAccountDeletionService, registerAccountDeletionRoutes} from './account-deletion.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadDir = path.resolve(__dirname, '..', 'uploads');
 const app = express();
 app.set('trust proxy', 'loopback');
 const pool = createPool();
+const legalService = createLegalService(pool);
+const accountDeletionService = createAccountDeletionService(pool, {
+  verifyPassword, fetchLineProfile, uploadDir,
+  publicUploadOrigins: ['https://coscircle.app', 'https://34.187.168.222'],
+  deleteAdditionalUserData: eraseReportPersonalData,
+});
+const eventNotifications = createEventNotifications(pool, {sendMeetupPush, sendRecognitionReplyPush});
 const devUserId = 1;
 const scrypt = promisify(crypto.scrypt);
 const isProduction = process.env.NODE_ENV === 'production';
@@ -76,7 +88,7 @@ function createRateLimiter({ windowMs, max }) {
   const buckets = new Map();
   return (req, res, next) => {
     const now = Date.now();
-    const userKey = req.user?.id ?? req.ip ?? 'unknown';
+    const userKey = req.userId ?? req.user?.id ?? req.ip ?? 'unknown';
     const key = `${req.method}:${req.baseUrl}:${userKey}`;
     const current = buckets.get(key);
     if (!current || current.resetAt <= now) {
@@ -170,7 +182,7 @@ app.use('/api/recognitions', createRateLimiter({ windowMs: 15 * 60 * 1000, max: 
 
 app.post('/api/auth/register', async (req, res, next) => {
   try {
-    const email = normalizeEmail(req.body.email);
+    const email = normalizeAccountEmail(req.body.email);
     const password = String(req.body.password ?? '');
     const nickname = String(req.body.nickname ?? '').trim() || '圈圈新朋友';
     if (!email || password.length < 8) {
@@ -400,12 +412,20 @@ app.get('/api/me', async (req, res, next) => {
   }
 });
 
+registerLegalRoutes(app, legalService);
+app.use('/api/me/delete-account', createRateLimiter({windowMs: 15 * 60 * 1000, max: 5}));
+registerAccountDeletionRoutes(app, accountDeletionService, {production: isProduction});
+app.use('/api/reports', createRateLimiter({windowMs: 60 * 60 * 1000, max: 20}));
+registerReportRoutes(app, pool);
+app.use(communityConsentGuard(legalService));
+
 app.use('/api/me/email-verification', createRateLimiter({windowMs: 15 * 60 * 1000, max: 10}));
 registerEmailAccountRoutes(app, emailAccountService, {privateRoutes: true, production: isProduction});
 
 app.use('/api/friend-invites', createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30 }));
 app.use('/api/friend-requests', createRateLimiter({ windowMs: 15 * 60 * 1000, max: 60 }));
 registerFriendRoutes(app, pool);
+registerSameWorkRoutes(app, pool);
 
 app.get('/api/me/auth-identities', async (req, res, next) => {
   try {
@@ -419,13 +439,15 @@ app.post('/api/me/auth-identities/line', async (req, res, next) => {
   try {
     if (isProduction && !req.secure) return res.status(426).json({error: 'secure_transport_required'});
     const password = typeof req.body.password === 'string' ? req.body.password : '';
-    if (!password || password.length > 1024) return res.status(401).json({error: 'reauthentication_required'});
+    if (!password || password.length > 1024) return res.status(403).json({error: 'reauthentication_required'});
     const profile = await fetchLineProfile(req.body.accessToken);
     res.json(await linkLineIdentity(pool, {userId: req.userId, lineUserId: profile.id, password, verifyPassword}));
   } catch (error) {
     if (['invalid_social_token', 'line_login_not_configured', 'line_login_unavailable',
       'account_suspended', 'reauthentication_required', 'line_identity_already_linked'].includes(error.code)) {
-      return res.status(error.status ?? 401).json({error: error.code});
+      const status = ['invalid_social_token', 'reauthentication_required'].includes(error.code)
+        ? 403 : (error.status ?? 400);
+      return res.status(status).json({error: error.code});
     }
     next(error);
   }
@@ -609,9 +631,9 @@ app.post('/api/uploads/image', async (req, res, next) => {
       return;
     }
 
-    await fs.mkdir(uploadDir, { recursive: true });
-    const fileName = `${crypto.randomUUID()}.${extension}`;
-    await fs.writeFile(path.join(uploadDir, fileName), bytes);
+    const {fileName} = await accountDeletionService.storeUpload({
+      userId: req.userId, bytes, extension,
+    });
     res.status(201).json({ url: publicUploadUrl(req, fileName) });
   } catch (error) {
     next(error);
@@ -671,6 +693,7 @@ app.get('/api/events', async (req, res, next) => {
 });
 
 app.use('/api/admin', requireAdmin);
+registerReportAdminRoutes(app, pool);
 
 app.get('/api/admin/stats', async (_req, res, next) => {
   try {
@@ -686,6 +709,8 @@ app.get('/api/admin/stats', async (_req, res, next) => {
     const [[locations]] = await pool.query('SELECT COUNT(*) AS count FROM shared_locations');
     const [[circles]] = await pool.query('SELECT COUNT(*) AS count FROM circles');
     const [[submissions]] = await pool.query('SELECT COUNT(*) AS count FROM event_submissions');
+    const [[uploadCleanup]] = await pool.query('SELECT COUNT(*) AS count FROM account_upload_cleanup');
+    const [[legacyUploadReview]] = await pool.query('SELECT COUNT(*) AS count FROM account_legacy_upload_review');
     res.json({
       users: users.count,
       suspendedUsers: suspendedUsers.count,
@@ -695,6 +720,8 @@ app.get('/api/admin/stats', async (_req, res, next) => {
       sharedLocations: locations.count,
       circles: circles.count,
       eventSubmissions: submissions.count,
+      uploadCleanup: uploadCleanup.count,
+      legacyUploadReview: legacyUploadReview.count,
     });
   } catch (error) {
     next(error);
@@ -1050,17 +1077,9 @@ app.put('/api/admin/users/:userId/status', async (req, res, next) => {
       res.status(400).json({ error: 'cannot_suspend_self' });
       return;
     }
-    const [result] = await pool.execute(
-      `UPDATE users
-          SET account_status = ?,
-              session_token = CASE WHEN ? = 'suspended' THEN NULL ELSE session_token END
-        WHERE id = ?`,
-      [status, status, userId],
-    );
-    if (result.affectedRows === 0) {
-      res.status(404).json({ error: 'user_not_found' });
-      return;
-    }
+    await accountDeletionService.updateAdminAccount({
+      userId, adminUserId: req.userId, sessionToken: bearerToken(req), status,
+    });
     await recordAdminAction(req, `user.${status}`, userId);
     res.status(204).end();
   } catch (error) {
@@ -1075,21 +1094,17 @@ app.put('/api/admin/users/:userId/admin', async (req, res, next) => {
       res.status(400).json({ error: 'invalid_user_id' });
       return;
     }
+    if (![true, false, 0, 1].includes(req.body.isAdmin)) {
+      return res.status(400).json({error: 'invalid_account_update'});
+    }
     const isAdmin = req.body.isAdmin === true || req.body.isAdmin === 1;
     if (userId === Number(req.userId) && !isAdmin) {
       res.status(400).json({ error: 'cannot_revoke_self_admin' });
       return;
     }
-    const [result] = await pool.execute(
-      `UPDATE users
-          SET is_admin = ?
-        WHERE id = ?`,
-      [isAdmin, userId],
-    );
-    if (result.affectedRows === 0) {
-      res.status(404).json({ error: 'user_not_found' });
-      return;
-    }
+    await accountDeletionService.updateAdminAccount({
+      userId, adminUserId: req.userId, sessionToken: bearerToken(req), isAdmin,
+    });
     await recordAdminAction(
       req,
       isAdmin ? 'user.grant_admin' : 'user.revoke_admin',
@@ -1112,13 +1127,9 @@ app.delete('/api/admin/users/:userId', async (req, res, next) => {
       res.status(400).json({ error: 'cannot_delete_self' });
       return;
     }
-    const [result] = await pool.execute('DELETE FROM users WHERE id = ?', [
-      userId,
-    ]);
-    if (result.affectedRows === 0) {
-      res.status(404).json({ error: 'user_not_found' });
-      return;
-    }
+    await accountDeletionService.adminDelete({
+      userId, adminUserId: req.userId, sessionToken: bearerToken(req),
+    });
     await recordAdminAction(req, 'user.delete', userId);
     res.status(204).end();
   } catch (error) {
@@ -1252,9 +1263,14 @@ app.get('/api/circles', async (req, res, next) => {
       const [members] = await pool.execute(
         `SELECT circle_members.circle_id AS circleId,
                 users.id AS userId,
-                users.public_code AS publicCode,
-                users.nickname,
-                users.avatar_url AS avatarUrl,
+                CASE WHEN viewer_blocks.blocked_user_id IS NOT NULL OR member_blocks.blocker_user_id IS NOT NULL OR users.account_status <> 'active'
+                  THEN '' ELSE users.public_code END AS publicCode,
+                CASE WHEN viewer_blocks.blocked_user_id IS NOT NULL OR member_blocks.blocker_user_id IS NOT NULL OR users.account_status <> 'active'
+                  THEN '已隱藏的成員' ELSE users.nickname END AS nickname,
+                CASE WHEN viewer_blocks.blocked_user_id IS NOT NULL OR member_blocks.blocker_user_id IS NOT NULL OR users.account_status <> 'active'
+                  THEN '' ELSE users.avatar_url END AS avatarUrl,
+                CASE WHEN viewer_blocks.blocked_user_id IS NOT NULL OR member_blocks.blocker_user_id IS NOT NULL OR users.account_status <> 'active'
+                  THEN TRUE ELSE FALSE END AS isBlocked,
                 CASE WHEN circles.owner_user_id = users.id THEN TRUE ELSE FALSE END AS isOwner
            FROM circle_members
          INNER JOIN users
@@ -1270,13 +1286,14 @@ app.get('/api/circles', async (req, res, next) => {
           WHERE circle_members.circle_id IN (${placeholders})
             AND (
               users.id = ?
+              OR circles.owner_user_id = ?
               OR (
                 viewer_blocks.blocked_user_id IS NULL
                 AND member_blocks.blocker_user_id IS NULL
               )
             )
           ORDER BY isOwner DESC, circle_members.created_at ASC`,
-        [req.userId, req.userId, ...circleIds, req.userId],
+        [req.userId, req.userId, ...circleIds, req.userId, req.userId],
       );
       for (const member of members) {
         const key = String(member.circleId);
@@ -1460,6 +1477,7 @@ app.get('/api/following', async (req, res, next) => {
            ON their_blocks.blocker_user_id = users.id
           AND their_blocks.blocked_user_id = ?
         WHERE follows.follower_user_id = ?
+          AND users.account_status = 'active'
           AND my_blocks.blocked_user_id IS NULL
           AND their_blocks.blocker_user_id IS NULL
         ORDER BY follows.created_at DESC`,
@@ -1771,6 +1789,7 @@ app.get('/api/events/:eventId/participants', async (req, res, next) => {
          LEFT JOIN works
            ON works.id = event_bookings.work_id
         WHERE event_bookings.event_id = ?
+          AND users.account_status = 'active'
           AND (
             users.id = ?
             OR (
@@ -2059,8 +2078,8 @@ app.get('/api/events/:eventId/meetups', async (req, res, next) => {
               event_meeting_points.latitude,
               event_meeting_points.longitude,
               event_meeting_points.description,
-              DATE_FORMAT(event_meeting_points.meet_at, '%Y-%m-%dT%H:%i:%s') AS meetAt,
-              DATE_FORMAT(event_meeting_points.created_at, '%Y-%m-%dT%H:%i:%s') AS createdAt,
+              DATE_FORMAT(event_meeting_points.meet_at, '%Y-%m-%dT%H:%i:%sZ') AS meetAt,
+              DATE_FORMAT(event_meeting_points.created_at, '%Y-%m-%dT%H:%i:%sZ') AS createdAt,
               CASE WHEN event_meeting_points.creator_user_id = ? THEN TRUE ELSE FALSE END AS isMine
          FROM event_meeting_points
          INNER JOIN circles
@@ -2071,9 +2090,15 @@ app.get('/api/events/:eventId/meetups', async (req, res, next) => {
            ON circle_members.circle_id = event_meeting_points.circle_id
           AND circle_members.user_id = ?
         WHERE event_meeting_points.event_id = ?
+          AND DATE(CONVERT_TZ(event_meeting_points.meet_at, '+00:00', '+08:00')) = DATE(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+08:00'))
+          AND NOT EXISTS (
+            SELECT 1 FROM user_blocks b
+            WHERE (b.blocker_user_id = ? AND b.blocked_user_id = event_meeting_points.creator_user_id)
+               OR (b.blocker_user_id = event_meeting_points.creator_user_id AND b.blocked_user_id = ?)
+          )
         ORDER BY event_meeting_points.meet_at ASC,
                  event_meeting_points.created_at DESC`,
-      [req.userId, req.userId, req.params.eventId],
+      [req.userId, req.userId, req.params.eventId, req.userId, req.userId],
     );
     res.json(rows);
   } catch (error) {
@@ -2112,7 +2137,10 @@ app.post('/api/events/:eventId/meetups', async (req, res, next) => {
         normalizeDateTimeForSql(meetAt),
       ],
     );
-    res.status(201).json({ id: result.insertId });
+    res.status(201).json({ id: result.insertId, push: {queued: true} });
+    void eventNotifications.meetupCreated({
+      meetupId: result.insertId, eventId: req.params.eventId, circleId, creatorUserId: req.userId,
+    });
   } catch (error) {
     next(error);
   }
@@ -2207,9 +2235,9 @@ app.get('/api/events/:eventId/recognitions', async (req, res, next) => {
                 ELSE event_recognition_requests.status
               END AS status,
               event_recognition_requests.response_message AS responseMessage,
-              DATE_FORMAT(event_recognition_requests.created_at, '%Y-%m-%dT%H:%i:%s') AS createdAt,
-              DATE_FORMAT(event_recognition_requests.expires_at, '%Y-%m-%dT%H:%i:%s') AS expiresAt,
-              DATE_FORMAT(event_recognition_requests.responded_at, '%Y-%m-%dT%H:%i:%s') AS respondedAt,
+              DATE_FORMAT(event_recognition_requests.created_at, '%Y-%m-%dT%H:%i:%sZ') AS createdAt,
+              DATE_FORMAT(event_recognition_requests.expires_at, '%Y-%m-%dT%H:%i:%sZ') AS expiresAt,
+              DATE_FORMAT(event_recognition_requests.responded_at, '%Y-%m-%dT%H:%i:%sZ') AS respondedAt,
               CASE WHEN event_recognition_requests.requester_user_id = ? THEN TRUE ELSE FALSE END AS isRequester,
               CASE WHEN event_recognition_requests.target_user_id = ? THEN TRUE ELSE FALSE END AS isTarget
          FROM event_recognition_requests
@@ -2224,6 +2252,10 @@ app.get('/api/events/:eventId/recognitions', async (req, res, next) => {
            ON target_blocks.blocker_user_id = event_recognition_requests.target_user_id
           AND target_blocks.blocked_user_id = event_recognition_requests.requester_user_id
         WHERE event_recognition_requests.event_id = ?
+          AND event_recognition_requests.day_index = (
+            SELECT DATEDIFF(DATE(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+08:00')), start_date) + 1
+            FROM events WHERE id = ?
+          )
           AND (
             event_recognition_requests.requester_user_id = ?
             OR event_recognition_requests.target_user_id = ?
@@ -2231,7 +2263,7 @@ app.get('/api/events/:eventId/recognitions', async (req, res, next) => {
           AND requester_blocks.blocked_user_id IS NULL
           AND target_blocks.blocker_user_id IS NULL
         ORDER BY event_recognition_requests.created_at DESC`,
-      [req.userId, req.userId, req.params.eventId, req.userId, req.userId],
+      [req.userId, req.userId, req.params.eventId, req.params.eventId, req.userId, req.userId],
     );
     res.json(rows);
   } catch (error) {
@@ -2317,18 +2349,26 @@ app.post('/api/recognitions/:requestId/respond', async (req, res, next) => {
       return;
     }
     res.status(204).end();
+    void eventNotifications.recognitionResponded({
+      requestId: req.params.requestId, targetUserId: req.userId, status,
+    });
   } catch (error) {
     next(error);
   }
 });
 
 app.use((error, _req, res, _next) => {
+  if (['last_admin', 'cannot_delete_self', 'cannot_suspend_self', 'cannot_revoke_self_admin',
+    'invalid_user_id', 'invalid_account_update', 'invalid_account_status',
+    'authentication_required', 'admin_required', 'user_not_found'].includes(error.code)) {
+    return res.status(error.status ?? 400).json({error: error.code});
+  }
   if (error.code === 'event_sync_busy') return res.status(409).json({error: 'event_sync_busy'});
   if (error?.message === 'cors_origin_not_allowed') {
     res.status(403).json({ error: 'cors_origin_not_allowed' });
     return;
   }
-  console.error(error);
+  console.error('[api] request failed', {code: error.code ?? 'unknown', method: _req.method});
   res.status(500).json({ error: 'internal_server_error' });
 });
 
@@ -2340,6 +2380,23 @@ await ensureCollaborationTables();
 await ensureAuthIdentities(pool);
 await pool.execute(emailActionTableSql);
 await ensureFriendships(pool);
+for (const table of ['account_uploads', 'account_upload_cleanup', 'account_legacy_upload_review', 'user_legal_consents',
+  'content_reports', 'content_report_reviews']) {
+  await pool.query(`SELECT 1 FROM ${table} LIMIT 0`);
+}
+async function maintainAccountSafety() {
+  await accountDeletionService.cleanupUploads();
+  await purgeExpiredReportEvidence(pool);
+}
+await maintainAccountSafety();
+let maintainingAccountSafety = false;
+setInterval(async () => {
+  if (maintainingAccountSafety) return;
+  maintainingAccountSafety = true;
+  try { await maintainAccountSafety(); }
+  catch { console.warn('[account-safety] cleanup needs retry'); }
+  finally { maintainingAccountSafety = false; }
+}, 10 * 60 * 1000).unref();
 await eventSyncService.initialize();
 if (eventScraperEnabled) scheduleDailyEventImport();
 
@@ -2953,6 +3010,7 @@ async function fetchUserProfileByPublicCode(publicCode, viewerUserId = null) {
          ON follows.follower_user_id = ?
         AND follows.followed_user_id = users.id
       WHERE users.public_code = ?
+        AND users.account_status = 'active'
       LIMIT 1`,
     [viewerUserId ?? 0, publicCode],
   );

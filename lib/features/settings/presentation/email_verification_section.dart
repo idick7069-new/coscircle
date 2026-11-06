@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/repositories/auth_repository.dart';
 import '../../../core/utils/error_message.dart';
+import '../../../shared/widgets/cos_ui.dart';
 
 final authEmailStatusProvider = FutureProvider.autoDispose<AuthEmailStatus>(
   (ref) => ref.watch(authRepositoryProvider).emailStatus(),
@@ -83,10 +84,13 @@ class _EmailVerificationSectionState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             ListTile(
-              leading: Icon(
-                status.verified
+              leading: CosIconBubble(
+                icon: status.verified
                     ? Icons.verified_outlined
                     : Icons.email_outlined,
+                color: status.verified
+                    ? Theme.of(context).colorScheme.secondary
+                    : Theme.of(context).colorScheme.primary,
               ),
               title: const Text('Email／密碼'),
               subtitle: Text(

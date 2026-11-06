@@ -8,6 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/config/app_environment.dart';
 import '../../../core/providers/theme_mode_provider.dart';
 import '../../../core/repositories/auth_repository.dart';
 import '../../../core/repositories/profile_repository.dart';
@@ -25,6 +26,7 @@ import '../../../shared/widgets/cos_ui.dart';
 import '../../admin/presentation/admin_dashboard_page.dart';
 import 'theme_settings_page.dart';
 import 'login_methods_page.dart';
+import '../../safety/presentation/delete_account_page.dart';
 
 const _bugReportUrl = String.fromEnvironment('BUG_REPORT_URL');
 const _feedbackFormUrl = String.fromEnvironment(
@@ -45,7 +47,7 @@ class SettingsPage extends ConsumerWidget {
       children: [
         const CosPageHeader(
           title: '設定',
-          subtitle: '管理主題、連線、投稿與帳號狀態',
+          subtitle: '照自己的步調，準備下一場',
           leading: CosIconBubble(icon: Icons.tune_outlined),
         ),
         const SizedBox(height: 8),
@@ -88,7 +90,7 @@ class SettingsPage extends ConsumerWidget {
             _SettingsAction(
               icon: Icons.palette_outlined,
               title: '介面主題',
-              subtitle: '切換星夜暗色或社群亮色',
+              subtitle: '亮色與夜間模式',
               trailing: CosBadge(
                 label: themeMode.label,
                 icon: themeMode == CosCircleThemeMode.neonDark
@@ -195,15 +197,42 @@ class SettingsPage extends ConsumerWidget {
           ],
         ),
         _SettingsSection(
+          title: '條款與隱私',
+          children: [
+            _SettingsAction(
+              icon: Icons.privacy_tip_outlined,
+              title: '隱私政策',
+              subtitle: '資料使用、分享與刪除',
+              onTap: () => context.push('/privacy'),
+            ),
+            _SettingsAction(
+              icon: Icons.description_outlined,
+              title: '服務條款',
+              subtitle: '社群規範與使用約定',
+              onTap: () => context.push('/terms'),
+            ),
+          ],
+        ),
+        _SettingsSection(
           title: '帳號',
           children: [
-            if (ref.watch(lineLoginEnabledProvider))
+            _SettingsAction(
+              icon: Icons.manage_accounts_outlined,
+              title: '登入方式',
+              subtitle: ref.watch(lineLoginEnabledProvider)
+                  ? 'Email／密碼與 LINE'
+                  : 'Email／密碼與信箱驗證',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const LoginMethodsPage()),
+              ),
+            ),
+            if (accountSafetyEnabled)
               _SettingsAction(
-                icon: Icons.manage_accounts_outlined,
-                title: '登入方式',
-                subtitle: 'Email／密碼與 LINE',
+                icon: Icons.person_remove_outlined,
+                title: '刪除帳號',
+                subtitle: '永久刪除帳號與相關資料',
                 onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const LoginMethodsPage()),
+                  MaterialPageRoute(builder: (_) => const DeleteAccountPage()),
                 ),
               ),
             _SettingsAction(
@@ -211,18 +240,22 @@ class SettingsPage extends ConsumerWidget {
               title: '登出',
               subtitle: '離開目前帳號',
               onTap: () async {
+                var loggedOut = false;
                 if (!await runUserAction(context, () async {
+                  final api = ref.read(apiClientProvider);
+                  final version = api.sessionVersion;
                   final push = ref.read(pushNotificationServiceProvider);
                   final token = push.registeredToken;
-                  await ref
-                      .read(authRepositoryProvider)
-                      .logout(pushToken: token);
                   try {
                     await push.dispose();
                   } catch (_) {
                     // A plugin cleanup failure must not keep the account signed in.
                   }
-                  await push.deleteDeviceToken();
+                  if (!context.mounted || api.sessionVersion != version) return;
+                  loggedOut = await ref
+                      .read(authRepositoryProvider)
+                      .logout(pushToken: token);
+                  if (!loggedOut || !context.mounted) return;
                   ref.invalidate(profileRepositoryProvider);
                   ref.invalidate(eventRepositoryProvider);
                   ref.invalidate(socialRepositoryProvider);
@@ -230,7 +263,7 @@ class SettingsPage extends ConsumerWidget {
                 })) {
                   return;
                 }
-                if (context.mounted) context.go('/login');
+                if (loggedOut && context.mounted) context.go('/login');
               },
             ),
           ],
@@ -243,6 +276,8 @@ class SettingsPage extends ConsumerWidget {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
       builder: (context) => const _SubmitEventSheet(),
     );
   }
@@ -407,6 +442,55 @@ class _SubmitEventSheetState extends ConsumerState<_SubmitEventSheet> {
   final _detailedAddress = TextEditingController();
   final _description = TextEditingController();
   bool _submitting = false;
+  bool _confirmingDiscard = false;
+  late final List<String> _initialDraft;
+
+  List<TextEditingController> get _fields => [
+    _name,
+    _startDate,
+    _endDate,
+    _venue,
+    _detailedAddress,
+    _description,
+  ];
+
+  bool get _dirty =>
+      _fields.indexed.any((entry) => entry.$2.text != _initialDraft[entry.$1]);
+
+  @override
+  void initState() {
+    super.initState();
+    _initialDraft = _fields.map((field) => field.text).toList();
+    for (final field in _fields) {
+      field.addListener(_draftChanged);
+    }
+  }
+
+  void _draftChanged() => setState(() {});
+
+  Future<void> _confirmDiscard() async {
+    if (_submitting || _confirmingDiscard) return;
+    _confirmingDiscard = true;
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('放棄這次投稿？'),
+        content: const Text('尚未送出的內容將不會保留。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('繼續編輯'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('放棄'),
+          ),
+        ],
+      ),
+    );
+    _confirmingDiscard = false;
+    if (discard == true && mounted) Navigator.pop(context);
+  }
 
   @override
   void dispose() {
@@ -421,77 +505,93 @@ class _SubmitEventSheetState extends ConsumerState<_SubmitEventSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          16,
-          16,
-          MediaQuery.of(context).viewInsets.bottom + 16,
-        ),
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            const CosSectionHeader(
-              title: '投稿活動',
-              subtitle: '把你知道的 cosplay / 同人場次補進資料庫',
-              icon: Icons.add_location_alt_outlined,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _name,
-              decoration: const InputDecoration(labelText: '活動名稱'),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _startDate,
-                    readOnly: true,
-                    decoration: const InputDecoration(
-                      labelText: '開始日期',
-                      suffixIcon: Icon(Icons.calendar_month),
-                    ),
-                    onTap: () => _pickDate(_startDate),
-                  ),
+    return PopScope(
+      canPop: !_dirty && !_submitting,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _confirmDiscard();
+      },
+      child: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            16,
+            16,
+            MediaQuery.of(context).viewInsets.bottom + 16,
+          ),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              Align(
+                alignment: Alignment.centerRight,
+                child: IconButton(
+                  tooltip: '關閉投稿',
+                  onPressed: _submitting
+                      ? null
+                      : () => Navigator.maybePop(context),
+                  icon: const Icon(Icons.close),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _endDate,
-                    readOnly: true,
-                    decoration: const InputDecoration(
-                      labelText: '結束日期',
-                      suffixIcon: Icon(Icons.calendar_month),
+              ),
+              const CosSectionHeader(
+                title: '投稿活動',
+                subtitle: '把你知道的 cosplay / 同人場次補進資料庫',
+                icon: Icons.add_location_alt_outlined,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _name,
+                decoration: const InputDecoration(labelText: '活動名稱'),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _startDate,
+                      readOnly: true,
+                      decoration: const InputDecoration(
+                        labelText: '開始日期',
+                        suffixIcon: Icon(Icons.calendar_month),
+                      ),
+                      onTap: () => _pickDate(_startDate),
                     ),
-                    onTap: () => _pickDate(_endDate),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _venue,
-              decoration: const InputDecoration(labelText: '活動地點'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _detailedAddress,
-              decoration: const InputDecoration(labelText: '詳細地址'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _description,
-              decoration: const InputDecoration(labelText: '活動說明'),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 16),
-            _SubmitEventActionBar(
-              submitting: _submitting,
-              onSubmit: _submitting ? null : _submit,
-            ),
-          ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _endDate,
+                      readOnly: true,
+                      decoration: const InputDecoration(
+                        labelText: '結束日期',
+                        suffixIcon: Icon(Icons.calendar_month),
+                      ),
+                      onTap: () => _pickDate(_endDate),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _venue,
+                decoration: const InputDecoration(labelText: '活動地點'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _detailedAddress,
+                decoration: const InputDecoration(labelText: '詳細地址'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _description,
+                decoration: const InputDecoration(labelText: '活動說明'),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 16),
+              _SubmitEventActionBar(
+                submitting: _submitting,
+                onSubmit: _submitting ? null : _submit,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -619,18 +719,30 @@ class _RecognitionNotificationToggleState
   bool? _enabled;
   bool _busy = false;
   String? _error;
+  late final PushNotificationService _push;
 
   @override
   void initState() {
     super.initState();
+    _push = ref.read(pushNotificationServiceProvider);
+    _push.activeNotifications.addListener(_notificationStateChanged);
     WidgetsBinding.instance.addObserver(this);
     _refresh();
   }
 
   @override
   void dispose() {
+    _push.activeNotifications.removeListener(_notificationStateChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  void _notificationStateChanged() {
+    if (!mounted || _busy) return;
+    setState(() {
+      _enabled = _push.activeNotifications.value;
+      _error = null;
+    });
   }
 
   @override

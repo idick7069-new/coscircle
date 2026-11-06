@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../../core/theme/app_theme.dart';
 
 class CosUi {
   static const radiusSm = 12.0;
@@ -10,145 +11,35 @@ class CosUi {
 
   static BoxShadow softShadow(Color color) {
     return BoxShadow(
-      color: color.withValues(alpha: 0.12),
-      blurRadius: 26,
-      offset: const Offset(0, 14),
-    );
-  }
-
-  static LinearGradient surfaceGradient(ColorScheme scheme) {
-    return LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [
-        scheme.surfaceContainerLowest,
-        scheme.surfaceContainerLow,
-        scheme.surface,
-      ],
+      color: color.withValues(alpha: 0.045),
+      blurRadius: 12,
+      offset: const Offset(0, 4),
     );
   }
 }
 
 class CosLogoMark extends StatelessWidget {
-  const CosLogoMark({
-    super.key,
-    this.size = 42,
-    this.orbitRotation = 0,
-    this.markOpacity = 1,
-  });
+  const CosLogoMark({super.key, this.size = 42, this.markOpacity = 1});
 
   final double size;
-  final double orbitRotation;
   final double markOpacity;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return CustomPaint(
-      size: Size.square(size),
-      painter: _CosLogoMarkPainter(
-        scheme,
-        orbitRotation: orbitRotation,
-        markOpacity: markOpacity,
+    return SizedBox.square(
+      dimension: size,
+      child: Opacity(
+        opacity: markOpacity,
+        child: Image.asset(
+          'assets/brand/coscircle-mark.png',
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.high,
+          excludeFromSemantics: true,
+        ),
       ),
     );
-  }
-}
-
-class _CosLogoMarkPainter extends CustomPainter {
-  const _CosLogoMarkPainter(
-    this.scheme, {
-    this.orbitRotation = 0,
-    this.markOpacity = 1,
-  });
-
-  final ColorScheme scheme;
-  final double orbitRotation;
-  final double markOpacity;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    final radius = size.width * 0.27;
-    final background = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [scheme.surfaceContainerHighest, scheme.surfaceContainerLow],
-      ).createShader(rect);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(rect, Radius.circular(radius)),
-      background,
-    );
-
-    final border = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = size.width * 0.035
-      ..color = scheme.outlineVariant.withValues(alpha: 0.9);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        rect.deflate(size.width * 0.015),
-        Radius.circular(radius),
-      ),
-      border,
-    );
-
-    final center = rect.center;
-    final stroke = size.width * 0.105;
-    final leftPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = stroke
-      ..color = scheme.primary.withValues(alpha: markOpacity);
-    final rightPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = stroke
-      ..color = scheme.secondary.withValues(alpha: markOpacity);
-    final orbitPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = size.width * 0.025
-      ..color = scheme.tertiary.withValues(alpha: 0.75);
-
-    final markRect = Rect.fromCenter(
-      center: center,
-      width: size.width * 0.58,
-      height: size.height * 0.58,
-    );
-    canvas.drawArc(
-      markRect.shift(Offset(-size.width * 0.08, 0)),
-      math.pi * 0.25,
-      math.pi * 1.35,
-      false,
-      leftPaint,
-    );
-    canvas.drawArc(
-      markRect.shift(Offset(size.width * 0.08, 0)),
-      math.pi * 1.05,
-      math.pi * 1.35,
-      false,
-      rightPaint,
-    );
-    canvas.save();
-    canvas.translate(center.dx, center.dy);
-    canvas.rotate(orbitRotation);
-    canvas.translate(-center.dx, -center.dy);
-    canvas.drawOval(markRect.inflate(size.width * 0.07), orbitPaint);
-
-    final sparkle = Paint()..color = scheme.tertiary;
-    canvas.drawCircle(
-      Offset(size.width * 0.72, size.height * 0.28),
-      size.width * 0.045,
-      sparkle,
-    );
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _CosLogoMarkPainter oldDelegate) {
-    return oldDelegate.scheme != scheme ||
-        oldDelegate.orbitRotation != orbitRotation ||
-        oldDelegate.markOpacity != markOpacity;
   }
 }
 
@@ -170,42 +61,62 @@ class CosPageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      padding: const EdgeInsets.fromLTRB(0, 12, 0, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          leading ?? const CosLogoMark(size: 44),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
+          Row(
+            children: [
+              const CosLogoMark(size: 32),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'CosCircle',
                   maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              ...actions,
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              if (leading != null) ...[
+                SizedBox.square(
+                  dimension: 32,
+                  child: FittedBox(child: leading!),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w900,
-                    height: 1.02,
+                    fontSize: 24,
+                    height: 1.2,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
             ),
           ),
-          if (actions.isNotEmpty) ...[
-            const SizedBox(width: 10),
-            Wrap(spacing: 6, children: actions),
-          ],
         ],
       ),
     );
@@ -219,12 +130,14 @@ class CosCard extends StatelessWidget {
     this.padding = const EdgeInsets.all(16),
     this.onTap,
     this.selected = false,
+    this.color,
   });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
   final VoidCallback? onTap;
   final bool selected;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -235,7 +148,7 @@ class CosCard extends StatelessWidget {
       duration: const Duration(milliseconds: 180),
       padding: padding,
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLowest,
+        color: color ?? scheme.surfaceContainerLowest,
         borderRadius: radius,
         border: Border.all(
           color: borderColor.withValues(alpha: selected ? 0.95 : 0.72),
@@ -298,7 +211,7 @@ class CosReveal extends StatefulWidget {
     super.key,
     required this.child,
     this.delay = Duration.zero,
-    this.offset = const Offset(0, 0.08),
+    this.offset = Offset.zero,
   });
 
   final Widget child;
@@ -344,6 +257,10 @@ class _CosRevealState extends State<CosReveal>
 
   @override
   Widget build(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context) ||
+        MediaQuery.accessibleNavigationOf(context)) {
+      return widget.child;
+    }
     return FadeTransition(
       opacity: _opacity,
       child: SlideTransition(position: _slide, child: widget.child),
@@ -610,15 +527,7 @@ class CosGradientPanel extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(CosUi.radiusXl),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            scheme.primaryContainer.withValues(alpha: 0.92),
-            scheme.secondaryContainer.withValues(alpha: 0.78),
-            scheme.tertiaryContainer.withValues(alpha: 0.72),
-          ],
-        ),
+        color: scheme.secondaryContainer,
         border: Border.all(
           color: scheme.outlineVariant.withValues(alpha: 0.46),
         ),
@@ -627,19 +536,7 @@ class CosGradientPanel extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(CosUi.radiusXl),
         child: Stack(
-          children: [
-            if (icon != null)
-              Positioned(
-                right: -22,
-                top: -22,
-                child: Icon(
-                  icon,
-                  size: 128,
-                  color: scheme.onPrimaryContainer.withValues(alpha: 0.07),
-                ),
-              ),
-            Padding(padding: padding, child: child),
-          ],
+          children: [Padding(padding: padding, child: child)],
         ),
       ),
     );
@@ -856,9 +753,13 @@ class CosBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final accent = color ?? (highlighted ? scheme.secondary : scheme.primary);
+    final foreground =
+        scheme.brightness == Brightness.light && accent.computeLuminance() > 0.5
+        ? scheme.onTertiaryContainer
+        : accent;
     return Container(
-      height: 28,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      constraints: const BoxConstraints(minHeight: 28),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: accent.withValues(alpha: highlighted ? 0.18 : 0.1),
         borderRadius: BorderRadius.circular(999),
@@ -868,7 +769,7 @@ class CosBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 14, color: accent),
+            Icon(icon, size: 14, color: foreground),
             const SizedBox(width: 4),
           ],
           Flexible(
@@ -877,7 +778,7 @@ class CosBadge extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: highlighted ? accent : scheme.onSurfaceVariant,
+                color: highlighted ? foreground : scheme.onSurfaceVariant,
                 fontWeight: FontWeight.w900,
               ),
             ),
@@ -1176,15 +1077,21 @@ class CosIconBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final accent = color ?? scheme.primary;
+    final lightAccent =
+        ThemeData.estimateBrightnessForColor(accent) == Brightness.light;
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.14),
+        color: lightAccent ? accent : accent.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(size * 0.34),
         border: Border.all(color: accent.withValues(alpha: 0.34)),
       ),
-      child: Icon(icon, color: accent, size: size * 0.52),
+      child: Icon(
+        icon,
+        color: lightAccent ? AppTheme.ink : accent,
+        size: size * 0.52,
+      ),
     );
   }
 }

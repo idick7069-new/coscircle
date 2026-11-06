@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS account_uploads (
+  file_name VARCHAR(64) PRIMARY KEY,
+  user_id BIGINT UNSIGNED NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_account_uploads_user (user_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS account_upload_cleanup (
+  file_name VARCHAR(64) PRIMARY KEY,
+  attempts INT UNSIGNED NOT NULL DEFAULT 0,
+  last_attempt_at_ms BIGINT UNSIGNED NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS account_legacy_upload_review (
+  file_name VARCHAR(64) PRIMARY KEY,
+  reason VARCHAR(32) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
