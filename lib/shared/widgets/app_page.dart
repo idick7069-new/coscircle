@@ -16,14 +16,13 @@ class AppPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: appBar,
       floatingActionButton: floatingActionButton,
       body: SafeArea(
         child: SizedBox.expand(
           child: ColoredBox(
-            color: scheme.surface,
+            color: Theme.of(context).scaffoldBackgroundColor,
             child: Padding(padding: padding, child: child),
           ),
         ),

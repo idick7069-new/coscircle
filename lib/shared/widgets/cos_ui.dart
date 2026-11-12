@@ -2,18 +2,20 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
+import 'mimi_mascot.dart';
+import 'pixel_icon.dart';
 
 class CosUi {
-  static const radiusSm = 12.0;
-  static const radiusMd = 18.0;
-  static const radiusLg = 24.0;
-  static const radiusXl = 32.0;
+  static const radiusSm = AppTheme.radiusSm;
+  static const radiusMd = AppTheme.radiusMd;
+  static const radiusLg = AppTheme.radiusLg;
+  static const radiusXl = AppTheme.radiusXl;
 
   static BoxShadow softShadow(Color color) {
     return BoxShadow(
-      color: color.withValues(alpha: 0.045),
-      blurRadius: 12,
-      offset: const Offset(0, 4),
+      color: color.withValues(alpha: 0.72),
+      blurRadius: 0,
+      offset: const Offset(3, 3),
     );
   }
 }
@@ -35,7 +37,7 @@ class CosLogoMark extends StatelessWidget {
           width: size,
           height: size,
           fit: BoxFit.contain,
-          filterQuality: FilterQuality.high,
+          filterQuality: FilterQuality.none,
           excludeFromSemantics: true,
         ),
       ),
@@ -145,15 +147,14 @@ class CosCard extends StatelessWidget {
     final radius = BorderRadius.circular(CosUi.radiusLg);
     final borderColor = selected ? scheme.primary : scheme.outlineVariant;
     final content = AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 180),
       padding: padding,
       decoration: BoxDecoration(
         color: color ?? scheme.surfaceContainerLowest,
         borderRadius: radius,
-        border: Border.all(
-          color: borderColor.withValues(alpha: selected ? 0.95 : 0.72),
-          width: selected ? 1.6 : 1,
-        ),
+        border: Border.all(color: borderColor, width: 2),
         boxShadow: [CosUi.softShadow(scheme.shadow)],
       ),
       child: child,
@@ -368,7 +369,7 @@ class _CosScannerOverlayState extends State<CosScannerOverlay>
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
+                            PixelIcon(
                               widget.statusIcon ?? Icons.center_focus_strong,
                               color: accent,
                               size: 18,
@@ -403,13 +404,13 @@ class _CosScannerOverlayState extends State<CosScannerOverlay>
                         borderRadius: BorderRadius.circular(CosUi.radiusXl),
                         border: Border.all(
                           color: accent.withValues(alpha: glow),
-                          width: 2.4,
+                          width: 2,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: accent.withValues(alpha: glow * 0.28),
-                            blurRadius: 26,
-                            spreadRadius: 1,
+                            color: scheme.shadow,
+                            blurRadius: 0,
+                            offset: const Offset(4, 4),
                           ),
                         ],
                       ),
@@ -499,7 +500,7 @@ class _ScannerCorner extends StatelessWidget {
       alignment: alignment,
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: Icon(
+        child: PixelIcon(
           Icons.crop_free_rounded,
           color: color.withValues(alpha: 0.9),
           size: 24,
@@ -528,9 +529,7 @@ class CosGradientPanel extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(CosUi.radiusXl),
         color: scheme.secondaryContainer,
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.46),
-        ),
+        border: Border.all(color: scheme.outlineVariant, width: 2),
         boxShadow: [CosUi.softShadow(scheme.shadow)],
       ),
       child: ClipRRect(
@@ -696,13 +695,13 @@ class CosMetricTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: accent.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(CosUi.radiusMd),
-        border: Border.all(color: accent.withValues(alpha: 0.18)),
+        border: Border.all(color: accent.withValues(alpha: 0.6), width: 2),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         child: Row(
           children: [
-            Icon(icon, color: accent, size: 20),
+            PixelIcon(icon, color: accent, size: 20),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
@@ -741,35 +740,41 @@ class CosBadge extends StatelessWidget {
     required this.label,
     this.icon,
     this.highlighted = false,
+    this.filled = false,
     this.color,
   });
 
   final String label;
   final IconData? icon;
   final bool highlighted;
+  final bool filled;
   final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final accent = color ?? (highlighted ? scheme.secondary : scheme.primary);
-    final foreground =
-        scheme.brightness == Brightness.light && accent.computeLuminance() > 0.5
+    final foreground = filled
+        ? (accent.computeLuminance() > 0.4 ? AppTheme.ink : Colors.white)
+        : scheme.brightness == Brightness.light &&
+              accent.computeLuminance() > 0.5
         ? scheme.onTertiaryContainer
         : accent;
     return Container(
       constraints: const BoxConstraints(minHeight: 28),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: accent.withValues(alpha: highlighted ? 0.18 : 0.1),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: accent.withValues(alpha: 0.42)),
+        color: filled
+            ? accent
+            : accent.withValues(alpha: highlighted ? 0.18 : 0.1),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
+        border: Border.all(color: accent.withValues(alpha: 0.7), width: 2),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 14, color: foreground),
+            PixelIcon(icon!, size: 14, color: foreground),
             const SizedBox(width: 4),
           ],
           Flexible(
@@ -778,7 +783,9 @@ class CosBadge extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: highlighted ? foreground : scheme.onSurfaceVariant,
+                color: highlighted || filled
+                    ? foreground
+                    : scheme.onSurfaceVariant,
                 fontWeight: FontWeight.w900,
               ),
             ),
@@ -829,7 +836,7 @@ class _CosChoicePillState extends State<CosChoicePill> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: BorderRadius.circular(CosUi.radiusMd),
           onTap: enabled ? widget.onTap : null,
           onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
           onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
@@ -844,17 +851,16 @@ class _CosChoicePillState extends State<CosChoicePill> {
               color: widget.selected
                   ? accent.withValues(alpha: 0.14)
                   : scheme.surfaceContainerHighest.withValues(alpha: 0.38),
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: BorderRadius.circular(CosUi.radiusMd),
               border: Border.all(
-                color: widget.selected
-                    ? accent.withValues(alpha: 0.5)
-                    : scheme.outlineVariant.withValues(alpha: 0.58),
+                color: widget.selected ? accent : scheme.outlineVariant,
+                width: 2,
               ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
+                PixelIcon(
                   widget.selected
                       ? Icons.check_circle_outline
                       : (widget.icon ?? Icons.radio_button_unchecked),
@@ -935,7 +941,7 @@ class _CosLoadingPulseState extends State<CosLoadingPulse>
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: accent,
-              borderRadius: BorderRadius.circular(99),
+              borderRadius: BorderRadius.circular(CosUi.radiusSm),
             ),
             child: SizedBox.square(dimension: dotSize),
           ),
@@ -965,7 +971,7 @@ class _CosLoadingPulseState extends State<CosLoadingPulse>
                       color: accent.withValues(
                         alpha: 0.36 + (index + 1) / count * 0.46,
                       ),
-                      borderRadius: BorderRadius.circular(99),
+                      borderRadius: BorderRadius.circular(CosUi.radiusSm),
                     ),
                     child: SizedBox.square(dimension: dotSize),
                   ),
@@ -1048,7 +1054,7 @@ class CosSafetyConfirmDialog extends StatelessWidget {
                           )
                         : null,
                     onPressed: () => Navigator.of(context).pop(true),
-                    icon: Icon(icon),
+                    icon: PixelIcon(icon),
                     label: Text(actionLabel),
                   ),
                 ),
@@ -1084,10 +1090,10 @@ class CosIconBubble extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         color: lightAccent ? accent : accent.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(size * 0.34),
-        border: Border.all(color: accent.withValues(alpha: 0.34)),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
+        border: Border.all(color: accent, width: 2),
       ),
-      child: Icon(
+      child: PixelIcon(
         icon,
         color: lightAccent ? AppTheme.ink : accent,
         size: size * 0.52,
@@ -1126,22 +1132,17 @@ class CosAvatarStack extends StatelessWidget {
               left: entry.$1 * step,
               child: Tooltip(
                 message: entry.$1 < names.length ? names[entry.$1] : '',
-                child: CircleAvatar(
-                  radius: radius + 2,
-                  backgroundColor: scheme.surfaceContainerLowest,
-                  child: CircleAvatar(
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerLowest,
+                    borderRadius: BorderRadius.circular(CosUi.radiusMd),
+                  ),
+                  child: MimiAvatar(
+                    image: entry.$2,
                     radius: radius,
-                    backgroundColor: scheme.primaryContainer,
-                    backgroundImage: entry.$2,
-                    child: entry.$2 == null
-                        ? Text(
-                            entry.$1 < names.length &&
-                                    names[entry.$1].isNotEmpty
-                                ? names[entry.$1].characters.first
-                                : '?',
-                            style: Theme.of(context).textTheme.labelSmall,
-                          )
-                        : null,
+                    label: entry.$1 < names.length ? names[entry.$1] : null,
+                    backgroundColor: scheme.surfaceContainerHigh,
                   ),
                 ),
               ),

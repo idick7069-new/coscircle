@@ -20,7 +20,7 @@ import '../../../core/utils/picked_image_provider.dart';
 import '../../../core/utils/participant_role_style.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/cos_ui.dart';
-import '../../../shared/widgets/cos_illustration.dart';
+import '../../../shared/widgets/mimi_mascot.dart';
 import '../../social/presentation/friendship_widgets.dart'
     show refreshFriendships;
 import 'event_booking_share_page.dart';
@@ -192,11 +192,21 @@ class _EventDetailLoadingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const CosReveal(
-      child: _EventDetailStateCard(
-        icon: Icons.event_available_outlined,
-        title: '正在整理活動訊號',
-        message: '載入場次資訊、同好預定與現場交流線索。',
+    return LayoutBuilder(
+      builder: (context, constraints) => ListView(
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: (constraints.maxHeight * 0.45).clamp(180.0, 320.0),
+            ),
+            child: MimiLoading(
+              scene: MimiScene.reading,
+              label: '希希正在查看活動…',
+              compact: constraints.maxHeight < 500,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -363,13 +373,35 @@ class _EventDetailHero extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   if (imageProvider == null)
-                    const CosIllustration(kind: CosIllustrationKind.event)
+                    const Center(
+                      child: MimiMascot(
+                        scene: MimiScene.reading,
+                        size: 48,
+                        animate: false,
+                      ),
+                    )
                   else
                     Image(
                       image: imageProvider,
                       fit: BoxFit.cover,
+                      loadingBuilder: (context, child, progress) =>
+                          progress == null
+                          ? child
+                          : const Center(
+                              child: MimiMascot(
+                                scene: MimiScene.reading,
+                                size: 48,
+                                animate: false,
+                              ),
+                            ),
                       errorBuilder: (context, error, stackTrace) =>
-                          const SizedBox.shrink(),
+                          const Center(
+                            child: MimiMascot(
+                              scene: MimiScene.reading,
+                              size: 48,
+                              animate: false,
+                            ),
+                          ),
                     ),
                   DecoratedBox(
                     decoration: BoxDecoration(
@@ -656,7 +688,7 @@ class _ParticipantsSection extends ConsumerWidget {
                     padding: EdgeInsets.all(16),
                     child: Row(
                       children: [
-                        CosIconBubble(icon: Icons.person_search_outlined),
+                        MimiMascot(size: 36, animate: false),
                         SizedBox(width: 12),
                         Expanded(child: Text('目前沒有可顯示的預定。')),
                       ],
@@ -895,7 +927,7 @@ class _SheetGrabber extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 14),
         decoration: BoxDecoration(
           color: scheme.outlineVariant,
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: BorderRadius.circular(CosUi.radiusMd),
         ),
       ),
     );
@@ -923,13 +955,11 @@ class _ParticipantSheetHeader extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(color: roleColor, shape: BoxShape.circle),
-            child: CircleAvatar(
+            child: MimiAvatar(
               radius: 32,
               backgroundColor: scheme.primaryContainer,
-              backgroundImage: pickedImageProvider(participant.avatarUrl),
-              child: participant.avatarUrl.isEmpty
-                  ? Text(participant.nickname.characters.firstOrNull ?? '?')
-                  : null,
+              image: pickedImageProvider(participant.avatarUrl),
+              label: participant.nickname,
             ),
           ),
           const SizedBox(width: 12),
@@ -1050,13 +1080,24 @@ class _ParticipantsLoadingPanel extends StatelessWidget {
             icon: Icons.diversity_3_outlined,
           ),
           const SizedBox(height: 14),
-          Row(
-            children: [
-              for (var index = 0; index < 3; index += 1) ...[
-                _ParticipantSkeletonChip(color: scheme.primary),
-                if (index < 2) const SizedBox(width: 10),
-              ],
-            ],
+          const MimiLoading(
+            scene: MimiScene.reading,
+            label: '希希正在整理同好…',
+            compact: true,
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final count = constraints.maxWidth < 320 ? 2 : 3;
+              return Row(
+                children: [
+                  for (var index = 0; index < count; index += 1) ...[
+                    _ParticipantSkeletonChip(color: scheme.primary),
+                    if (index < count - 1) const SizedBox(width: 10),
+                  ],
+                ],
+              );
+            },
           ),
           const SizedBox(height: 12),
           _ParticipantPanelMessage(
@@ -1088,9 +1129,10 @@ class _ParticipantSkeletonChip extends StatelessWidget {
           padding: const EdgeInsets.all(10),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: color.withValues(alpha: 0.2),
+              const MimiMascot(
+                scene: MimiScene.reading,
+                size: 28,
+                animate: false,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -1168,17 +1210,13 @@ class _ParticipantAvatar extends StatelessWidget {
                     color: roleColor,
                     shape: BoxShape.circle,
                   ),
-                  child: CircleAvatar(
+                  child: MimiAvatar(
                     radius: 25,
                     backgroundColor: Theme.of(
                       context,
                     ).colorScheme.primaryContainer,
-                    backgroundImage: pickedImageProvider(participant.avatarUrl),
-                    child: participant.avatarUrl.isEmpty
-                        ? Text(
-                            participant.nickname.characters.firstOrNull ?? '?',
-                          )
-                        : null,
+                    image: pickedImageProvider(participant.avatarUrl),
+                    label: participant.nickname,
                   ),
                 ),
                 const SizedBox(height: 6),

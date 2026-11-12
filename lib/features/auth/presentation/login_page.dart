@@ -10,8 +10,7 @@ import '../../../core/services/push_notification_service.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/cos_ui.dart';
-import '../../../shared/widgets/cos_illustration.dart';
-import '../../../shared/widgets/cos_animated_logo.dart';
+import '../../../shared/widgets/mimi_mascot.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -58,7 +57,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (_restoringSession) ...[
-                      const CosAnimatedLogo(),
+                      const MimiMascot(scene: MimiScene.reading),
                       const SizedBox(height: 20),
                       const Text('正在確認登入狀態'),
                     ] else ...[
@@ -535,7 +534,7 @@ class _LoginStageHero extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 18),
-                const CosIllustration(height: 144),
+                const Center(child: MimiMascot(size: 144, animate: false)),
                 const SizedBox(height: 18),
                 Text(
                   'CosCircle',

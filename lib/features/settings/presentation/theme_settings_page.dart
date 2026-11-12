@@ -30,12 +30,7 @@ class ThemeSettingsPage extends ConsumerWidget {
             child: _ThemeOptionCard(
               mode: CosCircleThemeMode.neonDark,
               selected: selectedMode == CosCircleThemeMode.neonDark,
-              colors: const [
-                AppTheme.ink,
-                AppTheme.coral,
-                AppTheme.cyan,
-                AppTheme.sun,
-              ],
+              colors: _previewColors(AppTheme.dark),
               onTap: () => ref
                   .read(appThemeModeProvider.notifier)
                   .setMode(CosCircleThemeMode.neonDark),
@@ -47,15 +42,22 @@ class ThemeSettingsPage extends ConsumerWidget {
             child: _ThemeOptionCard(
               mode: CosCircleThemeMode.morandiLight,
               selected: selectedMode == CosCircleThemeMode.morandiLight,
-              colors: const [
-                AppTheme.paper,
-                AppTheme.blush,
-                AppTheme.coral,
-                AppTheme.cyan,
-              ],
+              colors: _previewColors(AppTheme.morandi),
               onTap: () => ref
                   .read(appThemeModeProvider.notifier)
                   .setMode(CosCircleThemeMode.morandiLight),
+            ),
+          ),
+          const SizedBox(height: 12),
+          CosReveal(
+            delay: const Duration(milliseconds: 120),
+            child: _ThemeOptionCard(
+              mode: CosCircleThemeMode.whitePixel,
+              selected: selectedMode == CosCircleThemeMode.whitePixel,
+              colors: _previewColors(AppTheme.whitePixel),
+              onTap: () => ref
+                  .read(appThemeModeProvider.notifier)
+                  .setMode(CosCircleThemeMode.whitePixel),
             ),
           ),
         ],
@@ -63,6 +65,13 @@ class ThemeSettingsPage extends ConsumerWidget {
     );
   }
 }
+
+List<Color> _previewColors(ThemeData theme) => [
+  theme.scaffoldBackgroundColor,
+  theme.colorScheme.primary,
+  theme.colorScheme.secondary,
+  theme.colorScheme.tertiary,
+];
 
 class _ThemeModeHero extends StatelessWidget {
   const _ThemeModeHero({required this.selectedMode});
@@ -72,7 +81,7 @@ class _ThemeModeHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final dark = selectedMode == CosCircleThemeMode.neonDark;
+    final dark = scheme.brightness == Brightness.dark;
     return CosGradientPanel(
       icon: dark ? Icons.nights_stay_outlined : Icons.wb_sunny_outlined,
       child: Column(
@@ -236,7 +245,7 @@ class _ThemeOptionCard extends StatelessWidget {
                 _ThemePreviewScene(
                   colors: colors,
                   selected: selected,
-                  dark: mode == CosCircleThemeMode.neonDark,
+                  dark: mode != CosCircleThemeMode.whitePixel,
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -295,7 +304,7 @@ class _ThemeOptionCard extends StatelessWidget {
                       height: 8,
                       decoration: BoxDecoration(
                         color: color.$2,
-                        borderRadius: BorderRadius.circular(99),
+                        borderRadius: BorderRadius.circular(CosUi.radiusSm),
                         border: Border.all(
                           color: scheme.outlineVariant.withValues(alpha: 0.42),
                         ),
@@ -336,7 +345,7 @@ class _ThemePreviewScene extends StatelessWidget {
       height: 78,
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(CosUi.radiusLg),
         color: base,
         border: Border.all(
           color: selected ? scheme.primary : scheme.outlineVariant,
@@ -353,7 +362,7 @@ class _ThemePreviewScene extends StatelessWidget {
               height: 28,
               decoration: BoxDecoration(
                 color: accent,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(CosUi.radiusSm),
               ),
             ),
           ),
@@ -364,7 +373,7 @@ class _ThemePreviewScene extends StatelessWidget {
               height: 13,
               decoration: BoxDecoration(
                 color: secondary.withValues(alpha: dark ? 0.82 : 0.72),
-                borderRadius: BorderRadius.circular(99),
+                borderRadius: BorderRadius.circular(CosUi.radiusSm),
               ),
             ),
           ),
@@ -377,7 +386,7 @@ class _ThemePreviewScene extends StatelessWidget {
                 color: (dark ? Colors.white : Colors.black).withValues(
                   alpha: 0.18,
                 ),
-                borderRadius: BorderRadius.circular(99),
+                borderRadius: BorderRadius.circular(CosUi.radiusSm),
               ),
             ),
           ),

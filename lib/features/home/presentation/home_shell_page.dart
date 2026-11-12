@@ -10,6 +10,7 @@ import '../../profile/presentation/profile_page.dart';
 import '../../settings/presentation/settings_page.dart';
 import '../../social/presentation/social_page.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../../shared/widgets/pixel_icon.dart';
 
 class HomeShellPage extends ConsumerStatefulWidget {
   const HomeShellPage({super.key});
@@ -79,6 +80,7 @@ class _HomeShellPageState extends ConsumerState<HomeShellPage>
     final pages = [
       ProfilePage(isVisible: _index == 0),
       EventListPage(
+        isVisible: _index == 1,
         onOpenCurrentEvent: (item) {
           ref
               .read(selectedCurrentEventTargetProvider.notifier)
@@ -113,9 +115,12 @@ class _HomeShellPageState extends ConsumerState<HomeShellPage>
             index: _index,
             children: [
               for (var index = 0; index < pages.length; index++)
-                _visited.contains(index)
-                    ? pages[index]
-                    : const SizedBox.shrink(),
+                TickerMode(
+                  enabled: index == _index,
+                  child: _visited.contains(index)
+                      ? pages[index]
+                      : const SizedBox.shrink(),
+                ),
             ],
           ),
         ),
@@ -126,8 +131,8 @@ class _HomeShellPageState extends ConsumerState<HomeShellPage>
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: scheme.surfaceContainerLowest,
-                borderRadius: BorderRadius.circular(CosUi.radiusXl),
-                border: Border.all(color: scheme.outlineVariant),
+                borderRadius: BorderRadius.circular(CosUi.radiusMd),
+                border: Border.all(color: scheme.outlineVariant, width: 2),
                 boxShadow: [CosUi.softShadow(scheme.shadow)],
               ),
               child: Padding(
@@ -236,7 +241,7 @@ class _HomeNavButtonState extends State<_HomeNavButton> {
           curve: Curves.easeOutCubic,
           scale: _pressed ? 0.96 : 1,
           child: InkWell(
-            borderRadius: BorderRadius.circular(CosUi.radiusLg),
+            borderRadius: BorderRadius.circular(CosUi.radiusMd),
             onTap: widget.onTap,
             onTapDown: (_) => setState(() => _pressed = true),
             onTapCancel: () => setState(() => _pressed = false),
@@ -252,11 +257,10 @@ class _HomeNavButtonState extends State<_HomeNavButton> {
                 color: selected
                     ? scheme.secondaryContainer
                     : Colors.transparent,
-                borderRadius: BorderRadius.circular(CosUi.radiusLg),
+                borderRadius: BorderRadius.circular(CosUi.radiusMd),
                 border: Border.all(
-                  color: selected
-                      ? scheme.secondary.withValues(alpha: 0.24)
-                      : Colors.transparent,
+                  color: selected ? scheme.secondary : Colors.transparent,
+                  width: 2,
                 ),
               ),
               child: SizedBox(
@@ -278,7 +282,7 @@ class _HomeNavButtonState extends State<_HomeNavButton> {
                         child: DecoratedBox(
                           decoration: BoxDecoration(
                             color: scheme.secondary,
-                            borderRadius: BorderRadius.circular(99),
+                            borderRadius: BorderRadius.circular(CosUi.radiusSm),
                           ),
                           child: const SizedBox(width: 22, height: 3),
                         ),
@@ -293,7 +297,7 @@ class _HomeNavButtonState extends State<_HomeNavButton> {
                               : const Duration(milliseconds: 180),
                           curve: Curves.easeOutBack,
                           scale: selected ? 1.08 : 1,
-                          child: Icon(
+                          child: PixelIcon(
                             selected
                                 ? destination.selectedIcon
                                 : destination.icon,

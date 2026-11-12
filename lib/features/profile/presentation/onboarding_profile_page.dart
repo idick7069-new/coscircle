@@ -10,7 +10,7 @@ import '../../../core/utils/error_message.dart';
 import '../../../core/utils/participant_role_style.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/cos_ui.dart';
-import '../../../shared/widgets/cos_illustration.dart';
+import '../../../shared/widgets/mimi_mascot.dart';
 
 class OnboardingProfilePage extends ConsumerStatefulWidget {
   const OnboardingProfilePage({super.key});
@@ -54,25 +54,31 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
     final pages = [
       _GuideStep(
         icon: Icons.event_available,
-        title: '加入活動，公開今天會去哪',
-        message: '在活動清單找到場次，發布「出席預訂」讓同好知道你會在哪一天出現。',
+        scene: MimiScene.reading,
+        title: '場次預定，我陪你準備',
+        message: '我是希希，你的馬內！先找想去的活動，再選參加日期、填出角預定，讓同好知道哪天能遇見你。',
         cues: const ['場次預定', '同日認親', '快速加入'],
       ),
       _GuideStep(
         icon: Icons.map_outlined,
-        title: '現場找人更容易',
-        message: '當前活動可以分享位置、看小圈圈集合點，也能通知朋友你要過去認親。',
+        scene: MimiScene.map,
+        title: '到了現場，一起找夥伴',
+        message: '在「現場」看集合點、發認親訊號。位置分享由你主動開啟，也能隨時關閉；需要找路時，我陪你看地圖。',
         cues: const ['集合訊號', '小圈圈', '現場交流'],
       ),
       _GuideStep(
         icon: Icons.qr_code_2,
-        title: '掃 QR 快速認識新朋友',
-        message: '個人資料與小圈圈都能用 QRCode 分享，活動現場不用再慢慢搜尋帳號。',
-        cues: const ['Cos 名片', '掃碼交換', '坑單比對'],
+        scene: MimiScene.hello,
+        title: '交換名片，找到同坑朋友',
+        message: '掃對方的 QRCode，可以關注或送出戳友邀請，附一句自我介紹方便認人。到「同好」還能找同坑夥伴、加入小圈圈。',
+        cues: const ['Cos 名片', '戳友留話', '同坑夥伴'],
       ),
       IgnorePointer(
         ignoring: _loadingProfile || _initialProfile == null || _saving,
         child: _ProfileSetupStep(
+          loading: _loadingProfile,
+          saving: _saving,
+          hasProfile: _initialProfile != null,
           nicknameController: _nicknameController,
           roleOptions: _roleOptions,
           roles: _roles,
@@ -260,12 +266,14 @@ class _OnboardingProfilePageState extends ConsumerState<OnboardingProfilePage> {
 class _GuideStep extends StatelessWidget {
   const _GuideStep({
     required this.icon,
+    required this.scene,
     required this.title,
     required this.message,
     required this.cues,
   });
 
   final IconData icon;
+  final MimiScene scene;
   final String title;
   final String message;
   final List<String> cues;
@@ -290,14 +298,14 @@ class _GuideStep extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       CosBadge(
-                        label: '新手任務',
+                        label: '希希・你的馬內',
                         icon: Icons.auto_awesome,
                         color: scheme.primary,
                         highlighted: true,
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        '先把現場交流變簡單',
+                        '陪你準備，一起出角',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.labelLarge?.copyWith(
@@ -311,12 +319,7 @@ class _GuideStep extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            CosIllustration(
-              height: 148,
-              kind: icon == Icons.event_available || icon == Icons.map_outlined
-                  ? CosIllustrationKind.event
-                  : CosIllustrationKind.people,
-            ),
+            Center(child: MimiMascot(scene: scene, size: 112, animate: false)),
             const SizedBox(height: 16),
             Text(
               title,
@@ -402,7 +405,7 @@ class _OnboardingProgressCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: BorderRadius.circular(CosUi.radiusSm),
                   child: LinearProgressIndicator(minHeight: 8, value: progress),
                 ),
               ],
@@ -416,6 +419,9 @@ class _OnboardingProgressCard extends StatelessWidget {
 
 class _ProfileSetupStep extends StatelessWidget {
   const _ProfileSetupStep({
+    required this.loading,
+    required this.saving,
+    required this.hasProfile,
     required this.nicknameController,
     required this.roleOptions,
     required this.roles,
@@ -424,6 +430,9 @@ class _ProfileSetupStep extends StatelessWidget {
     required this.onChanged,
   });
 
+  final bool loading;
+  final bool saving;
+  final bool hasProfile;
   final TextEditingController nicknameController;
   final List<String> roleOptions;
   final Set<String> roles;
@@ -436,6 +445,42 @@ class _ProfileSetupStep extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return ListView(
       children: [
+        CosCard(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const MimiMascot(size: 72),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Semantics(
+                  liveRegion: true,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '希希幫你建檔',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        loading
+                            ? '我先幫你讀取名片資料，稍等一下！'
+                            : saving
+                            ? '正在收好你的名片，馬上就能出發！'
+                            : !hasProfile
+                            ? '資料還沒讀取成功，按下方重新載入，我們再試一次。'
+                            : '先告訴我怎麼稱呼你、平常的身份和常跑地區。身份可以複選，其他資料之後再到名片補齊就好！',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
         CosCard(
           padding: const EdgeInsets.all(18),
           child: Column(
@@ -481,7 +526,10 @@ class _ProfileSetupStep extends StatelessWidget {
                 decoration: const InputDecoration(labelText: '暱稱 / CN'),
               ),
               const SizedBox(height: 18),
-              Text('你通常的身份', style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                '你通常的身份（可複選）',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,

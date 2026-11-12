@@ -194,6 +194,7 @@ class _RadarWorkTags extends StatelessWidget {
                     color: common.contains(work.id) ? scheme.tertiary : color,
                     icon: common.contains(work.id) ? Icons.radar : null,
                     highlighted: common.contains(work.id),
+                    filled: common.contains(work.id),
                   ),
                 ),
             ],

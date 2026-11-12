@@ -48,7 +48,7 @@ class _Social extends qa.FixtureSocial {
           SameWorkUser(
             userId: '2',
             publicCode: 'qa-peer',
-          nickname: '小光攝影',
+            nickname: '小光攝影',
             commonWorkCount: 2,
             commonWorks: [
               WorkTag(id: '100', name: '星旅'),
@@ -67,6 +67,12 @@ class _Profile extends qa.FixtureProfile {
 void main() {
   setUpAll(() async {
     await initializeDateFormatting('zh_TW');
+    await (FontLoader('FusionPixel')..addFont(
+          rootBundle.load(
+            'assets/fonts/fusion-pixel-12px-proportional-zh_hant.ttf',
+          ),
+        ))
+        .load();
     final latinPath = const String.fromEnvironment('QA_LATIN_FONT');
     if (latinPath.isNotEmpty) {
       await (FontLoader('Roboto')..addFont(
@@ -89,34 +95,98 @@ void main() {
   });
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  test('new installs use light; stored theme choices remain compatible', () {
-    expect(
-      CosCircleThemeMode.fromStorage(null),
-      CosCircleThemeMode.morandiLight,
-    );
-    expect(
-      CosCircleThemeMode.fromStorage('neon_dark'),
-      CosCircleThemeMode.neonDark,
-    );
-    expect(
-      CosCircleThemeMode.fromStorage('morandi_light'),
-      CosCircleThemeMode.morandiLight,
-    );
-    expect(AppTheme.light.colorScheme.secondary, AppTheme.cyan);
-    for (final theme in [AppTheme.light, AppTheme.dark]) {
-      expect(theme.textTheme.bodyMedium?.letterSpacing, 0);
-      expect(theme.textTheme.headlineSmall?.letterSpacing, 0);
-      final scheme = theme.colorScheme;
-      for (final pair in [
-        (scheme.primary, scheme.onPrimary),
-        (scheme.secondary, scheme.onSecondary),
-      ]) {
-        final a = pair.$1.computeLuminance();
-        final b = pair.$2.computeLuminance();
-        final ratio = a > b ? (a + 0.05) / (b + 0.05) : (b + 0.05) / (a + 0.05);
-        expect(ratio, greaterThanOrEqualTo(4.5));
+  test(
+    'new installs use dark pixel theme; stored enum choices remain compatible',
+    () {
+      expect(CosCircleThemeMode.fromStorage(null), CosCircleThemeMode.neonDark);
+      expect(
+        CosCircleThemeMode.fromStorage('neon_dark'),
+        CosCircleThemeMode.neonDark,
+      );
+      expect(
+        CosCircleThemeMode.fromStorage('morandi_light'),
+        CosCircleThemeMode.morandiLight,
+      );
+      expect(AppTheme.morandi.colorScheme.primary, AppTheme.lavender);
+      expect(AppTheme.morandi.colorScheme.secondary, const Color(0xffa8d8ff));
+      for (final theme in [AppTheme.light, AppTheme.morandi, AppTheme.dark]) {
+        expect(theme.textTheme.bodyMedium?.letterSpacing, 0);
+        expect(theme.textTheme.headlineSmall?.letterSpacing, 0);
+        final scheme = theme.colorScheme;
+        for (final pair in [
+          (scheme.primary, scheme.onPrimary),
+          (scheme.secondary, scheme.onSecondary),
+        ]) {
+          final a = pair.$1.computeLuminance();
+          final b = pair.$2.computeLuminance();
+          final ratio = a > b
+              ? (a + 0.05) / (b + 0.05)
+              : (b + 0.05) / (a + 0.05);
+          expect(ratio, greaterThanOrEqualTo(4.5));
+        }
       }
-    }
+    },
+  );
+
+  testWidgets('theme selection updates page surfaces and action colors', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      ProviderScope(
+        child: Consumer(
+          builder: (context, ref, _) {
+            final mode = ref.watch(appThemeModeProvider);
+            return MaterialApp(
+              theme: switch (mode) {
+                CosCircleThemeMode.neonDark => AppTheme.dark,
+                CosCircleThemeMode.morandiLight => AppTheme.morandi,
+                CosCircleThemeMode.whitePixel => AppTheme.whitePixel,
+              },
+              home: const ThemeSettingsPage(),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    ThemeData currentTheme() =>
+        Theme.of(tester.element(find.byType(ThemeSettingsPage)));
+    final before = currentTheme();
+    await tester.ensureVisible(find.text('冷調微光'));
+    await tester.tap(find.text('冷調微光'));
+    await tester.pumpAndSettle();
+    final after = currentTheme();
+    expect(
+      after.scaffoldBackgroundColor,
+      isNot(before.scaffoldBackgroundColor),
+    );
+    expect(after.colorScheme.primary, isNot(before.colorScheme.primary));
+    expect(after.colorScheme.secondary, isNot(before.colorScheme.secondary));
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('coscircle_pixel_theme_mode_v1'), 'morandi_light');
+    await tester.ensureVisible(find.text('白晝像素'));
+    await tester.tap(find.text('白晝像素'));
+    await tester.pumpAndSettle();
+    expect(currentTheme().scaffoldBackgroundColor, Colors.white);
+    expect(currentTheme().brightness, Brightness.light);
+    expect(prefs.getString('coscircle_pixel_theme_mode_v1'), 'white_pixel');
+    expect(
+      CosCircleThemeMode.fromStorage('white_pixel'),
+      CosCircleThemeMode.whitePixel,
+    );
+    await tester.ensureVisible(find.text('午夜像素'));
+    await tester.tap(find.text('午夜像素'));
+    await tester.pumpAndSettle();
+    expect(currentTheme().colorScheme.primary, before.colorScheme.primary);
+    expect(
+      currentTheme().scaffoldBackgroundColor,
+      before.scaffoldBackgroundColor,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   final pages = <String, Widget Function()>{

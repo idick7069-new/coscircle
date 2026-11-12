@@ -1,0 +1,75 @@
+--- server-before.js
++++ server-after.js
+@@ -10,6 +10,7 @@
+   importEventsFromHtml,
+ } from '../scripts/scrape-events.js';
+ import { createPool } from './db.js';
++import { agePublicUpdate, publicProfileAge } from './profile-age-privacy.js';
+ import { createLegalService, registerLegalRoutes } from './legal-consent.js';
+ import { sendRecognitionPush, sendMeetupPush, sendRecognitionReplyPush } from './push-service.js';
+ import { createEventNotifications } from './event-notifications.js';
+@@ -491,6 +492,7 @@
+       facebookUrl,
+       bio,
+       age,
++      agePublic,
+       regions = [],
+       travelRegions = [],
+       travelSameRegion = false,
+@@ -504,6 +506,7 @@
+       deepPitWorkIds = pitWorkIds,
+       shallowPitWorkIds = [],
+     } = req.body;
++    const normalizedAgePublic = agePublicUpdate(agePublic);
+     const normalizedRegions = normalizeStringArray(regions, [
+       '北部',
+       '中部',
+@@ -541,6 +544,7 @@
+               facebook_url = ?,
+               bio = ?,
+               age = ?,
++              age_public = COALESCE(?, age_public),
+               regions_json = ?,
+               travel_regions_json = ?,
+               travel_same_region = ?,
+@@ -557,6 +561,7 @@
+         facebookUrl ?? null,
+         bio ?? null,
+         age ?? null,
++        normalizedAgePublic,
+         JSON.stringify(normalizedRegions),
+         JSON.stringify(normalizedTravelRegions),
+         travelSameRegion ||
+@@ -2354,6 +2359,7 @@
+ });
+ 
+ app.use((error, _req, res, _next) => {
++  if (error.code === 'invalid_age_public') return res.status(400).json({error: error.code});
+   if (error.code === 'event_sync_busy') return res.status(409).json({error: 'event_sync_busy'});
+   if (error?.message === 'cors_origin_not_allowed') {
+     res.status(403).json({ error: 'cors_origin_not_allowed' });
+@@ -2940,6 +2946,7 @@
+             facebook_url AS facebookUrl,
+             bio,
+             age,
++            age_public AS agePublic,
+             regions_json AS regionsJson,
+             travel_regions_json AS travelRegionsJson,
+             travel_same_region AS travelSameRegion,
+@@ -2972,6 +2979,7 @@
+             users.facebook_url AS facebookUrl,
+             users.bio,
+             users.age,
++            users.age_public AS agePublic,
+             users.regions_json AS regionsJson,
+             users.travel_regions_json AS travelRegionsJson,
+             users.travel_same_region AS travelSameRegion,
+@@ -3005,7 +3013,7 @@
+   return {
+     id,
+     isMe: Number(viewerUserId) === Number(id),
+-    ...normalizeProfileJsonFields(profile),
++    ...publicProfileAge(normalizeProfileJsonFields(profile)),
+     pitWorks,
+     deepPitWorks: pitWorks.filter((work) => work.depth === 'deep'),
+     shallowPitWorks: pitWorks.filter((work) => work.depth === 'shallow'),

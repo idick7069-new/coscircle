@@ -13,6 +13,7 @@ import '../../../core/repositories/admin_repository.dart';
 import '../../../core/providers/admin_sync_provider.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../../shared/widgets/mimi_mascot.dart';
 import 'report_management_page.dart';
 
 final adminStatsProvider = FutureProvider.autoDispose<AdminStats>((ref) {
@@ -1001,7 +1002,9 @@ class _AdminSection extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(dense ? 16 : CosUi.radiusLg),
+        borderRadius: BorderRadius.circular(
+          dense ? CosUi.radiusMd : CosUi.radiusLg,
+        ),
         border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.7)),
       ),
       child: Padding(
@@ -1146,7 +1149,9 @@ class _AdminMetricTile extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.09),
-        borderRadius: BorderRadius.circular(compact ? 14 : CosUi.radiusMd),
+        borderRadius: BorderRadius.circular(
+          compact ? CosUi.radiusSm : CosUi.radiusMd,
+        ),
         border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Padding(
@@ -1203,11 +1208,11 @@ class _AdminTableShell extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return DecoratedBox(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(CosUi.radiusSm),
         border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.7)),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(CosUi.radiusSm),
         child: Column(children: children),
       ),
     );
@@ -1675,15 +1680,9 @@ class _AdminUserList extends StatelessWidget {
               padding: const EdgeInsets.all(14),
               child: Row(
                 children: [
-                  CircleAvatar(
+                  MimiAvatar(
+                    radius: 20,
                     backgroundColor: scheme.primaryContainer,
-                    foregroundColor: scheme.onPrimaryContainer,
-                    child: Text(
-                      (user.nickname.isNotEmpty ? user.nickname : user.email)
-                              .characters
-                              .firstOrNull ??
-                          '?',
-                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(

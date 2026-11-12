@@ -16,7 +16,9 @@ import '../../../core/utils/user_action.dart';
 import '../../../core/utils/participant_role_style.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../../shared/widgets/pixel_icon.dart';
 import '../../works/presentation/work_selector.dart';
+import 'same_work_coser_notice.dart';
 
 Future<void> showEventBookingSheet(
   BuildContext context,
@@ -185,19 +187,19 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
                       onPressed: _submitting
                           ? null
                           : () => Navigator.of(context).maybePop(),
-                      icon: const Icon(Icons.close),
+                      icon: const PixelIcon(Icons.close),
                     ),
                   ),
                   CosReveal(
-                    child: CosGradientPanel(
-                      icon: Icons.badge_outlined,
+                    child: CosCard(
+                      padding: const EdgeInsets.all(18),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           CosSectionHeader(
                             title: widget.initialParticipant != null
-                                ? '修改參戰名片'
-                                : '建立參戰名片',
+                                ? '修改預訂'
+                                : '發佈預訂',
                             subtitle: '讓同好知道你哪天會到、扮什麼、怎麼找你互動',
                             icon: Icons.theater_comedy_outlined,
                             trailing: CosBadge(
@@ -299,6 +301,14 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
                             onChanged: (work) =>
                                 setState(() => _selectedWork = work),
                           ),
+                          if (_selectedWork != null && _selectedWork!.id.isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            SameWorkCoserNotice(
+                              eventId: widget.event.id,
+                              dayIndex: _dayIndex,
+                              work: _selectedWork!,
+                            ),
+                          ],
                           const SizedBox(height: 12),
                           TextField(
                             controller: _characterController,
@@ -706,14 +716,12 @@ class _RoleChoiceCard extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: selected
-              ? accent.withValues(alpha: 0.14)
-              : scheme.surfaceContainerHighest.withValues(alpha: 0.34),
+              ? scheme.primaryContainer
+              : scheme.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(CosUi.radiusMd),
           border: Border.all(
-            color: selected
-                ? accent.withValues(alpha: 0.5)
-                : scheme.outlineVariant.withValues(alpha: 0.5),
-            width: selected ? 1.4 : 1,
+            color: selected ? accent : scheme.outlineVariant,
+            width: 2,
           ),
         ),
         child: Row(
@@ -748,8 +756,8 @@ class _RoleChoiceCard extends StatelessWidget {
                   ? Duration.zero
                   : const Duration(milliseconds: 150),
               scale: selected ? 1 : 0.86,
-              child: Icon(
-                selected ? Icons.check_circle : Icons.circle_outlined,
+              child: PixelIcon(
+                selected ? Icons.check_box : Icons.check_box_outline_blank,
                 color: selected ? accent : scheme.outline,
                 size: 18,
               ),
@@ -846,7 +854,7 @@ class _BookingSubmitBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(CosUi.radiusLg),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.7)),
+        border: Border.all(color: scheme.outlineVariant, width: 2),
         boxShadow: [CosUi.softShadow(scheme.shadow)],
       ),
       child: Padding(
@@ -857,7 +865,7 @@ class _BookingSubmitBar extends StatelessWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: submitting ? null : onRemove,
-                  icon: const Icon(Icons.event_busy_outlined),
+                  icon: const PixelIcon(Icons.event_busy_outlined),
                   label: const Text('取消出席'),
                 ),
               ),
@@ -869,7 +877,7 @@ class _BookingSubmitBar extends StatelessWidget {
                 onPressed: submitting ? null : onSave,
                 icon: submitting
                     ? CosLoadingPulse(color: scheme.onPrimary, size: 20)
-                    : Icon(
+                    : PixelIcon(
                         editing
                             ? Icons.save_outlined
                             : Icons.how_to_reg_outlined,
@@ -878,8 +886,8 @@ class _BookingSubmitBar extends StatelessWidget {
                   submitting
                       ? '同步中'
                       : editing
-                      ? '儲存出席'
-                      : '我會去',
+                      ? '儲存預訂'
+                      : '發佈預訂',
                 ),
               ),
             ),
@@ -904,11 +912,9 @@ class _OutfitImagePicker extends StatelessWidget {
       onTap: onPick,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: scheme.surfaceContainerHighest.withValues(alpha: 0.45),
+          color: scheme.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(CosUi.radiusLg),
-          border: Border.all(
-            color: scheme.outlineVariant.withValues(alpha: 0.7),
-          ),
+          border: Border.all(color: scheme.outlineVariant, width: 2),
         ),
         child: Padding(
           padding: const EdgeInsets.all(12),
@@ -922,9 +928,9 @@ class _OutfitImagePicker extends StatelessWidget {
                   child: imagePath == null
                       ? DecoratedBox(
                           decoration: BoxDecoration(
-                            color: scheme.secondary.withValues(alpha: 0.12),
+                            color: scheme.secondaryContainer,
                           ),
-                          child: Icon(
+                          child: PixelIcon(
                             Icons.add_photo_alternate_outlined,
                             color: scheme.secondary,
                           ),
@@ -937,7 +943,9 @@ class _OutfitImagePicker extends StatelessWidget {
                                 decoration: BoxDecoration(
                                   color: scheme.surfaceContainerHigh,
                                 ),
-                                child: const Icon(Icons.broken_image_outlined),
+                                child: const PixelIcon(
+                                  Icons.broken_image_outlined,
+                                ),
                               ),
                         ),
                 ),
@@ -964,7 +972,7 @@ class _OutfitImagePicker extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+              PixelIcon(Icons.chevron_right, color: scheme.onSurfaceVariant),
             ],
           ),
         ),

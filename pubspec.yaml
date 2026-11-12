@@ -83,6 +83,12 @@ flutter:
   assets:
     - assets/illustrations/
     - assets/brand/
+    - assets/mimi/cute-v1/
+    - assets/fonts/LICENSE-FusionPixel.txt
+  fonts:
+    - family: FusionPixel
+      fonts:
+        - asset: assets/fonts/fusion-pixel-12px-proportional-zh_hant.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:

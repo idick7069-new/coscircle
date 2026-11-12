@@ -16,6 +16,7 @@ import '../../../core/utils/error_message.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../core/utils/user_action.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../../shared/widgets/mimi_mascot.dart';
 import '../../profile/presentation/profile_page.dart';
 import '../../profile/presentation/public_profile_page.dart';
 import 'social_page.dart';
@@ -155,11 +156,9 @@ class _FriendshipTileState extends ConsumerState<FriendshipTile> {
           children: [
             Row(
               children: [
-                CircleAvatar(
-                  backgroundImage: pickedImageProvider(item.avatarUrl),
-                  child: item.avatarUrl.isEmpty
-                      ? const Icon(Icons.person_outline)
-                      : null,
+                MimiAvatar(
+                  radius: 20,
+                  image: pickedImageProvider(item.avatarUrl),
                 ),
                 const SizedBox(width: 8),
                 Expanded(

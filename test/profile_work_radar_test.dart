@@ -202,6 +202,10 @@ void main() {
         tags.singleWhere((tag) => tag.label == '獨有作品').highlighted,
         isFalse,
       );
+      expect(tags.where((tag) => tag.filled).map((tag) => tag.label).toSet(), {
+        '共同作品改名',
+        '第二部',
+      });
       expect(find.byIcon(Icons.radar), findsNWidgets(3));
     },
   );

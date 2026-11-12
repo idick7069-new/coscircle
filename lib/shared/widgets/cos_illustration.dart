@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'cos_ui.dart';
+import 'mimi_mascot.dart';
 
-/// Decorative brand artwork, kept separate from user media and map content.
 enum CosIllustrationKind { people, event }
 
 class CosIllustration extends StatelessWidget {
@@ -16,23 +15,22 @@ class CosIllustration extends StatelessWidget {
   final CosIllustrationKind kind;
 
   @override
-  Widget build(BuildContext context) => ExcludeSemantics(
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(CosUi.radiusLg),
-      child: ColoredBox(
-        color: Colors.white,
-        child: SizedBox(
-          height: height,
-          width: double.infinity,
-          child: Image.asset(
-            kind == CosIllustrationKind.people
-                ? 'assets/illustrations/meet-your-circle.png'
-                : 'assets/illustrations/next-event.png',
-            fit: BoxFit.contain,
-            filterQuality: FilterQuality.medium,
+  Widget build(BuildContext context) {
+    final illustrationHeight = height.clamp(0.0, 160.0).toDouble();
+    return ExcludeSemantics(
+      child: SizedBox(
+        height: illustrationHeight,
+        width: double.infinity,
+        child: Center(
+          child: MimiMascot(
+            scene: kind == CosIllustrationKind.people
+                ? MimiScene.hello
+                : MimiScene.reading,
+            size: illustrationHeight,
+            animate: false,
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

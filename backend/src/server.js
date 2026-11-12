@@ -9,6 +9,7 @@ import {
   importEventsFromHtml,
 } from '../scripts/scrape-events.js';
 import { createPool } from './db.js';
+import { agePublicUpdate, publicProfileAge } from './profile-age-privacy.js';
 import { sendRecognitionPush, sendMeetupPush, sendRecognitionReplyPush } from './push-service.js';
 import { createEventNotifications } from './event-notifications.js';
 import { eventListQuery } from './event-queries.js';
@@ -504,6 +505,7 @@ app.put('/api/me', async (req, res, next) => {
       facebookUrl,
       bio,
       age,
+      agePublic,
       regions = [],
       travelRegions = [],
       travelSameRegion = false,
@@ -517,6 +519,7 @@ app.put('/api/me', async (req, res, next) => {
       deepPitWorkIds = pitWorkIds,
       shallowPitWorkIds = [],
     } = req.body;
+    const normalizedAgePublic = agePublicUpdate(agePublic);
     const normalizedRegions = normalizeStringArray(regions, [
       '北部',
       '中部',
@@ -554,6 +557,7 @@ app.put('/api/me', async (req, res, next) => {
               facebook_url = ?,
               bio = ?,
               age = ?,
+              age_public = COALESCE(?, age_public),
               regions_json = ?,
               travel_regions_json = ?,
               travel_same_region = ?,
@@ -570,6 +574,7 @@ app.put('/api/me', async (req, res, next) => {
         facebookUrl ?? null,
         bio ?? null,
         age ?? null,
+        normalizedAgePublic,
         JSON.stringify(normalizedRegions),
         JSON.stringify(normalizedTravelRegions),
         travelSameRegion ||
@@ -2359,7 +2364,7 @@ app.post('/api/recognitions/:requestId/respond', async (req, res, next) => {
 
 app.use((error, _req, res, _next) => {
   if (['last_admin', 'cannot_delete_self', 'cannot_suspend_self', 'cannot_revoke_self_admin',
-    'invalid_user_id', 'invalid_account_update', 'invalid_account_status',
+    'invalid_user_id', 'invalid_account_update', 'invalid_account_status', 'invalid_age_public',
     'authentication_required', 'admin_required', 'user_not_found'].includes(error.code)) {
     return res.status(error.status ?? 400).json({error: error.code});
   }
@@ -2965,6 +2970,7 @@ async function fetchUserProfile(userId) {
             facebook_url AS facebookUrl,
             bio,
             age,
+            age_public AS agePublic,
             regions_json AS regionsJson,
             travel_regions_json AS travelRegionsJson,
             travel_same_region AS travelSameRegion,
@@ -2997,6 +3003,7 @@ async function fetchUserProfileByPublicCode(publicCode, viewerUserId = null) {
             users.facebook_url AS facebookUrl,
             users.bio,
             users.age,
+            users.age_public AS agePublic,
             users.regions_json AS regionsJson,
             users.travel_regions_json AS travelRegionsJson,
             users.travel_same_region AS travelSameRegion,
@@ -3031,7 +3038,7 @@ async function fetchUserProfileByPublicCode(publicCode, viewerUserId = null) {
   return {
     id,
     isMe: Number(viewerUserId) === Number(id),
-    ...normalizeProfileJsonFields(profile),
+    ...publicProfileAge(normalizeProfileJsonFields(profile)),
     pitWorks,
     deepPitWorks: pitWorks.filter((work) => work.depth === 'deep'),
     shallowPitWorks: pitWorks.filter((work) => work.depth === 'shallow'),

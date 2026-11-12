@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/mimi_mascot.dart';
 import '../../../core/config/app_environment.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -261,7 +262,7 @@ class _LegalAcceptanceGateState extends ConsumerState<LegalAcceptanceGate>
           return const Scaffold(
             body: SafeArea(
               child: Center(
-                child: CircularProgressIndicator(semanticsLabel: '載入中'),
+                child: MimiLoading(scene: MimiScene.reading, label: '正在確認同意狀態…'),
               ),
             ),
           );

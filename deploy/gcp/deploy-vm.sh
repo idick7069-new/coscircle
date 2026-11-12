@@ -56,7 +56,7 @@ rsync -a \
 mkdir -p "${TMP_DIR}/web/official"
 rsync -a web/official/ "${TMP_DIR}/web/official/"
 cp web/official/index.html "${TMP_DIR}/web/index.html"
-rsync -a web/official/privacy.html web/official/terms.html \
+rsync -a web/official/android-testing.html web/official/privacy.html web/official/terms.html \
   web/official/delete-account.html web/official/delete-account.js \
   web/official/legal.css "${TMP_DIR}/web/"
 rsync -a web/favicon.png web/icons "${TMP_DIR}/web/"

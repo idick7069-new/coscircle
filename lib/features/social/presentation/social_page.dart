@@ -11,7 +11,7 @@ import '../../../core/utils/error_message.dart';
 import '../../../core/utils/user_action.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/cos_ui.dart';
-import '../../../shared/widgets/cos_illustration.dart';
+import '../../../shared/widgets/mimi_mascot.dart';
 import '../../../core/providers/friendship_providers.dart';
 import 'friendship_widgets.dart';
 import 'partner_discovery_page.dart';
@@ -174,10 +174,6 @@ class SocialPage extends ConsumerWidget {
                   child: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
-                      if (MediaQuery.textScalerOf(context).scale(14) <= 21) ...[
-                        const CosIllustration(height: 110),
-                        const SizedBox(height: 12),
-                      ],
                       _SocialActionGrid(
                         actions: [
                           _SocialAction(
@@ -634,8 +630,6 @@ class _EmptyActionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const CosIllustration(height: 120),
-          const SizedBox(height: 12),
           CosIconBubble(icon: icon, color: scheme.primary),
           const SizedBox(height: 10),
           Text(
@@ -872,7 +866,7 @@ class _SocialLoadingStack extends StatelessWidget {
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    CircleAvatar(
+                    MimiAvatar(
                       radius: 20,
                       backgroundColor:
                           (index.isEven ? scheme.primary : scheme.secondary)
@@ -920,7 +914,7 @@ class _SocialSkeletonLine extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: scheme.onSurface.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(99),
+          borderRadius: BorderRadius.circular(CosUi.radiusSm),
         ),
         child: SizedBox(height: height),
       ),
@@ -1215,19 +1209,18 @@ class _CircleMemberRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final nickname = member.nickname.isEmpty ? '未命名使用者' : member.nickname;
-    final initial = nickname.characters.firstOrNull ?? '?';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(CosUi.radiusMd),
           onTap: member.isBlocked ? null : onOpen,
           child: Ink(
             decoration: BoxDecoration(
               color: scheme.surfaceContainerHighest.withValues(alpha: 0.42),
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(CosUi.radiusMd),
               border: Border.all(
                 color: scheme.outlineVariant.withValues(alpha: 0.42),
               ),
@@ -1236,23 +1229,12 @@ class _CircleMemberRow extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Row(
                 children: [
-                  CircleAvatar(
+                  MimiAvatar(
                     radius: 21,
                     backgroundColor: member.isOwner
                         ? scheme.primaryContainer
                         : scheme.secondaryContainer,
-                    backgroundImage: pickedImageProvider(member.avatarUrl),
-                    child: member.avatarUrl.isEmpty
-                        ? Text(
-                            initial,
-                            style: TextStyle(
-                              color: member.isOwner
-                                  ? scheme.onPrimaryContainer
-                                  : scheme.onSecondaryContainer,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          )
-                        : null,
+                    image: pickedImageProvider(member.avatarUrl),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1310,7 +1292,7 @@ class _CircleInviteBand extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: scheme.tertiaryContainer,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
         border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.7)),
       ),
       child: Padding(
@@ -1376,13 +1358,33 @@ class _MemberAvatarStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (members.isEmpty) return const SizedBox.shrink();
-    return CosAvatarStack(
-      avatars: [
-        for (final member in members) pickedImageProvider(member.avatarUrl),
-      ],
-      names: [for (final member in members) member.nickname],
-      maxVisible: 8,
-      radius: 12,
+    final visible = members.take(8).toList();
+    final scheme = Theme.of(context).colorScheme;
+    const radius = 12.0;
+    const step = radius * 1.55;
+    return SizedBox(
+      height: radius * 2 + 4,
+      width: radius * 2 + (visible.length - 1) * step + 4,
+      child: Stack(
+        children: [
+          for (final entry in visible.indexed)
+            Positioned(
+              left: entry.$1 * step,
+              child: Tooltip(
+                message: entry.$2.nickname,
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: MimiAvatar(
+                    radius: radius,
+                    backgroundColor: scheme.primaryContainer,
+                    image: pickedImageProvider(entry.$2.avatarUrl),
+                    label: entry.$2.nickname,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -1402,7 +1404,6 @@ class _FollowedUserCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final nickname = user.nickname.isEmpty ? '未命名使用者' : user.nickname;
-    final initial = nickname.characters.firstOrNull ?? '?';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -1413,19 +1414,10 @@ class _FollowedUserCard extends StatelessWidget {
             Stack(
               clipBehavior: Clip.none,
               children: [
-                CircleAvatar(
+                MimiAvatar(
                   radius: 26,
                   backgroundColor: scheme.primaryContainer,
-                  backgroundImage: pickedImageProvider(user.avatarUrl),
-                  child: user.avatarUrl.isEmpty
-                      ? Text(
-                          initial,
-                          style: TextStyle(
-                            color: scheme.onPrimaryContainer,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        )
-                      : null,
+                  image: pickedImageProvider(user.avatarUrl),
                 ),
                 Positioned(
                   right: -2,
@@ -1433,7 +1425,7 @@ class _FollowedUserCard extends StatelessWidget {
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       color: scheme.surfaceContainerLowest,
-                      borderRadius: BorderRadius.circular(99),
+                      borderRadius: BorderRadius.circular(CosUi.radiusSm),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(2),

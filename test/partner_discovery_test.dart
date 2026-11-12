@@ -11,6 +11,8 @@ import 'package:coscircle/core/providers/partner_discovery_providers.dart';
 import 'package:coscircle/core/repositories/social_repository.dart';
 import 'package:coscircle/features/social/presentation/partner_discovery_page.dart';
 import 'package:coscircle/features/social/presentation/social_page.dart';
+import 'package:coscircle/shared/widgets/mimi_mascot.dart';
+import 'package:coscircle/shared/widgets/cos_illustration.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -202,6 +204,7 @@ void main() {
         await tester.tap(find.text('小圈圈').first);
         await tester.pumpAndSettle();
         expect(find.text('同好小圈圈'), findsOneWidget);
+        expect(find.byType(CosIllustration), findsNothing);
         expect(tester.takeException(), isNull);
       },
     );
@@ -322,7 +325,7 @@ void main() {
       expect(repository.userRequests, [(workId: 'work-1', offset: 0)]);
       expect(find.text('公開暱稱'), findsOneWidget);
       expect(find.text('公開自我介紹'), findsOneWidget);
-      expect(find.byType(CircleAvatar), findsOneWidget);
+      expect(find.byType(MimiAvatar), findsOneWidget);
       expect(find.textContaining('共同作品'), findsNothing);
       await tester.tap(find.text('查看名片'));
       await tester.pumpAndSettle();

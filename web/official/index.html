@@ -1,149 +1,40 @@
 <!doctype html>
-<html lang="zh-Hant">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="CosCircle 是為 Cosplay 與同人活動設計的小圈圈集合、活動預訂、現場位置分享與同好管理工具。">
-  <title>CosCircle | Cos 小圈圈</title>
-  <link rel="icon" type="image/png" href="/favicon.png">
-  <link rel="stylesheet" href="/official/styles.css">
-  <script>
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.getRegistrations()
-        .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
-        .catch(() => {});
-    }
-    if ("caches" in window) {
-      caches.keys()
-        .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
-        .catch(() => {});
-    }
-  </script>
-</head>
-<body>
-  <header class="site-header">
-    <a class="brand" href="/" aria-label="CosCircle 首頁">
-      <img src="/icons/Icon-192.png" alt="" width="32" height="32">
-      <span>CosCircle</span>
-    </a>
-    <nav aria-label="主要導覽">
-      <a href="#privacy">安心保護</a>
-      <a href="#events">活動工具</a>
-      <a href="/app/">開啟 Web App</a>
-    </nav>
-  </header>
-
-  <main>
-    <section class="hero">
-      <div class="hero-copy">
-        <p class="eyebrow">Cosplay 活動同好工具</p>
-        <h1>CosCircle 是給 Coser、攝影與同好一起跑場的小圈圈工具。</h1>
-        <p class="lead">
-          它不是公開交友牆，而是把活動預定、Cos 名片、同行小圈圈、現場集合和隱私保護放在同一個地方。你可以知道朋友今天出什麼角、在哪個活動、什麼時段方便互動，也能控制哪些資訊只給信任的人看。
-        </p>
-        <div class="actions">
-          <a class="button primary" href="/app/">開啟 Web App</a>
-          <a class="button secondary" href="#privacy">了解隱私設計</a>
-        </div>
-      </div>
-      <div class="phone-stage" aria-label="CosCircle App 預覽">
-        <div class="phone">
-          <div class="phone-top"></div>
-          <div class="screen">
-            <div class="screen-header">
-              <span>活動發現</span>
-              <strong>FF 開拓祭</strong>
-            </div>
-            <div class="event-card">
-              <span class="pill">今日</span>
-              <h2>找同好、約集合、看現場</h2>
-              <p>以小圈圈為單位管理同行者，不把行蹤灑到整個公開場域。</p>
-            </div>
-            <div class="map-preview">
-              <span class="pin one"></span>
-              <span class="pin two"></span>
-              <span class="pin three"></span>
-            </div>
-            <div class="privacy-strip">
-              <span>緊急隱身</span>
-              <span>15 分鐘</span>
-              <span>小圈圈可見</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section id="privacy" class="section">
-      <div class="section-heading">
-        <p class="eyebrow">CosCircle 在做什麼</p>
-        <h2>讓活動前、活動中、活動後的資訊不再散落各處。</h2>
-      </div>
-      <div class="feature-grid">
-        <article>
-          <span class="icon">1</span>
-          <h3>活動預定</h3>
-          <p>收藏即將參加的場次，標記出席日期、角色、作品、同行身分與可互動時間，讓約拍和認親不用一直翻聊天紀錄。</p>
-        </article>
-        <article>
-          <span class="icon">2</span>
-          <h3>Cos 名片</h3>
-          <p>整理暱稱、作品坑單、常去地區、互動偏好與地雷資訊，用 QR Code 快速交換，不必在現場臨時補一堆自我介紹。</p>
-        </article>
-        <article>
-          <span class="icon">3</span>
-          <h3>小圈圈管理</h3>
-          <p>把熟人、同坑朋友、攝影夥伴分成可信任的小圈圈，資訊分享可以依關係收放，不需要一次公開給所有人。</p>
-        </article>
-      </div>
-    </section>
-
-    <section id="events" class="section split">
-      <div>
-        <p class="eyebrow">現場與安全</p>
-        <h2>大型活動裡最容易混亂的集合與隱私，CosCircle 也一起處理。</h2>
-      </div>
-      <div class="timeline">
-        <div><strong>限時</strong><span>位置分享可設定 15、30、60 分鐘，到期自動失效。</span></div>
-        <div><strong>可見</strong><span>位置與預定資訊可限制給小圈圈或活動內使用者。</span></div>
-        <div><strong>封鎖</strong><span>遇到不舒服的人可以封鎖，降低被持續看見的風險。</span></div>
-        <div><strong>隱身</strong><span>緊急隱身會停止位置分享，並把個人可見性收緊。</span></div>
-      </div>
-    </section>
-
-    <section class="section use-cases">
-      <div>
-        <p class="eyebrow">適合誰使用</p>
-        <h2>不是只有 Coser，整個活動同行圈都能用。</h2>
-      </div>
-      <div class="use-case-grid">
-        <article>
-          <h3>Coser</h3>
-          <p>公開今天出的角色、可互動時段與地雷，讓認親更順，也讓界線更清楚。</p>
-        </article>
-        <article>
-          <h3>攝影</h3>
-          <p>快速確認朋友場次、集合點與預定角色，減少現場找不到人的時間。</p>
-        </article>
-        <article>
-          <h3>同行朋友</h3>
-          <p>用小圈圈掌握大家的活動狀態，需要集合時才分享有限時間的位置。</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="cta-band">
-      <h2>準備好讓活動現場少一點混亂了嗎？</h2>
-      <a class="button primary" href="/app/">進入 CosCircle</a>
-    </section>
-  </main>
-  <footer class="section" aria-label="條款與支援">
-    <nav>
-      <a href="/privacy.html">隱私政策</a>
-      <a href="/terms.html">服務條款</a>
-      <a href="/delete-account.html">刪除帳號</a>
-      <a href="https://forms.gle/WGFe57Y1AFW1LQda8" rel="noopener noreferrer">聯絡我們</a>
-    </nav>
-  </footer>
-</body>
-</html>
+<html lang="zh-Hant"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b1020"><meta name="description" content="讓希希陪你建立 Cos 名片、發布場次預定、找到同坑朋友，和小圈圈在現場碰面。">
+<title>CosCircle｜和同坑夥伴，一起跑下一場</title><link rel="canonical" href="https://coscircle.app/">
+<meta property="og:title" content="CosCircle｜和同坑夥伴，一起跑下一場"><meta property="og:description" content="讓希希陪你建立 Cos 名片、發布場次預定、找到同坑朋友，和小圈圈在現場碰面。">
+<meta property="og:type" content="website"><meta property="og:locale" content="zh_TW">
+<meta property="og:url" content="https://coscircle.app/"><meta property="og:image" content="https://coscircle.app/official/assets/xixi-cute-v1/share-card.png">
+<link rel="icon" type="image/png" href="/official/assets/pixel-v1/logo.png">
+<link rel="stylesheet" href="/official/styles.css?v=20261111-1">
+<script src="/official/site.js?v=20261111-1" defer></script></head><body>
+<a class="skip-link" href="#main">跳到主要內容</a><header class="site-header wrap"><a class="brand" href="/" aria-label="CosCircle 首頁"><img src="/official/assets/pixel-v1/logo.png" width="40" height="40" alt=""><span>CosCircle<small>Cos 小圈圈</small></span></a>
+<nav aria-label="主要導覽"><a href="/#journey" aria-current="page">跟希希逛逛</a><a href="/android-testing.html" >Android 測試</a><a class="nav-app" href="/app/">開啟 Web App <span aria-hidden="true">↗</span></a></nav></header>
+<main id="main">
+<section class="hero wrap">
+<div class="hero-copy"><p class="eyebrow"><span class="status-dot"></span> 給一起跑場的你 · Android 測試準備中</p>
+<h1>下一場，<br>和<span class="mint">同坑的你</span><br>一起出發。</h1>
+<p class="lead">想出哪個角、想見哪些朋友、到場在哪碰面。<br class="desktop-break">把跑場前後的大小事，交給你的小圈圈。</p>
+<div class="hero-actions"><a class="button primary" href="/android-testing.html">查看 Android 測試指南 <span aria-hidden="true">→</span></a><a class="text-link" href="#journey">先跟希希認識 App ↓</a></div>
+<div class="mascot-note"><img src="/official/assets/xixi-cute-v1/portrait.png" width="80" height="80" alt="粉色短髮、圓眼鏡的半身像素希希"><p><strong>我是希希，你的馬內。</strong><br>陪你一起出角，也幫你把場次大小事打理好。</p></div></div>
+<div class="hero-stage"><span class="stage-label">場次準備中 <span aria-hidden="true">✦ ✦ ✦</span></span><div class="ticket"><span class="eyebrow">我的下一場</span><h2>喜歡的角色，<br>熟悉的小圈圈。</h2><div class="ticket-tags"><span>Coser</span><span>攝影</span><span>一起跑場</span></div><div class="ticket-bottom"><span class="pixel-square"></span><span>名片準備好，就出發。</span></div></div>
+<figure class="hero-phone"><img src="/official/assets/screens-cute-v1/profile-dark.png" width="780" height="1688" alt="CosCircle 午夜像素主題的個人名片與身份顯示範例"><figcaption>App 畫面示意 · 範例資料</figcaption></figure><div class="stage-caption"><span>01 名片</span><span>02 預定</span><span>03 同坑</span><span>04 碰面</span></div></div>
+</section>
+<section class="intro-strip"><div class="wrap"><p>一個人準備出角，<br><strong>一群人期待見面。</strong></p><span>Cos 名片 / 場次預定 / 同坑雷達 / 現場集合</span></div></section>
+<section class="section wrap" id="journey"><div class="section-heading"><p class="eyebrow">跟著希希，從第一次跑場開始</p><h2>四小步，把同好<br>變成下次會見面的朋友。</h2><p>點選每一步，看看 CosCircle 怎麼陪你跑場。</p></div>
+<div class="journey-layout"><div class="journey-steps" role="tablist" aria-label="跑場功能介紹" aria-orientation="vertical">
+<button type="button" role="tab" id="tab-profile" aria-controls="panel-profile" aria-selected="true"><span class="step-number">01</span><span><strong>先讓同好認識你</strong><small>建立名片，把你的坑單帶上</small></span><span class="step-arrow" aria-hidden="true">↗</span></button>
+<button type="button" role="tab" id="tab-booking" aria-controls="panel-booking" aria-selected="false" tabindex="-1"><span class="step-number">02</span><span><strong>說好，這一天見</strong><small>選場次日期，發布出角預定</small></span><span class="step-arrow" aria-hidden="true">↗</span></button>
+<button type="button" role="tab" id="tab-friends" aria-controls="panel-friends" aria-selected="false" tabindex="-1"><span class="step-number">03</span><span><strong>原來你也喜歡這部！</strong><small>同坑雷達、戳友與小圈圈</small></span><span class="step-arrow" aria-hidden="true">↗</span></button>
+<button type="button" role="tab" id="tab-meet" aria-controls="panel-meet" aria-selected="false" tabindex="-1"><span class="step-number">04</span><span><strong>到了現場，一起集合</strong><small>看地圖，發出認親訊號</small></span><span class="step-arrow" aria-hidden="true">↗</span></button></div>
+<div class="journey-panels">
+<article role="tabpanel" id="panel-profile" aria-labelledby="tab-profile" tabindex="0"><div class="guide-dialog"><img src="/official/assets/xixi-cute-v1/portrait.png" width="64" height="64" alt="半身希希"><p>「先告訴大家你喜歡什麼。<br>同坑的人，就更容易認出彼此。」</p></div><div class="panel-content"><div><p class="eyebrow">你的 Cos 名片</p><h3>不只暱稱，<br>還有你的喜歡。</h3><p>放上身份、常跑地區、作品坑單與互動偏好。遇見新朋友，掃 QRCode 就能交換名片。</p><ul class="check-list"><li>身份可複選，Coser 也能是攝影</li><li>共同作品標籤，讓同坑一眼被看見</li><li>認親準備度，陪你慢慢補齊資料</li></ul></div><img class="app-preview" src="/official/assets/screens-cute-v1/profile-dark.png" width="780" height="1688" alt="個人名片、複選身份與認親準備度的 App 範例畫面" loading="lazy"></div><p class="sample-label">App 畫面示意 · 範例資料</p></article>
+<article role="tabpanel" id="panel-booking" aria-labelledby="tab-booking" tabindex="0" hidden><div class="guide-dialog"><img src="/official/assets/xixi-cute-v1/reading-still.png" width="64" height="64" alt="半身希希正在整理資料"><p>「D1 出這個角、D2 換另一套？<br>每一天的預定，都分開幫你記好。」</p></div><div class="panel-content"><div><p class="eyebrow">活動與出角預定</p><h3>把「我會去」<br>變成清楚的約定。</h3><p>用月曆找場次、選參加日期，填上作品、角色、照片與可互動時段，活動前就知道怎麼碰面。</p><ul class="check-list"><li>多日活動，依實際參加日分開預定</li><li>瀏覽活動詳情，看看大家的公開預定</li><li>製作預定分享圖，把計畫傳給朋友</li></ul></div><img class="app-preview" src="/official/assets/screens-cute-v1/events-dark.png" width="780" height="1688" alt="活動月曆與篩選工具的 App 範例畫面" loading="lazy"></div><p class="sample-label">App 畫面示意 · 範例資料</p></article>
+<article role="tabpanel" id="panel-friends" aria-labelledby="tab-friends" tabindex="0" hidden><div class="guide-dialog"><img src="/official/assets/xixi-cute-v1/portrait.png" width="64" height="64" alt="半身希希揮手"><p>「今天來不及好好聊？<br>留一句自我介紹，下次就認得你。」</p></div><div class="panel-content"><div><p class="eyebrow">同坑雷達與戳友</p><h3>從相同的喜歡，<br>找到一起跑場的人。</h3><p>到「尋找夥伴」挑喜歡的作品，再看看有哪些同好。掃名片後可以單向關注，也能附上留言送出戳友邀請。</p><ul class="check-list"><li>同坑標籤提醒，一眼看到共同作品</li><li>戳友確認後，留下相遇場次與備註</li><li>加入小圈圈，和熟悉的夥伴一起行動</li></ul></div><img class="app-preview" src="/official/assets/screens-cute-v1/same-works-dark.png" width="780" height="1688" alt="同坑作品與共同喜好使用者的 App 範例畫面" loading="lazy"></div><p class="sample-label">App 畫面示意 · 範例資料</p></article>
+<article role="tabpanel" id="panel-meet" aria-labelledby="tab-meet" tabindex="0" hidden><div class="guide-dialog"><img src="/official/assets/xixi-cute-v1/map-still.png" width="64" height="64" alt="半身希希查看地圖"><p>「你到哪裡了？<br>想讓朋友找到你時，再開啟位置分享。」</p></div><div class="meet-content"><p class="eyebrow">現場與認親</p><h3>人很多，<br>也找得到自己的小圈圈。</h3><p>查看場次地圖與集合點，向朋友發出認親訊號。需要時主動分享位置，設定可見範圍與期限，也能隨時停止。</p><div class="meet-route" aria-label="示意流程：選場次、查看集合點、發出認親訊號"><span>選場次</span><span aria-hidden="true">→</span><span>看集合點</span><span aria-hidden="true">→</span><span>打聲招呼</span></div><p class="micro-copy">位置分享需要你的定位授權；是否分享，由你決定。</p></div></article>
+</div></div><noscript><p class="notice">這裡有四個功能介紹。啟用 JavaScript 後可依步驟切換，也可以直接<a href="/app/">開啟 Web App</a>探索名片、活動、同好與現場功能。</p></noscript></section>
+<section class="section wrap theme-section"><div><p class="eyebrow">像素裡，也有你的習慣</p><h2>午夜、微光，<br>或明亮的白晝。</h2><p>三種介面主題，搭配陪你跑場的希希。名片、卡片與按鈕一起換色，選你看得舒服的樣子。</p><div class="palette-list"><span><i class="swatch midnight"></i>午夜像素</span><span><i class="swatch glow"></i>冷調微光</span><span><i class="swatch daylight"></i>白晝像素</span></div></div><figure class="theme-preview"><img src="/official/assets/screens-cute-v1/profile-light.png" width="780" height="1688" alt="白晝像素主題的白色底個人名片範例" loading="lazy"><figcaption>白晝像素 · 畫面示意</figcaption></figure></section>
+<section class="section wrap safety-section"><div><p class="eyebrow">相遇很開心，界線也要照顧好</p><h2>分享多少，<br>由你決定。</h2></div><div class="safety-list"><article><span>01</span><div><h3>預定的可見範圍</h3><p>公開預定讓大家認識你，也能選擇小圈圈限定。</p></div></article><article><span>02</span><div><h3>位置由你主動分享</h3><p>需要找人時才開啟；設定期限，或隨時停止分享。</p></div></article><article><span>03</span><div><h3>交友不必有壓力</h3><p>關注與雙向戳友分開，邀請也能選擇忽略。</p></div></article></div></section>
+<section class="closing wrap"><img src="/official/assets/xixi-cute-v1/portrait.png" width="96" height="96" alt="希希揮手邀請你一起跑場"><div><p class="eyebrow">希希幫你打理好，準備出發</p><h2>把下一場，<br>留給你喜歡的人事物。</h2><p>Android 測試即將開放。也可以先用 Web App 認識 CosCircle。</p><div class="hero-actions"><a class="button primary" href="/android-testing.html">查看加入測試步驟 →</a><a class="text-link" href="/app/">開啟 Web App ↗</a></div></div></section>
+</main><footer class="site-footer wrap"><a class="brand" href="/">CosCircle<span class="footer-note">讓下一場，有熟悉的你。</span></a><nav aria-label="條款與支援"><a href="/privacy.html">隱私政策</a><a href="/terms.html">服務條款</a><a href="/delete-account.html">刪除帳號</a><a href="https://forms.gle/WGFe57Y1AFW1LQda8" target="_blank" rel="noopener noreferrer">意見回饋 ↗</a></nav><p>為 Coser、攝影與每一位一起跑場的朋友而做。</p></footer></body></html>

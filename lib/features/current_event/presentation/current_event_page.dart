@@ -13,6 +13,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/models/circle.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/models/event.dart';
 import '../../../core/models/event_day_item.dart';
@@ -28,6 +29,7 @@ import '../../../core/utils/error_message.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../core/utils/participant_role_style.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../../shared/widgets/mimi_mascot.dart';
 import '../../social/presentation/social_page.dart' show circlesProvider;
 import '../../social/presentation/friendship_widgets.dart'
     show refreshFriendships;
@@ -256,6 +258,9 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
             return Stack(
               children: [
                 GoogleMap(
+                  style: Theme.of(context).brightness == Brightness.dark
+                      ? AppTheme.pixelMapStyle
+                      : null,
                   initialCameraPosition: CameraPosition(
                     target: _initialPosition,
                     zoom: 15,
@@ -340,19 +345,43 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
                     ),
                   ),
                 if (isResolvingEvent)
-                  const Positioned(
-                    left: 24,
-                    right: 24,
-                    top: 166,
-                    child: _CurrentEventLoadingCard(),
+                  Positioned.fill(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          24,
+                          (constraints.maxHeight * 0.3).clamp(88.0, 166.0),
+                          24,
+                          16,
+                        ),
+                        child: Align(
+                          alignment: Alignment.topCenter,
+                          child: SingleChildScrollView(
+                            child: const _CurrentEventLoadingCard(),
+                          ),
+                        ),
+                      ),
+                    ),
                   )
                 else if (event == null)
-                  Positioned(
-                    left: 24,
-                    right: 24,
-                    top: 166,
-                    child: _CurrentEventEmptyCard(
-                      onOpenEvents: widget.onOpenEvents,
+                  Positioned.fill(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          24,
+                          (constraints.maxHeight * 0.3).clamp(88.0, 166.0),
+                          24,
+                          16,
+                        ),
+                        child: Align(
+                          alignment: Alignment.topCenter,
+                          child: SingleChildScrollView(
+                            child: _CurrentEventEmptyCard(
+                              onOpenEvents: widget.onOpenEvents,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 if (meetups.hasError && eventId != null)
@@ -411,10 +440,18 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
               ),
             ),
           ),
-          loading: () => const Center(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: _CurrentEventLoadingCard(),
+          loading: () => LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: (constraints.maxHeight - 32).clamp(
+                    0.0,
+                    double.infinity,
+                  ),
+                ),
+                child: const Center(child: _CurrentEventLoadingCard()),
+              ),
             ),
           ),
         ),
@@ -1198,6 +1235,11 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
                               child: SizedBox(
                                 height: 220,
                                 child: GoogleMap(
+                                  style:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? AppTheme.pixelMapStyle
+                                      : null,
                                   initialCameraPosition: CameraPosition(
                                     target: selectedPosition,
                                     zoom: 17,
@@ -1651,23 +1693,15 @@ class _CurrentEventPageState extends ConsumerState<CurrentEventPage>
                               padding: const EdgeInsets.all(4),
                               decoration: BoxDecoration(
                                 color: roleColor,
-                                borderRadius: BorderRadius.circular(24),
+                                borderRadius: BorderRadius.circular(
+                                  CosUi.radiusLg,
+                                ),
                                 boxShadow: [CosUi.softShadow(roleColor)],
                               ),
-                              child: CircleAvatar(
+                              child: MimiAvatar(
                                 radius: 34,
-                                backgroundImage: pickedImageProvider(
-                                  location.avatarUrl,
-                                ),
-                                child: location.avatarUrl.isEmpty
-                                    ? Text(
-                                        location
-                                                .nickname
-                                                .characters
-                                                .firstOrNull ??
-                                            '?',
-                                      )
-                                    : null,
+                                image: pickedImageProvider(location.avatarUrl),
+                                label: location.nickname,
                               ),
                             ),
                             const SizedBox(width: 14),
@@ -2159,13 +2193,14 @@ class _CurrentEventLoadingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CosReveal(
-      child: _CurrentEventStateCard(
-        icon: Icons.radar_outlined,
-        title: '正在接上現場雷達',
-        subtitle: '讀取你已加入的活動和現場同好位置',
-        accentColor: Theme.of(context).colorScheme.primary,
-        child: const _RadarPulse(),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 440),
+      child: CosCard(
+        child: MimiLoading(
+          scene: MimiScene.map,
+          label: '希希正在查看場次地圖…',
+          compact: MediaQuery.sizeOf(context).height < 600,
+        ),
       ),
     );
   }
@@ -2186,13 +2221,18 @@ class _CurrentEventEmptyCard extends StatelessWidget {
         title: '目前無當前活動',
         subtitle: '先加入今天或即將參加的場次，再回來分享位置、集合與認親',
         accentColor: scheme.secondary,
-        child: SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: onOpenEvents,
-            icon: const Icon(Icons.event_available),
-            label: const Text('去活動清單'),
-          ),
+        child: Row(
+          children: [
+            const MimiMascot(scene: MimiScene.map, size: 48, animate: false),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: onOpenEvents,
+                icon: const Icon(Icons.event_available),
+                label: const Text('去活動清單'),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -2282,103 +2322,6 @@ class _CurrentEventStateCard extends StatelessWidget {
             ),
             if (child != null) ...[const SizedBox(height: 16), child!],
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _RadarPulse extends StatefulWidget {
-  const _RadarPulse();
-
-  @override
-  State<_RadarPulse> createState() => _RadarPulseState();
-}
-
-class _RadarPulseState extends State<_RadarPulse>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    );
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _controller.stop();
-    } else if (!_controller.isAnimating) {
-      _controller.repeat();
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    if (MediaQuery.disableAnimationsOf(context)) {
-      return SizedBox(
-        height: 58,
-        child: Icon(Icons.location_searching, color: scheme.primary, size: 24),
-      );
-    }
-
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final value = _controller.value;
-        return SizedBox(
-          height: 58,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              for (final offset in const [0.0, 0.33, 0.66])
-                _RadarRing(
-                  progress: (value + offset) % 1,
-                  color: scheme.primary,
-                ),
-              Icon(Icons.location_searching, color: scheme.primary, size: 24),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _RadarRing extends StatelessWidget {
-  const _RadarRing({required this.progress, required this.color});
-
-  final double progress;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final scale = 0.42 + progress * 0.9;
-    final opacity = (1 - progress).clamp(0.0, 1.0);
-
-    return Transform.scale(
-      scale: scale,
-      child: Opacity(
-        opacity: opacity,
-        child: Container(
-          width: 52,
-          height: 52,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: color.withValues(alpha: 0.42), width: 2),
-          ),
         ),
       ),
     );

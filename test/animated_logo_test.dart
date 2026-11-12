@@ -3,16 +3,21 @@ import 'dart:ui' as ui;
 import 'package:coscircle/core/theme/app_theme.dart';
 import 'package:coscircle/shared/widgets/cos_animated_logo.dart';
 import 'package:coscircle/shared/widgets/cos_ui.dart';
+import 'package:coscircle/shared/widgets/mimi_mascot.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-Future<void> _precacheMark(WidgetTester tester) async {
+Future<void> _precacheMark(WidgetTester tester, {bool mascot = false}) async {
   Object? loadError;
   await tester.runAsync(() async {
     await precacheImage(
-      const AssetImage('assets/brand/coscircle-mark.png'),
-      tester.element(find.byType(CosLogoMark).first),
+      AssetImage(
+        mascot
+            ? 'assets/mimi/cute-v1/reading-still.png'
+            : 'assets/brand/coscircle-mark.png',
+      ),
+      tester.element(find.byType(MaterialApp).first),
       onError: (error, stackTrace) => loadError = error,
     );
   });
@@ -38,17 +43,20 @@ Future<List<int>> _pixels(WidgetTester tester, Finder finder) async {
 }
 
 void _expectBrandPixels(List<int> pixels, int size) {
-  final colors = <String, bool Function(int, int, int)>{
-    'teal body': (r, g, b) => g > r + 25 && b > r + 10 && g >= b - 30,
-    'coral calendar': (r, g, b) =>
-        r > g + 40 && r > b + 25 && g > 35 && b >= g * 0.6,
-    'gold fold': (r, g, b) => r > 160 && g > 105 && b < g * 0.7 && r > g + 10,
+  final colors = {
+    'mint body': AppTheme.mint,
+    'lavender calendar': AppTheme.lavender,
+    'cream fold': AppTheme.cream,
   };
   for (final color in colors.entries) {
     var count = 0;
     for (var i = 0; i < pixels.length; i += 4) {
-      if (pixels[i + 3] > 180 &&
-          color.value(pixels[i], pixels[i + 1], pixels[i + 2])) {
+      final argb =
+          (pixels[i + 3] << 24) |
+          (pixels[i] << 16) |
+          (pixels[i + 1] << 8) |
+          pixels[i + 2];
+      if (argb == color.value.toARGB32()) {
         count++;
       }
     }
@@ -86,12 +94,17 @@ void main() {
             accessibleNavigation: accessible,
           ),
           child: const Scaffold(
-            body: Center(child: CosAnimatedLogo(key: ValueKey('logo'))),
+            body: Center(
+              child: RepaintBoundary(
+                key: ValueKey('animated-preview'),
+                child: CosAnimatedLogo(key: ValueKey('logo')),
+              ),
+            ),
           ),
         ),
       ),
     );
-    await _precacheMark(tester);
+    await _precacheMark(tester, mascot: true);
   }
 
   Future<List<int>> renderMark(
@@ -166,16 +179,29 @@ void main() {
 
   testWidgets('brand fades in without moving its layout', (tester) async {
     await open(tester);
-    final before = tester.widget<CosLogoMark>(find.byType(CosLogoMark));
-    expect(before.markOpacity, closeTo(0.2, 0.001));
+    final before = tester.widget<Opacity>(
+      find.descendant(
+        of: find.byType(CosAnimatedLogo),
+        matching: find.byType(Opacity),
+      ),
+    );
+    expect(before.opacity, closeTo(0.2, 0.001));
     final size = tester.getSize(find.byKey(const ValueKey('logo')));
     await tester.pump(const Duration(milliseconds: 800));
-    final after = tester.widget<CosLogoMark>(find.byType(CosLogoMark));
-    expect(after.markOpacity, 1);
+    final after = tester.widget<Opacity>(
+      find.descendant(
+        of: find.byType(CosAnimatedLogo),
+        matching: find.byType(Opacity),
+      ),
+    );
+    expect(after.opacity, 1);
     expect(tester.getSize(find.byKey(const ValueKey('logo'))), size);
     expect(size, const Size.square(128));
     await tester.pump(const Duration(seconds: 8));
-    expect(tester.widget<CosLogoMark>(find.byType(CosLogoMark)).markOpacity, 1);
+    expect(
+      tester.widget<MimiMascot>(find.byType(MimiMascot)).scene,
+      MimiScene.reading,
+    );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
@@ -186,12 +212,12 @@ void main() {
     ) async {
       await open(tester, reduced: true, dark: dark);
       await tester.pumpAndSettle();
-      final logo = tester.widget<CosLogoMark>(find.byType(CosLogoMark));
-      expect(logo.markOpacity, 1);
+      final logo = tester.widget<MimiMascot>(find.byType(MimiMascot));
+      expect(logo.animate, false);
       expect(
         find.descendant(
           of: find.byType(CosAnimatedLogo),
-          matching: find.byType(AnimatedBuilder),
+          matching: find.byType(TweenAnimationBuilder<double>),
         ),
         findsNothing,
       );
@@ -204,10 +230,7 @@ void main() {
       'logo pixels are visible and change between frames, dark=$dark',
       (tester) async {
         await open(tester, dark: dark);
-        final boundary = find.descendant(
-          of: find.byType(CosAnimatedLogo),
-          matching: find.byType(RepaintBoundary),
-        );
+        final boundary = find.byKey(const ValueKey('animated-preview'));
 
         final first = await _pixels(tester, boundary);
         expect(
@@ -231,15 +254,12 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       await open(tester, accessible: true);
       await tester.pumpAndSettle();
-      expect(
-        tester.widget<CosLogoMark>(find.byType(CosLogoMark)).markOpacity,
-        1,
-      );
+      expect(tester.widget<MimiMascot>(find.byType(MimiMascot)).animate, false);
       await open(tester);
-      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pumpAndSettle();
       expect(
-        tester.widget<CosLogoMark>(find.byType(CosLogoMark)).markOpacity,
-        1,
+        tester.widget<MimiMascot>(find.byType(MimiMascot)).scene,
+        MimiScene.reading,
       );
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();

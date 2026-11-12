@@ -9,11 +9,13 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/models/event.dart';
 import '../../../core/models/participant.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/event_day_display.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../core/utils/participant_role_style.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../../shared/widgets/pixel_icon.dart';
 
 class EventBookingSharePage extends StatefulWidget {
   const EventBookingSharePage({
@@ -31,21 +33,21 @@ class EventBookingSharePage extends StatefulWidget {
 
 class _EventBookingSharePageState extends State<EventBookingSharePage> {
   static const _backgroundColors = [
-    Color(0xffffe27d),
-    Color(0xffd8f1e9),
-    Color(0xffffe1df),
-    Color(0xffe3f2f5),
-    Color(0xfff7faf9),
-    Color(0xffe5e6ef),
+    AppTheme.midnight,
+    AppTheme.panel,
+    AppTheme.raisedPanel,
+    Color(0xff193d42),
+    Color(0xff302c50),
+    Color(0xff332239),
   ];
   static const _labelBackgroundColors = [
-    Color(0xff111111),
-    Color(0xffe83f75),
-    Color(0xff2f80ed),
-    Color(0xff8b5cf6),
-    Color(0xff16a34a),
-    Color(0xfff59e0b),
-    Color(0xffef4444),
+    AppTheme.midnight,
+    AppTheme.mint,
+    AppTheme.lavender,
+    AppTheme.cream,
+    AppTheme.coral,
+    AppTheme.raisedPanel,
+    Color(0xff302c50),
   ];
 
   final _boundaryKey = GlobalKey();
@@ -136,7 +138,7 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
                     color: Theme.of(context).colorScheme.onPrimary,
                     size: 20,
                   )
-                : const Icon(Icons.ios_share),
+                : const PixelIcon(Icons.ios_share),
             label: Text(_sharing ? '產生中' : '分享圖片'),
           ),
         ),
@@ -346,7 +348,7 @@ class _EventBookingSharePageState extends State<EventBookingSharePage> {
                               }
                             });
                           },
-                          icon: const Icon(Icons.refresh),
+                          icon: const PixelIcon(Icons.refresh),
                           label: const Text('重置'),
                         ),
                       ],
@@ -536,8 +538,7 @@ class _ShareComposerHero extends StatelessWidget {
     final dateText = DateFormat('MM/dd', 'zh_TW').format(event.startDate);
 
     return CosReveal(
-      child: CosGradientPanel(
-        icon: Icons.theater_comedy_outlined,
+      child: CosCard(
         padding: const EdgeInsets.all(16),
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -640,13 +641,12 @@ class _ShareGestureHint extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: selected == null
-            ? scheme.surfaceContainerHighest.withValues(alpha: 0.52)
-            : scheme.secondaryContainer.withValues(alpha: 0.72),
+            ? scheme.surfaceContainerLowest
+            : scheme.secondaryContainer,
         borderRadius: BorderRadius.circular(CosUi.radiusLg),
         border: Border.all(
-          color: selected == null
-              ? scheme.outlineVariant.withValues(alpha: 0.66)
-              : scheme.secondary.withValues(alpha: 0.36),
+          color: selected == null ? scheme.outlineVariant : scheme.secondary,
+          width: 2,
         ),
       ),
       child: Row(
@@ -710,9 +710,9 @@ class _ShareQuickActionPanel extends StatelessWidget {
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: scheme.primaryContainer.withValues(alpha: 0.34),
+        color: scheme.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(CosUi.radiusLg),
-        border: Border.all(color: scheme.primary.withValues(alpha: 0.22)),
+        border: Border.all(color: scheme.primary, width: 2),
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -744,7 +744,7 @@ class _ShareQuickActionPanel extends StatelessWidget {
               onPressed: sharing ? null : onShare,
               icon: sharing
                   ? CosLoadingPulse(color: scheme.onPrimary, size: 20)
-                  : const Icon(Icons.ios_share),
+                  : const PixelIcon(Icons.ios_share),
               label: Text(sharing ? '產生中' : '產生並分享'),
             );
             if (constraints.maxWidth < 390) {
@@ -790,9 +790,7 @@ class _ShareEditorPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(CosUi.radiusLg),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.64),
-        ),
+        border: Border.all(color: scheme.outlineVariant, width: 2),
         boxShadow: [CosUi.softShadow(scheme.shadow)],
       ),
       child: Padding(
@@ -960,8 +958,8 @@ class _ShareCanvas extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final days = [for (var index = 1; index <= dayCount; index += 1) index];
-    final accent = _strongColor(backgroundColor);
-    final secondary = _shiftHue(accent, 42);
+    const accent = AppTheme.mint;
+    const secondary = AppTheme.lavender;
     return DecoratedBox(
       decoration: BoxDecoration(color: backgroundColor),
       child: Stack(
@@ -992,12 +990,9 @@ class _ShareCanvas extends StatelessWidget {
             bottom: 42,
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.42),
-                borderRadius: BorderRadius.circular(42),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.72),
-                  width: 3,
-                ),
+                color: AppTheme.panel,
+                borderRadius: BorderRadius.circular(CosUi.radiusLg),
+                border: Border.all(color: AppTheme.pixelOutline, width: 3),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(26),
@@ -1026,7 +1021,7 @@ class _ShareCanvas extends StatelessWidget {
                             labelFontSize: labelFontSizes[dayIndex] ?? 80,
                             labelBackgroundColor:
                                 labelBackgroundColors[dayIndex] ??
-                                const Color(0xff111111),
+                                AppTheme.midnight,
                             labelBorderRadius: labelBorderRadii[dayIndex] ?? 36,
                             showDayLabel: dayCount > 1,
                             selectedLayer: selectedLayer,
@@ -1050,16 +1045,6 @@ class _ShareCanvas extends StatelessWidget {
       ),
     );
   }
-
-  Color _strongColor(Color color) {
-    final hsl = HSLColor.fromColor(color);
-    return hsl.withSaturation(0.72).withLightness(0.44).toColor();
-  }
-
-  Color _shiftHue(Color color, double degrees) {
-    final hsl = HSLColor.fromColor(color);
-    return hsl.withHue((hsl.hue + degrees) % 360).toColor();
-  }
 }
 
 class _TicketHeader extends StatelessWidget {
@@ -1072,9 +1057,9 @@ class _TicketHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.82),
-        borderRadius: BorderRadius.circular(34),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.42)),
+        color: AppTheme.panel,
+        borderRadius: BorderRadius.circular(CosUi.radiusLg),
+        border: Border.all(color: AppTheme.pixelOutline, width: 2),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 22),
@@ -1084,8 +1069,8 @@ class _TicketHeader extends StatelessWidget {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(22),
+                color: AppTheme.raisedPanel,
+                borderRadius: BorderRadius.circular(CosUi.radiusMd),
               ),
               child: Icon(Icons.auto_awesome, color: accent, size: 42),
             ),
@@ -1097,7 +1082,7 @@ class _TicketHeader extends StatelessWidget {
                   const Text(
                     'CosCircle Meetup Pass',
                     style: TextStyle(
-                      color: Colors.white70,
+                      color: AppTheme.lavender,
                       fontSize: 24,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0,
@@ -1108,7 +1093,7 @@ class _TicketHeader extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: AppTheme.cream,
                       fontSize: 44,
                       fontWeight: FontWeight.w900,
                       height: 1.04,
@@ -1137,7 +1122,7 @@ class _HeaderPill extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -1146,7 +1131,7 @@ class _HeaderPill extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            color: Colors.white,
+            color: AppTheme.midnight,
             fontSize: 25,
             fontWeight: FontWeight.w900,
           ),
@@ -1170,7 +1155,7 @@ class _TicketPerforation extends StatelessWidget {
           Container(
             width: 16,
             height: 16,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            decoration: BoxDecoration(color: color),
           ),
       ],
     );
@@ -1197,14 +1182,14 @@ class _InfoPanel extends StatelessWidget {
     final role = participantRoleLabel(participant.role);
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.86),
-        borderRadius: BorderRadius.circular(42),
-        border: Border.all(color: Colors.white, width: 3),
+        color: AppTheme.panel,
+        borderRadius: BorderRadius.circular(CosUi.radiusLg),
+        border: Border.all(color: AppTheme.pixelOutline, width: 3),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.14),
-            blurRadius: 32,
-            offset: const Offset(0, 18),
+            color: AppTheme.midnight,
+            blurRadius: 0,
+            offset: const Offset(6, 6),
           ),
         ],
       ),
@@ -1220,11 +1205,11 @@ class _InfoPanel extends StatelessWidget {
                   height: 76,
                   decoration: BoxDecoration(
                     color: accent,
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(CosUi.radiusMd),
                   ),
                   child: const Icon(
                     Icons.theater_comedy_outlined,
-                    color: Colors.white,
+                    color: AppTheme.midnight,
                     size: 42,
                   ),
                 ),
@@ -1255,7 +1240,7 @@ class _InfoPanel extends StatelessWidget {
                   maxLines: 4,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.black,
+                    color: AppTheme.cream,
                     fontSize: 38,
                     fontWeight: FontWeight.w900,
                     height: 1.02,
@@ -1293,7 +1278,7 @@ class _InfoPanel extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                color: Colors.black,
+                color: AppTheme.cream,
                 fontSize: 22,
                 fontWeight: FontWeight.w800,
               ),
@@ -1321,7 +1306,7 @@ class _MetaStrip extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
         border: Border.all(color: color.withValues(alpha: 0.26), width: 2),
       ),
       child: Padding(
@@ -1336,7 +1321,7 @@ class _MetaStrip extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  color: Colors.black,
+                  color: AppTheme.cream,
                   fontSize: 25,
                   fontWeight: FontWeight.w900,
                 ),
@@ -1373,8 +1358,8 @@ class _Box extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(28),
+          color: AppTheme.raisedPanel,
+          borderRadius: BorderRadius.circular(CosUi.radiusMd),
           border: Border.all(color: accent.withValues(alpha: 0.34), width: 3),
         ),
         child: Column(
@@ -1407,7 +1392,7 @@ class _Box extends StatelessWidget {
                     maxLines: maxLines,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Colors.black,
+                      color: AppTheme.cream,
                       fontSize: contentFontSize,
                       fontWeight: FontWeight.w900,
                       height: 1.04,
@@ -1471,7 +1456,7 @@ class _DayColumn extends StatelessWidget {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: accent,
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: BorderRadius.circular(CosUi.radiusMd),
               ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -1481,7 +1466,7 @@ class _DayColumn extends StatelessWidget {
                 child: Text(
                   'DAY $dayIndex',
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: AppTheme.midnight,
                     fontSize: 28,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 0,
@@ -1497,14 +1482,14 @@ class _DayColumn extends StatelessWidget {
             builder: (context, constraints) {
               return DecoratedBox(
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(34),
-                  border: Border.all(color: Colors.white, width: 7),
+                  color: AppTheme.raisedPanel,
+                  borderRadius: BorderRadius.circular(CosUi.radiusLg),
+                  border: Border.all(color: AppTheme.pixelOutline, width: 7),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.16),
-                      blurRadius: 30,
-                      offset: const Offset(0, 16),
+                      color: AppTheme.midnight,
+                      blurRadius: 0,
+                      offset: const Offset(6, 6),
                     ),
                   ],
                 ),
@@ -1536,7 +1521,9 @@ class _DayColumn extends StatelessWidget {
                           child: DecoratedBox(
                             decoration: BoxDecoration(
                               color: accent.withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(28),
+                              borderRadius: BorderRadius.circular(
+                                CosUi.radiusMd,
+                              ),
                               border: Border.all(
                                 color: accent.withValues(alpha: 0.2),
                                 width: 2,
@@ -1557,7 +1544,7 @@ class _DayColumn extends StatelessWidget {
                                     '未發布此日照片',
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
-                                      color: Colors.black54,
+                                      color: AppTheme.lavender,
                                       fontSize: 24,
                                       fontWeight: FontWeight.w900,
                                     ),
@@ -1615,7 +1602,7 @@ class _DayColumn extends StatelessWidget {
                       child: IgnorePointer(
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(34),
+                            borderRadius: BorderRadius.circular(CosUi.radiusLg),
                             border: Border.all(color: accent, width: 5),
                           ),
                         ),
@@ -1631,14 +1618,14 @@ class _DayColumn extends StatelessWidget {
         DecoratedBox(
           decoration: BoxDecoration(
             color: Colors.black.withValues(alpha: 0.78),
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: BorderRadius.circular(CosUi.radiusMd),
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             child: Text(
               DateFormat('M/d (E)', 'zh_TW').format(date),
               style: const TextStyle(
-                color: Colors.white,
+                color: AppTheme.cream,
                 fontSize: 32,
                 fontWeight: FontWeight.w900,
               ),
@@ -1777,15 +1764,19 @@ class _MoveHandle extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.78),
-        shape: BoxShape.circle,
+        borderRadius: BorderRadius.circular(CosUi.radiusSm),
         border: Border.all(color: Colors.white, width: 2),
         boxShadow: const [
-          BoxShadow(color: Colors.black38, blurRadius: 8, offset: Offset(0, 3)),
+          BoxShadow(
+            color: AppTheme.midnight,
+            blurRadius: 0,
+            offset: Offset(2, 2),
+          ),
         ],
       ),
       child: const Padding(
         padding: EdgeInsets.all(7),
-        child: Icon(Icons.open_with, color: Colors.white, size: 22),
+        child: PixelIcon(Icons.open_with, color: Colors.white, size: 22),
       ),
     );
   }
@@ -1807,32 +1798,32 @@ class _ColorSwatchButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(999),
+      borderRadius: BorderRadius.circular(CosUi.radiusMd),
       onTap: onTap,
       child: Container(
         width: size,
         height: size,
         decoration: BoxDecoration(
           color: color,
-          shape: BoxShape.circle,
+          borderRadius: BorderRadius.circular(CosUi.radiusSm),
           border: Border.all(
             color: selected
                 ? Theme.of(context).colorScheme.primary
                 : Theme.of(context).colorScheme.outlineVariant,
-            width: selected ? 3 : 1,
+            width: selected ? 4 : 2,
           ),
           boxShadow: selected
               ? const [
                   BoxShadow(
-                    color: Colors.black26,
-                    blurRadius: 8,
-                    offset: Offset(0, 2),
+                    color: AppTheme.midnight,
+                    blurRadius: 0,
+                    offset: Offset(2, 2),
                   ),
                 ]
               : null,
         ),
         child: selected
-            ? Icon(Icons.check, size: 18, color: _readableTextColor(color))
+            ? PixelIcon(Icons.check, size: 18, color: _readableTextColor(color))
             : null,
       ),
     );
@@ -1903,8 +1894,11 @@ class _ColorPicker extends StatelessWidget {
     final blue = _channel(color, 0);
     return DecoratedBox(
       decoration: BoxDecoration(
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant,
+          width: 2,
+        ),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
@@ -1917,9 +1911,10 @@ class _ColorPicker extends StatelessWidget {
                   height: 44,
                   decoration: BoxDecoration(
                     color: color,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(CosUi.radiusSm),
                     border: Border.all(
                       color: Theme.of(context).colorScheme.outlineVariant,
+                      width: 2,
                     ),
                   ),
                 ),

@@ -93,7 +93,7 @@ class SettingsPage extends ConsumerWidget {
               subtitle: '亮色與夜間模式',
               trailing: CosBadge(
                 label: themeMode.label,
-                icon: themeMode == CosCircleThemeMode.neonDark
+                icon: themeMode != CosCircleThemeMode.whitePixel
                     ? Icons.dark_mode_outlined
                     : Icons.light_mode_outlined,
                 highlighted: true,
@@ -307,7 +307,7 @@ class _SettingsSection extends StatelessWidget {
                   height: 8,
                   decoration: BoxDecoration(
                     color: scheme.primary,
-                    borderRadius: BorderRadius.circular(99),
+                    borderRadius: BorderRadius.circular(CosUi.radiusSm),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -402,7 +402,7 @@ class _SettingsAction extends StatelessWidget {
                     color: scheme.surfaceContainerHighest.withValues(
                       alpha: 0.48,
                     ),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(CosUi.radiusSm),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(8),
@@ -1251,7 +1251,7 @@ class _BugReportHero extends StatelessWidget {
           if (loading) ...[
             const SizedBox(height: 12),
             ClipRRect(
-              borderRadius: BorderRadius.circular(99),
+              borderRadius: BorderRadius.circular(CosUi.radiusSm),
               child: LinearProgressIndicator(value: progress / 100),
             ),
           ],

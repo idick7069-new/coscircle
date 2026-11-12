@@ -12,6 +12,7 @@ import '../../../core/utils/participant_role_style.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../../shared/widgets/mimi_mascot.dart';
 import '../../social/presentation/friendship_widgets.dart';
 import '../../safety/presentation/report_sheet.dart';
 import 'profile_work_radar.dart';
@@ -245,7 +246,7 @@ class _PublicProfileContent extends ConsumerWidget {
                       _PublicInfoTile(
                         icon: Icons.cake_outlined,
                         label: '年齡',
-                        value: value.age.isEmpty ? '尚未設定' : value.age,
+                        value: value.ageLabel,
                       ),
                       _PublicInfoTile(
                         icon: Icons.wc_outlined,
@@ -380,7 +381,7 @@ class _PublicProfileLoadingState extends StatelessWidget {
                       color: scheme.surfaceContainerLowest.withValues(
                         alpha: 0.56,
                       ),
-                      borderRadius: BorderRadius.circular(32),
+                      borderRadius: BorderRadius.circular(CosUi.radiusXl),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -527,7 +528,7 @@ class _PublicSkeletonLine extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: scheme.onSurface.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(99),
+          borderRadius: BorderRadius.circular(CosUi.radiusSm),
         ),
         child: SizedBox(height: height),
       ),
@@ -600,17 +601,14 @@ class _PublicProfileAvatar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(32),
+        borderRadius: BorderRadius.circular(CosUi.radiusXl),
         color: scheme.secondary,
         boxShadow: [CosUi.softShadow(scheme.primary)],
       ),
-      child: CircleAvatar(
+      child: MimiAvatar(
         radius: 52,
         backgroundColor: scheme.surfaceContainerLowest,
-        backgroundImage: pickedImageProvider(profile.avatarUrl),
-        child: profile.avatarUrl.isEmpty
-            ? Icon(Icons.person, size: 46, color: scheme.primary)
-            : null,
+        image: pickedImageProvider(profile.avatarUrl),
       ),
     );
   }
@@ -1006,7 +1004,7 @@ class _PublicPhotoEmptyState extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
         border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.7)),
       ),
       child: Padding(

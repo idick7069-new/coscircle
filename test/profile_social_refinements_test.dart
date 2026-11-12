@@ -219,6 +219,26 @@ void main() {
     otherPhotoUrls: ['https://example.invalid/photo.png'],
   );
 
+  testWidgets('hiding age saves the preference while retaining the age value', (
+    tester,
+  ) async {
+    final repository = _Profile()
+      ..profile = completeProfile.copyWith(age: '24');
+    await _open(tester, const ProfilePage(), profile: repository);
+    await tester.tap(find.byTooltip('編輯'));
+    await tester.pumpAndSettle();
+    final toggle = find.widgetWithText(SwitchListTile, '公開年齡');
+    await tester.ensureVisible(toggle);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('儲存'));
+    await tester.pumpAndSettle();
+    expect(repository.profile.age, '24');
+    expect(repository.profile.agePublic, false);
+    expect(find.text('不公開'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('readiness celebrates successful incomplete to complete only', (
     tester,
   ) async {

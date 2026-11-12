@@ -18,6 +18,7 @@ import '../../../core/utils/public_app_link.dart';
 import '../../../core/utils/participant_role_style.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../../shared/widgets/mimi_mascot.dart';
 import '../../../core/providers/same_work_providers.dart';
 import '../../../core/providers/partner_discovery_providers.dart';
 import '../../social/presentation/friendship_widgets.dart'
@@ -56,6 +57,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   final _facebook = TextEditingController();
   final _bio = TextEditingController();
   final _age = TextEditingController();
+  bool _agePublic = true;
   final _landmine = TextEditingController();
   String _avatarUrl = '';
   XFile? _pickedAvatar;
@@ -205,6 +207,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                               facebook: _facebook,
                               bio: _bio,
                               age: _age,
+                              agePublic: _agePublic,
+                              onAgePublicChanged: (value) =>
+                                  setState(() => _agePublic = value),
                               landmine: _landmine,
                               deepPitWorks: _deepPitWorks,
                               shallowPitWorks: _shallowPitWorks,
@@ -332,6 +337,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     _facebook.text = profile.facebookUrl;
     _bio.text = profile.bio;
     _age.text = profile.age;
+    _agePublic = profile.agePublic;
     _landmine.text = profile.landmine;
     _avatarUrl = profile.avatarUrl;
     _pickedAvatar = null;
@@ -411,6 +417,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           deepPitWorks: _deepPitWorks,
           shallowPitWorks: _shallowPitWorks,
           age: _age.text.trim(),
+          agePublic: _agePublic,
           regions: _regions,
           travelRegions: _travelRegions,
           travelSameRegion: _travelSameRegion,
@@ -571,7 +578,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                             child: DecoratedBox(
                               decoration: BoxDecoration(
                                 color: Colors.white,
-                                borderRadius: BorderRadius.circular(24),
+                                borderRadius: BorderRadius.circular(
+                                  CosUi.radiusLg,
+                                ),
                               ),
                               child: Padding(
                                 padding: const EdgeInsets.all(14),
@@ -679,7 +688,7 @@ class _ProfileSummary extends StatelessWidget {
                 _InfoTile(
                   icon: Icons.cake_outlined,
                   label: '年齡',
-                  value: profile.age.isEmpty ? '尚未設定' : profile.age,
+                  value: profile.ageLabel,
                 ),
                 _InfoTile(
                   icon: Icons.explore_outlined,
@@ -796,7 +805,7 @@ class _ProfileLoadingState extends StatelessWidget {
                       color: scheme.surfaceContainerLowest.withValues(
                         alpha: 0.62,
                       ),
-                      borderRadius: BorderRadius.circular(30),
+                      borderRadius: BorderRadius.circular(CosUi.radiusXl),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -886,7 +895,7 @@ class _ProfileSkeletonLine extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: scheme.onSurface.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(99),
+          borderRadius: BorderRadius.circular(CosUi.radiusSm),
         ),
         child: SizedBox(height: height),
       ),
@@ -913,17 +922,14 @@ class _ProfileHeroCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(5),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(30),
+                  borderRadius: BorderRadius.circular(CosUi.radiusXl),
                   color: scheme.secondary,
                   boxShadow: [CosUi.softShadow(scheme.primary)],
                 ),
-                child: CircleAvatar(
+                child: MimiAvatar(
                   radius: 36,
                   backgroundColor: scheme.surfaceContainerLowest,
-                  backgroundImage: pickedImageProvider(profile.avatarUrl),
-                  child: profile.avatarUrl.isEmpty
-                      ? Icon(Icons.person, size: 42, color: scheme.primary)
-                      : null,
+                  image: pickedImageProvider(profile.avatarUrl),
                 ),
               ),
               const SizedBox(width: 16),
@@ -1076,7 +1082,7 @@ class _ProfileReadinessCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           ClipRRect(
-            borderRadius: BorderRadius.circular(99),
+            borderRadius: BorderRadius.circular(CosUi.radiusSm),
             child: LinearProgressIndicator(
               value: progress,
               minHeight: 8,
@@ -1216,11 +1222,11 @@ class _ProfileReadinessChip extends StatelessWidget {
       child: InkWell(
         key: ValueKey('profile-readiness-${cue.label}'),
         onTap: onTap,
-        borderRadius: BorderRadius.circular(99),
+        borderRadius: BorderRadius.circular(CosUi.radiusSm),
         child: Ink(
           decoration: BoxDecoration(
             color: accent.withValues(alpha: cue.ready ? 0.12 : 0.06),
-            borderRadius: BorderRadius.circular(99),
+            borderRadius: BorderRadius.circular(CosUi.radiusSm),
             border: Border.all(color: accent.withValues(alpha: 0.22)),
           ),
           child: Padding(
@@ -1698,13 +1704,10 @@ class _BookingFollowerRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: Row(
             children: [
-              CircleAvatar(
+              MimiAvatar(
                 radius: 18,
                 backgroundColor: scheme.primaryContainer,
-                backgroundImage: pickedImageProvider(follower.avatarUrl),
-                child: follower.avatarUrl.isEmpty
-                    ? Text(nickname.characters.firstOrNull ?? '?')
-                    : null,
+                image: pickedImageProvider(follower.avatarUrl),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -1888,13 +1891,10 @@ class _BlockedUserRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: Row(
             children: [
-              CircleAvatar(
+              MimiAvatar(
                 radius: 18,
                 backgroundColor: scheme.errorContainer,
-                backgroundImage: pickedImageProvider(user.avatarUrl),
-                child: user.avatarUrl.isEmpty
-                    ? Text(nickname.characters.firstOrNull ?? '?')
-                    : null,
+                image: pickedImageProvider(user.avatarUrl),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -2223,7 +2223,7 @@ class _PhotoEmptyState extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(CosUi.radiusMd),
         border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.7)),
       ),
       child: Padding(
@@ -2321,6 +2321,8 @@ class _EditProfileForm extends StatelessWidget {
     required this.facebook,
     required this.bio,
     required this.age,
+    required this.agePublic,
+    required this.onAgePublicChanged,
     required this.landmine,
     required this.deepPitWorks,
     required this.shallowPitWorks,
@@ -2354,6 +2356,8 @@ class _EditProfileForm extends StatelessWidget {
   final TextEditingController facebook;
   final TextEditingController bio;
   final TextEditingController age;
+  final bool agePublic;
+  final ValueChanged<bool> onAgePublicChanged;
   final TextEditingController landmine;
   final List<WorkTag> deepPitWorks;
   final List<WorkTag> shallowPitWorks;
@@ -2423,7 +2427,16 @@ class _EditProfileForm extends StatelessWidget {
             const SizedBox(height: 10),
             TextField(
               controller: age,
-              decoration: const InputDecoration(labelText: '年齡'),
+              decoration: InputDecoration(
+                labelText: '年齡',
+                helperText: agePublic ? null : '不公開時，其他人看不到你的年齡',
+              ),
+            ),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('公開年齡'),
+              value: agePublic,
+              onChanged: saving ? null : onAgePublicChanged,
             ),
             const SizedBox(height: 10),
             _GenderSelector(
@@ -2557,23 +2570,24 @@ class _EditableAvatarPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return SizedBox.square(
-      dimension: 84,
-      child: ClipOval(
-        child: DecoratedBox(
-          decoration: BoxDecoration(color: scheme.surfaceContainerHighest),
-          child: pickedAvatar != null
-              ? _PickedXFileImage(file: pickedAvatar!)
-              : avatarUrl.isEmpty
-              ? const Icon(Icons.person, size: 38)
-              : Image(
-                  image: pickedImageProvider(avatarUrl)!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) =>
-                      const Icon(Icons.broken_image_outlined),
-                ),
-        ),
-      ),
+    final file = pickedAvatar;
+    if (file == null) {
+      return MimiAvatar(
+        radius: 42,
+        backgroundColor: scheme.surfaceContainerHighest,
+        image: pickedImageProvider(avatarUrl),
+      );
+    }
+    return FutureBuilder<Uint8List>(
+      future: file.readAsBytes(),
+      builder: (context, snapshot) {
+        final bytes = snapshot.data;
+        return MimiAvatar(
+          radius: 42,
+          backgroundColor: scheme.surfaceContainerHighest,
+          image: bytes == null ? null : MemoryImage(bytes),
+        );
+      },
     );
   }
 }

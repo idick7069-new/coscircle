@@ -11,6 +11,7 @@ import '../../../core/utils/error_message.dart';
 import '../../../core/utils/user_action.dart';
 import '../../../core/utils/participant_role_style.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../../shared/widgets/mimi_mascot.dart';
 import 'event_booking_share_page.dart';
 import 'event_list_page.dart';
 
@@ -226,63 +227,26 @@ class _MyEventsLoadingState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        const CosPageHeader(
-          title: '我的活動',
-          subtitle: '正在整理你的參戰票夾',
-          leading: CosIconBubble(icon: Icons.event_available_outlined),
-        ),
-        const SizedBox(height: 8),
-        CosGradientPanel(
-          icon: Icons.confirmation_number_outlined,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const CosSectionHeader(
-                title: '同步參戰名片',
-                subtitle: '整理即將出席的場次、角色名片與分享圖素材',
-                icon: Icons.wallet_outlined,
-              ),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  for (var index = 0; index < 3; index += 1) ...[
-                    Expanded(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color:
-                              (index == 0
-                                      ? scheme.primary
-                                      : index == 1
-                                      ? scheme.secondary
-                                      : scheme.tertiary)
-                                  .withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(CosUi.radiusMd),
-                          border: Border.all(
-                            color: scheme.outlineVariant.withValues(
-                              alpha: 0.34,
-                            ),
-                          ),
-                        ),
-                        child: const SizedBox(height: 64),
-                      ),
-                    ),
-                    if (index < 2) const SizedBox(width: 8),
-                  ],
-                ],
-              ),
-            ],
+    return LayoutBuilder(
+      builder: (context, constraints) => ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: (constraints.maxHeight * 0.45).clamp(180.0, 320.0),
+            ),
+            child: MimiLoading(
+              scene: MimiScene.reading,
+              label: '希希正在整理票夾…',
+              compact: constraints.maxHeight < 500,
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        for (var index = 0; index < 2; index += 1) ...[
-          _MyBookingSkeletonCard(compact: index == 1),
+          const SizedBox(height: 12),
+          const _MyBookingSkeletonCard(),
           const SizedBox(height: 10),
+          const _MyBookingSkeletonCard(compact: true),
         ],
-      ],
+      ),
     );
   }
 }
@@ -310,9 +274,10 @@ class _MyBookingSkeletonCard extends StatelessWidget {
               padding: const EdgeInsets.all(14),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 23,
-                    backgroundColor: scheme.primary.withValues(alpha: 0.18),
+                  const MimiMascot(
+                    scene: MimiScene.reading,
+                    size: 46,
+                    animate: false,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -757,14 +722,10 @@ class _MyEventsEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return CosCard(
       child: Row(
         children: [
-          CosIconBubble(
-            icon: Icons.event_busy_outlined,
-            color: scheme.secondary,
-          ),
+          const MimiMascot(size: 48, animate: false),
           const SizedBox(width: 12),
           Expanded(
             child: Text(

@@ -11,6 +11,7 @@ import '../../../core/utils/error_message.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../core/utils/user_action.dart';
 import '../../../shared/widgets/cos_ui.dart';
+import '../../../shared/widgets/mimi_mascot.dart';
 import 'friendship_widgets.dart';
 
 class PartnerDiscoveryPage extends StatelessWidget {
@@ -210,11 +211,9 @@ class _PartnerPersonCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              CircleAvatar(
-                backgroundImage: pickedImageProvider(user.avatarUrl),
-                child: user.avatarUrl.isEmpty
-                    ? const Icon(Icons.person_outline)
-                    : null,
+              MimiAvatar(
+                radius: 20,
+                image: pickedImageProvider(user.avatarUrl),
               ),
               const SizedBox(width: 12),
               Expanded(

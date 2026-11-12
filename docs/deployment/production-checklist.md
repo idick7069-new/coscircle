@@ -32,6 +32,7 @@ mysql -h <host> -u <user> -p <database> < backend/db/migrate_auth.sql
 mysql -h <host> -u <user> -p <database> < backend/db/migrate_user_public_code.sql
 mysql -h <host> -u <user> -p <database> < backend/db/migrate_user_admin.sql
 mysql -h <host> -u <user> -p <database> < backend/db/migrate_profile_extended_fields.sql
+mysql -h <host> -u <user> -p <database> < backend/db/migrate_age_visibility.sql
 mysql -h <host> -u <user> -p <database> < backend/db/migrate_event_media.sql
 mysql -h <host> -u <user> -p <database> < backend/db/migrate_works.sql
 mysql -h <host> -u <user> -p <database> < backend/db/migrate_event_attendance.sql

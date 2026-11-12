@@ -199,11 +199,11 @@ void main() {
           )
           .first;
       await tester.scrollUntilVisible(
-        find.text('儲存出席'),
+        find.text('儲存預訂'),
         300,
         scrollable: formScrollable,
       );
-      await tester.tap(find.text('儲存出席'));
+      await tester.tap(find.text('儲存預訂'));
       await tester.pumpAndSettle();
       expect(events.writes.single.dayIndex, 2);
     },

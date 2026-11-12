@@ -14,6 +14,7 @@ CREATE TABLE users (
   facebook_url TEXT NULL,
   bio TEXT NULL,
   age VARCHAR(40) NULL,
+  age_public BOOLEAN NOT NULL DEFAULT TRUE,
   regions_json TEXT NULL,
   travel_regions_json TEXT NULL,
   travel_same_region BOOLEAN NOT NULL DEFAULT FALSE,

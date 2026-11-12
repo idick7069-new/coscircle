@@ -5,7 +5,7 @@
 Production API and web deployment completed on 2026-10-08.
 Android debug test build is installed on Pixel 9a; existing Email session and the live login-methods page were verified.
 The user will complete LINE authorization later. Successful real-account LINE binding/login is not yet verified.
-iOS configuration is present, but compilation/install remain blocked by missing full Xcode and an iOS test device.
+iOS callback configuration is present. On 2026-11-06 an unsigned iOS release build compiled successfully with Xcode 27.2; physical installation and LINE authorization remain unverified pending device pairing and development signing. See [iOS device build](ios-device-build.md).
 The SDK exchanges a LINE access token for a CosCircle session through the existing social login endpoint.
 The backend verifies the expected channel, token expiry and profile scope before reading the LINE profile.
 No email scope is requested; no email-based account merge is performed.

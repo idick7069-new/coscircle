@@ -11,16 +11,21 @@ import '../../../core/providers/event_providers.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/cos_ui.dart';
-import '../../../shared/widgets/cos_illustration.dart';
+import '../../../shared/widgets/mimi_mascot.dart';
 import 'my_events_page.dart';
 import 'widgets/event_card.dart';
 import 'event_booking_sheet.dart';
 export 'event_booking_sheet.dart' show BookingSheet;
 
 class EventListPage extends ConsumerStatefulWidget {
-  const EventListPage({super.key, required this.onOpenCurrentEvent});
+  const EventListPage({
+    super.key,
+    required this.onOpenCurrentEvent,
+    this.isVisible = true,
+  });
 
   final ValueChanged<EventDayItem> onOpenCurrentEvent;
+  final bool isVisible;
 
   @override
   ConsumerState<EventListPage> createState() => _EventListPageState();
@@ -30,12 +35,10 @@ class _EventListPageState extends ConsumerState<EventListPage> {
   static const _filterKey = 'event_list_filter';
   static const _joinedOnlyKey = 'event_list_joined_only';
   static const _hideEndedKey = 'event_list_hide_ended_v2';
-  static const _selectedDayKey = 'event_list_selected_day';
-  static const _focusedDayKey = 'event_list_focused_day';
   static const _validFilters = {'全部', '我有加入', '關注者', '小圈圈', '戳友'};
 
   DateTime _focusedDay = DateTime.now();
-  DateTime? _selectedDay;
+  DateTime? _selectedDay = DateUtils.dateOnly(DateTime.now());
   bool _joinedOnly = false;
   bool _hideEnded = false;
   String _filter = '全部';
@@ -44,6 +47,15 @@ class _EventListPageState extends ConsumerState<EventListPage> {
   void initState() {
     super.initState();
     _restoreFilters();
+  }
+
+  @override
+  void didUpdateWidget(covariant EventListPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isVisible && !oldWidget.isVisible) {
+      _focusedDay = DateUtils.dateOnly(DateTime.now());
+      _selectedDay = _focusedDay;
+    }
   }
 
   @override
@@ -391,16 +403,12 @@ class _EventListPageState extends ConsumerState<EventListPage> {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     final filter = prefs.getString(_filterKey);
-    final selectedDay = _parseSavedDate(prefs.getString(_selectedDayKey));
-    final focusedDay = _parseSavedDate(prefs.getString(_focusedDayKey));
     setState(() {
       if (filter != null && _validFilters.contains(filter)) {
         _filter = filter;
       }
       _joinedOnly = prefs.getBool(_joinedOnlyKey) ?? false;
       _hideEnded = prefs.getBool(_hideEndedKey) ?? false;
-      _selectedDay = selectedDay;
-      _focusedDay = focusedDay ?? selectedDay ?? DateTime.now();
     });
   }
 
@@ -432,24 +440,6 @@ class _EventListPageState extends ConsumerState<EventListPage> {
     await prefs.setString(_filterKey, _filter);
     await prefs.setBool(_joinedOnlyKey, _joinedOnly);
     await prefs.setBool(_hideEndedKey, _hideEnded);
-    await prefs.setString(_focusedDayKey, _dateOnly(_focusedDay));
-    final selectedDay = _selectedDay;
-    if (selectedDay == null) {
-      await prefs.remove(_selectedDayKey);
-    } else {
-      await prefs.setString(_selectedDayKey, _dateOnly(selectedDay));
-    }
-  }
-
-  DateTime? _parseSavedDate(String? value) {
-    if (value == null || value.isEmpty) return null;
-    return DateTime.tryParse(value);
-  }
-
-  String _dateOnly(DateTime date) {
-    final month = date.month.toString().padLeft(2, '0');
-    final day = date.day.toString().padLeft(2, '0');
-    return '${date.year}-$month-$day';
   }
 
   Future<void> _showBookingSheet(
@@ -471,19 +461,26 @@ class _EventListLoadingView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-      children: const [
-        _EventListStateView(
-          icon: Icons.radar_outlined,
-          title: '正在掃描活動訊號',
-          message: '整理近期場次、同好參與和小圈圈動態。',
-        ),
-        SizedBox(height: 14),
-        _EventListSkeletonCard(),
-        SizedBox(height: 10),
-        _EventListSkeletonCard(compact: true),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) => ListView(
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: (constraints.maxHeight * 0.45).clamp(180.0, 320.0),
+            ),
+            child: MimiLoading(
+              scene: MimiScene.reading,
+              label: '希希正在整理活動…',
+              compact: constraints.maxHeight < 500,
+            ),
+          ),
+          const SizedBox(height: 14),
+          const _EventListSkeletonCard(),
+          const SizedBox(height: 10),
+          const _EventListSkeletonCard(compact: true),
+        ],
+      ),
     );
   }
 }
@@ -559,7 +556,17 @@ class _EventListSkeletonCard extends StatelessWidget {
               color: scheme.primary.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(CosUi.radiusMd),
             ),
-            child: SizedBox(width: 68, height: compact ? 58 : 78),
+            child: SizedBox(
+              width: 68,
+              height: compact ? 58 : 78,
+              child: const Center(
+                child: MimiMascot(
+                  scene: MimiScene.reading,
+                  size: 48,
+                  animate: false,
+                ),
+              ),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -650,16 +657,12 @@ class _EmptyEventResult extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
       child: CosCard(
         child: Row(
           children: [
-            CosIconBubble(
-              icon: Icons.event_busy_outlined,
-              color: scheme.secondary,
-            ),
+            const MimiMascot(size: 48, animate: false),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -715,55 +718,59 @@ class _EventSpotlightCard extends StatelessWidget {
                 ),
                 child: AspectRatio(
                   aspectRatio: 3.4,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (imageProvider == null)
-                        const CosIllustration(kind: CosIllustrationKind.event)
-                      else
-                        Image(image: imageProvider, fit: BoxFit.cover),
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.transparent,
-                              Colors.black.withValues(alpha: 0.64),
-                            ],
+                  child: imageProvider == null
+                      ? const Center(
+                          child: MimiMascot(
+                            scene: MimiScene.reading,
+                            size: 80,
+                            animate: false,
                           ),
-                        ),
-                      ),
-                      Positioned(
-                        left: 14,
-                        right: 14,
-                        bottom: 14,
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            CosBadge(
-                              label: statusText,
-                              highlighted: status == EventStatus.active,
-                              color: status == EventStatus.active
-                                  ? scheme.secondary
-                                  : scheme.tertiary,
-                            ),
-                            CosBadge(
-                              label: event.category,
-                              color: scheme.primary,
-                            ),
-                            if (item.isJoined)
-                              CosBadge(
-                                label: '已加入',
-                                icon: Icons.check_circle,
-                                highlighted: true,
+                        )
+                      : Image(
+                          image: imageProvider,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, progress) =>
+                              progress == null
+                              ? child
+                              : const Center(
+                                  child: MimiMascot(
+                                    scene: MimiScene.reading,
+                                    size: 80,
+                                    animate: false,
+                                  ),
+                                ),
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Center(
+                                child: MimiMascot(
+                                  scene: MimiScene.reading,
+                                  size: 80,
+                                  animate: false,
+                                ),
                               ),
-                          ],
                         ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    CosBadge(
+                      label: statusText,
+                      highlighted: status == EventStatus.active,
+                      color: status == EventStatus.active
+                          ? scheme.secondary
+                          : scheme.tertiary,
+                    ),
+                    CosBadge(label: event.category, color: scheme.primary),
+                    if (item.isJoined)
+                      CosBadge(
+                        label: '已加入',
+                        icon: Icons.check_circle,
+                        highlighted: true,
                       ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
               Padding(

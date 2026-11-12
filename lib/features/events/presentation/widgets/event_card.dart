@@ -8,6 +8,7 @@ import '../../../../core/providers/event_providers.dart';
 import '../../../../core/utils/event_day_display.dart';
 import '../../../../core/utils/picked_image_provider.dart';
 import '../../../../shared/widgets/cos_ui.dart';
+import '../../../../shared/widgets/mimi_mascot.dart';
 
 class EventCard extends ConsumerWidget {
   const EventCard({
@@ -260,7 +261,9 @@ class _EventImage extends StatelessWidget {
         color: scheme.secondaryContainer,
         border: Border.all(color: scheme.outlineVariant),
       ),
-      child: Icon(Icons.photo_camera_outlined, size: 34, color: scheme.primary),
+      child: const Center(
+        child: MimiMascot(scene: MimiScene.reading, size: 48, animate: false),
+      ),
     );
 
     final image = imageUrl.isEmpty
@@ -270,6 +273,14 @@ class _EventImage extends StatelessWidget {
             width: 96,
             height: 128,
             fit: BoxFit.cover,
+            loadingBuilder: (context, child, progress) => progress == null
+                ? child
+                : ColoredBox(
+                    color: scheme.surfaceContainerHigh,
+                    child: const Center(
+                      child: MimiMascot(scene: MimiScene.reading, size: 64),
+                    ),
+                  ),
             errorBuilder: (context, error, stackTrace) => placeholder,
           );
 
@@ -277,7 +288,7 @@ class _EventImage extends StatelessWidget {
       width: 96,
       height: 128,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(CosUi.radiusLg),
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -297,7 +308,7 @@ class _EventImage extends StatelessWidget {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.62),
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: BorderRadius.circular(CosUi.radiusSm),
                   border: Border.all(
                     color: isEnded ? scheme.outline : scheme.tertiary,
                   ),
@@ -385,13 +396,19 @@ class _ParticipantStrip extends StatelessWidget {
       },
       error: (error, stackTrace) =>
           Text('參與者載入失敗', style: Theme.of(context).textTheme.bodySmall),
-      loading: () => SizedBox(
-        height: 24,
-        width: 24,
-        child: CosLoadingPulse(
-          color: Theme.of(context).colorScheme.secondary,
-          size: 22,
-        ),
+      loading: () => Row(
+        children: [
+          const MimiMascot(scene: MimiScene.reading, size: 24, animate: false),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              '整理同好中…',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
       ),
     );
   }

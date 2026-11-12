@@ -8,6 +8,7 @@ import 'package:coscircle/core/services/auth_state.dart';
 import 'package:coscircle/features/safety/presentation/legal_acceptance_page.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:coscircle/shared/widgets/mimi_mascot.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -117,13 +118,13 @@ void main() {
         await open(tester, adapter, pending: true);
         expect(adapter.requests.single.path, '/me/legal');
         expect(find.text('閱讀並確認使用規則'), findsNothing);
-        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(find.byType(MimiLoading), findsOneWidget);
         expect(find.byType(CheckboxListTile), findsNothing);
         expect(find.text('同意並繼續'), findsNothing);
         expect(find.text('社群內容'), findsNothing);
         response.complete(_legal(accepted));
         await tester.pumpAndSettle();
-        expect(find.byType(CircularProgressIndicator), findsNothing);
+        expect(find.byType(MimiLoading), findsNothing);
         expect(find.text('社群內容'), accepted ? findsOneWidget : findsNothing);
         expect(
           find.text('閱讀並確認使用規則'),

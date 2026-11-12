@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:coscircle/core/models/booking.dart';
+import 'package:coscircle/core/theme/app_theme.dart';
 import 'package:coscircle/core/models/circle.dart';
 import 'package:coscircle/core/models/event.dart';
 import 'package:coscircle/core/models/participant.dart';
@@ -173,6 +174,35 @@ void main() {
     );
   });
 
+  test(
+    'web images allow HTML fallback when a public image has no CORS headers',
+    () {
+      final image =
+          web.pickedImageProvider('https://media.example.com/event.webp')!
+              as NetworkImage;
+      expect(image.webHtmlElementStrategy, WebHtmlElementStrategy.fallback);
+    },
+  );
+
+  test(
+    'legacy CosCircle uploads use the HTTPS domain and preserve the file query',
+    () {
+      const path = '/uploads/avatar.png?signature=abc%2Fdef#preview';
+      for (final origin in [
+        'http://34.187.168.222',
+        'https://34.187.168.222',
+        'http://coscircle.app',
+      ]) {
+        for (final image in [
+          native.pickedImageProvider('$origin$path'),
+          web.pickedImageProvider('$origin$path'),
+        ]) {
+          expect((image! as NetworkImage).url, 'https://coscircle.app$path');
+        }
+      }
+    },
+  );
+
   for (final fromMyEvents in [false, true]) {
     testWidgets(
       'Q07 dismissal guards from ${fromMyEvents ? 'my events' : 'detail'}',
@@ -251,7 +281,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.ensureVisible(character);
         await tester.enterText(character, '儲存中的草稿');
-        final save = find.text('儲存出席');
+        final save = find.text('儲存預訂');
         await tester.ensureVisible(save);
         await tester.tap(save);
         await tester.pump();
@@ -455,7 +485,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         tester.widget<TableCalendar>(calendar).focusedDay.month,
-        target.month,
+        DateTime.now().month,
+      );
+      expect(
+        tester.widget<TableCalendar>(calendar).selectedDayPredicate!(
+          DateTime.now(),
+        ),
+        isTrue,
       );
     },
   );
@@ -492,8 +528,8 @@ void main() {
           (widget) =>
               widget is DecoratedBox &&
               widget.decoration is BoxDecoration &&
-              (widget.decoration as BoxDecoration).color ==
-                  const Color(0xff111111),
+              (widget.decoration as BoxDecoration).color == AppTheme.midnight &&
+              (widget.decoration as BoxDecoration).borderRadius != null,
         ),
       );
       expect(backgrounds(), findsOneWidget);

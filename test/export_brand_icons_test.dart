@@ -5,7 +5,6 @@ import 'dart:ui' as ui;
 import 'package:coscircle/core/theme/app_theme.dart';
 import 'package:coscircle/shared/widgets/cos_ui.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -20,12 +19,9 @@ void main() {
       MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
-        home: const RepaintBoundary(
-          key: ValueKey('brand-export'),
-          child: ColoredBox(
-            color: Colors.white,
-            child: Center(child: CosLogoMark(size: 736)),
-          ),
+        home: const ColoredBox(
+          color: AppTheme.midnight,
+          child: Center(child: CosLogoMark(size: 736)),
         ),
       ),
     );
@@ -48,6 +44,8 @@ void main() {
           jsonDecode(await File('$iosFolder/Contents.json').readAsString())
               as Map<String, dynamic>;
       final targets = <String, int>{
+        'assets/brand/coscircle_app_icon_source.png': 128,
+        'assets/brand/coscircle_app_icon_1024.png': 1024,
         'build/ui-preview/brand-mark-1024.png': 1024,
         'web/favicon.png': 32,
         'web/icons/Icon-192.png': 192,
@@ -71,11 +69,31 @@ void main() {
                       ))
                   .round(),
       };
-      final boundary = tester.renderObject<RenderRepaintBoundary>(
-        find.byKey(const ValueKey('brand-export')),
+      final codec = await ui.instantiateImageCodec(
+        await File('assets/brand/coscircle-mark.png').readAsBytes(),
       );
+      final mark = (await codec.getNextFrame()).image;
+      codec.dispose();
       for (final target in targets.entries) {
-        final image = await boundary.toImage(pixelRatio: target.value / 1024);
+        final side = target.value;
+        const grid = 64;
+        final cellSize = (side * 0.78 / grid).floor();
+        final markSize = cellSize == 0
+            ? (side * 0.84).roundToDouble()
+            : (grid * cellSize).toDouble();
+        final inset = ((side - markSize) / 2).floorToDouble();
+        final recorder = ui.PictureRecorder();
+        final canvas = Canvas(recorder);
+        canvas.drawColor(AppTheme.midnight, BlendMode.src);
+        canvas.drawImageRect(
+          mark,
+          Rect.fromLTWH(0, 0, mark.width.toDouble(), mark.height.toDouble()),
+          Rect.fromLTWH(inset, inset, markSize, markSize),
+          Paint()..filterQuality = FilterQuality.none,
+        );
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(side, side);
+        picture.dispose();
         try {
           expect(image.width, target.value);
           expect(image.height, target.value);
@@ -98,6 +116,7 @@ void main() {
           image.dispose();
         }
       }
+      mark.dispose();
     });
   });
 }

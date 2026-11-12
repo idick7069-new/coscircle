@@ -18,14 +18,15 @@ class CosCircleApp extends ConsumerWidget {
     final theme = switch (themeMode) {
       CosCircleThemeMode.neonDark => AppTheme.dark,
       CosCircleThemeMode.morandiLight => AppTheme.morandi,
+      CosCircleThemeMode.whitePixel => AppTheme.whitePixel,
     };
 
     return MaterialApp.router(
       title: 'CosCircle | Cos小圈圈',
       debugShowCheckedModeBanner: false,
       theme: theme,
-      darkTheme: AppTheme.dark,
-      themeMode: themeMode == CosCircleThemeMode.neonDark
+      darkTheme: theme.brightness == Brightness.dark ? theme : AppTheme.dark,
+      themeMode: theme.brightness == Brightness.dark
           ? ThemeMode.dark
           : ThemeMode.light,
       locale: const Locale('zh', 'TW'),

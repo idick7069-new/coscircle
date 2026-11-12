@@ -89,10 +89,10 @@ CosCircle 為 cosplay、ACG 及同人活動參與者提供活動前發預定、�
 
 ### 5.1 首次註冊與再次開啟
 
-1. App 開啟後先還原登入狀態，判斷前顯示 loading 與品牌動畫。
+1. App 開啟後先還原登入狀態，判斷前顯示希希半身整理資料的像素動畫；首次條款狀態確認仍只顯示 loading，不先閃出同意表單。
 2. 沒有有效登入狀態時顯示登入入口。使用者可用 Email 註冊或啟用的原生 LINE 登入。
 3. 登入頁依帳號 OOBE 完成狀態選擇首次設定或返回目標頁；目的頁有法律 gate 時，先要求目前版本明確同意。
-4. 尚未完成首次設定的帳號經同意後使用 OOBE，完成後進入主頁。
+4. 尚未完成首次設定的帳號經同意後使用 OOBE。希希以「你的馬內」身分，用半身像素插圖引導活動預定、現場找人與位置分享控制、掃碼關注／戳友留話，以及同坑夥伴與小圈圈；最後協助建立暱稱、可複選身份與常跑地區。讀取與儲存時提供對應提示，其他資料可日後在名片補齊，完成後進入主頁。
 5. 已完成帳號重新登入、換裝置或重裝後，不因缺少本機 OOBE 記錄而再次強制引導；以帳號資料為準。
 
 Email 註冊會嘗試寄驗證信，但不等待收信才建立帳號。驗證目前不是進入主頁的強制門檻。使用者可從設定頁主動重看引導。
@@ -172,7 +172,7 @@ Email 註冊會嘗試寄驗證信，但不等待收信才建立帳號。驗證�
 | --- | --- |
 | 暱稱、頭像、自介 | 暱稱去空白後不得空白；資料儲存成功才離開編輯。 |
 | 個人身份 | Coser、攝影、馬內、路人，可複選，在名片以圖示與身份標籤顯示。 |
-| 個人資訊 | 年齡、性別、Facebook 網址、雷點。性別含不公開；現有年齡欄位沒有明確數字範圍驗證，不等於已實作年齡限制。 |
+| 個人資訊 | 年齡、性別、Facebook 網址、雷點。性別與年齡可設為不公開。關閉年齡公開時保留自己的原值，公開名片 API 遮蔽年齡；現有年齡欄位沒有明確數字範圍驗證，不等於已實作年齡限制。 |
 | 座標與跑場 | 座標在此代表常駐地區，不是 GPS；選項包含北部、中部、南部、離島、海外，另有跑場範圍及同常駐地區選擇。 |
 | 照片 | 頭像及其他照片。其他照片最多三張；圖片檔頭接受 JPG、PNG、WebP，讀取上限 5 MiB。 |
 | 編輯操作 | 同類訊號及準備度項目可開對應編輯位置；儲存列固定底部，失敗保留草稿與錯誤。 |
@@ -204,7 +204,7 @@ PROF-03：公開名片提供基本資料、身份、照片與坑單，不提供 
 - EVT-01：一般列表顯示 approved 活動，按日期排序；已結束活動仍可取得。審核狀態為 pending、approved、rejected，與時間狀態「未開始、進行中、已結束」分開。
 - EVT-02：多日活動逐日展開，月曆日期與列表以實際 D 日篩選。上下滑動月曆仍可帶動整頁，橫滑可換月。
 - EVT-03：快速篩選包含全部、我有加入、關注者、小圈圈、戳友，可搭配日期及隱藏已結束。關係訊號依日次判斷，不把同活動其他日當成同日參加。
-- EVT-04：篩選與月曆焦點保存於本裝置。活動探索預設不隱藏已結束；我的活動清單則預設隱藏已結束，兩者預設不同。
+- EVT-04：關係篩選保存於本裝置；每次新進入活動分頁預設選取與聚焦今天，不還原上次日期。手動選日後，在本次瀏覽期間維持該選擇。活動探索預設不隱藏已結束；我的活動清單則預設隱藏已結束，兩者預設不同。
 - EVT-05：整張活動卡可開詳情；顯示日期、場地、地址、分類、來源名稱與原網址。原生 App 可用 WebView 閱讀來源，Web 開外部頁。
 - EVT-06：詳情可看所有符合公開或圈內可見規則的預定，不必先關注作者；排除非 active 及任一方向封鎖對象，依日期分組。
 - EVT-07：活動總參加人數按 user ID 去重；各日仍保留獨立內容。探索的場數可按展開後日數計，已加入摘要按活動計，不能將兩者當成同一數量。
@@ -345,7 +345,7 @@ BKG-03：照片先成功上傳再儲存預定。我的活動逐日列出自己�
 
 ### 6.15 SET：設定、通知與回饋
 
-- SET-01：主題為活力亮色及夜間撞色，新安裝預設亮色，保留本機既有偏好。風格為圓潤卡片、鮮明撞色與插畫，準備度為輕量完成度回饋，不新增虛構積分或獎勵。
+- SET-01：2026-11-06 新版為午夜像素及冷調微光，預設深色。舊安裝首次進入本視覺版本改用午夜像素，之後的選擇會保存。介面使用方角面板、硬邊陰影、像素字型與希希插圖。準備度維持原本完成度回饋，不新增虛構積分或獎勵。未上傳或讀取失敗的頭像使用灰色希希輪廓，不影響資料完成度判定。
 - SET-02：認親通知使用開關。原生服務就緒、系統授權與 token 同步後才具備通知條件；關閉移除本裝置 token。開關變化不等於背景推播已送達。
 - SET-03：可重看教學、投稿活動、查看版本及登入方式、登出。診斷與管理入口限管理員顯示，服務端仍須自行授權。
 - SET-04：意見回饋開啟外部 Google 表單，預設為既有填寫連結。空建置設定隱藏入口，不自動附加 user ID、Email、token 或裝置資料；不是站內客服聊天室。
@@ -488,7 +488,7 @@ BKG-03：照片先成功上傳再儲存預定。我的活動逐日列出自己�
 | 外部連結 | 分享使用 Web 名片 URL；目前設定不足以宣稱 HTTPS Universal Links 或 Android App Links 已完整完成。 |
 | 網路 | 一般 API connect／receive timeout 各十秒，錯誤提供重試與合適提示；網路不通不等同帳號無效。 |
 | 可用性 | loading、empty、error 分開呈現；小螢幕、鍵盤、橫向及大字體不可使主要操作無法觸及。 |
-| 動態效果 | 啟動及完成度動畫尊重減少動畫設定；不以大幅垂直位移干擾操作。 |
+| 動態效果 | 希希插圖、灰色預設頭像與兩種 loading GIF 統一為可愛大頭、圓眼鏡與腮紅的 64×64 像素素材，圖片內不含文字，狀態說明留在圖片外。希希（CC）設定為「你的馬內」，是一起出角、幫你打理場次事務的朋友；所有插圖與動畫最多呈現半身，大圖也不使用全身構圖。同好頁移除無功能的裝飾希希。登入與活動載入使用整理資料 GIF，現場載入使用地圖 GIF；減少動態、隱藏分頁或離開前景時顯示靜態圖。完成度動畫仍尊重減少動畫設定，不以大幅垂直位移干擾操作。 |
 | 安全 | 正式建置依專案規則指定 HTTPS GCP API，不交付金鑰、密碼或管理憑證於文件與客戶端。程式另有不安全測試豁免旗標，不代表正式可用。 |
 | 環境 | 除使用者明確切回測試環境外，後端、API、DB 使用正式 GCP；本文件不要求建立本機替代服務。 |
 
@@ -596,10 +596,17 @@ BKG-03：照片先成功上傳再儲存預定。我的活動逐日列出自己�
 | 後台與同步 | [Dashboard](/Users/frank/FlutterProjects/coscircle/lib/features/admin/presentation/admin_dashboard_page.dart:84)、[Sync service](/Users/frank/FlutterProjects/coscircle/backend/src/event-sync-service.js:18)、[Source scraper](/Users/frank/FlutterProjects/coscircle/backend/scripts/scrape-events.js:28)。 |
 | 法律與安全 | [Legal consent](/Users/frank/FlutterProjects/coscircle/backend/src/legal-consent.js:1)、[Deletion](/Users/frank/FlutterProjects/coscircle/backend/src/account-deletion.js:210)、[Reports](/Users/frank/FlutterProjects/coscircle/backend/src/content-reports.js:143)、[最小 hotfix 範圍](/Users/frank/FlutterProjects/coscircle/docs/deployment/legal-endpoint-hotfix.md)。 |
 | 資料與平台 | [MySQL schema](/Users/frank/FlutterProjects/coscircle/backend/db/schema.sql:1)、[依賴](/Users/frank/FlutterProjects/coscircle/pubspec.yaml:21)、[Android Manifest](/Users/frank/FlutterProjects/coscircle/android/app/src/main/AndroidManifest.xml:1)。 |
-| 視覺與驗收 | [撞色插畫 UI](/Users/frank/FlutterProjects/coscircle/docs/design/playful-ui-refresh.md)、[Android 完整測試紀錄](/Users/frank/FlutterProjects/coscircle/docs/product/android-full-qa-2026-10-30.md)、[Android 續測](/Users/frank/FlutterProjects/coscircle/docs/product/android-qa-continuation-2026-10-30.md)。 |
+| 視覺與驗收 | [希希像素風](/Users/frank/FlutterProjects/coscircle/docs/design/mimi-pixel-style.md)、[前版撞色插畫 UI](/Users/frank/FlutterProjects/coscircle/docs/design/playful-ui-refresh.md)、[Android 完整測試紀錄](/Users/frank/FlutterProjects/coscircle/docs/product/android-full-qa-2026-10-30.md)、[Android 續測](/Users/frank/FlutterProjects/coscircle/docs/product/android-qa-continuation-2026-10-30.md)。 |
 
 主要公開與功能路由包含 `/login`、`/forgot-password`、`/verify-email`、`/reset-password`、`/privacy`、`/terms`、`/onboarding`、`/events/:id`、`/current/:id`、`/profiles/:code`、`/scan-profile`、`/scan-circle`、`/delete-account`、`/admin`。部分設定、分享、審核頁使用頁面堆疊導覽，不能因沒有獨立 URL 就視為缺功能。
 
 文件依三個唯讀盤點切片整合，並以獨立一致性檢查核對高風險規則。此次為文件工作，不重跑完整測試、不重新確認正式服務現況，也不宣告產品發布通過。
 
 檢核注意事項：審查沿用同一模型，由獨立代理執行，不是跨模型或安全核准。已依審查更正信箱資料表名稱，補明匿名名片、路由檢查順序及位置讀取邊界。仍未確認的部署、平台驗收及產品決策保留於第 13 節。
+
+### 2026-11-12 操作細節補強
+
+- 預訂表單標題及新建按鈕統一使用「發佈預訂」，編輯使用「修改預訂／儲存預訂」。
+- Coser 選擇作品後即時顯示同場、同日、同作品的其他 Coser 人數，去除重複帳號且不含自己；沿用參加者 API 可見範圍，隱藏與封鎖資料不計入。自由填寫的出沒時間不作精確重疊判斷。讀取失敗顯示重試，不假設人數為零。
+- 同坑雷達的共同作品標籤使用實心亮色、對比文字與雷達圖示，非共同作品維持一般標籤。
+- `users.age_public` 記錄年齡公開偏好，舊客戶端未傳此欄位時保留原設定；僅自己可透過 `/api/me` 讀取不公開的原始年齡。

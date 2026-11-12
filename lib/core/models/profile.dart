@@ -15,6 +15,7 @@ class UserProfile {
     this.deepPitWorks = const [],
     this.shallowPitWorks = const [],
     this.age = '',
+    this.agePublic = true,
     this.regions = const [],
     this.travelRegions = const [],
     this.travelSameRegion = false,
@@ -39,6 +40,13 @@ class UserProfile {
   final List<WorkTag> deepPitWorks;
   final List<WorkTag> shallowPitWorks;
   final String age;
+  final bool agePublic;
+
+  String get ageLabel => !agePublic
+      ? '不公開'
+      : age.isEmpty
+      ? '尚未設定'
+      : age;
   final List<String> regions;
   final List<String> travelRegions;
   final bool travelSameRegion;
@@ -79,6 +87,10 @@ class UserProfile {
           : deepPitWorks,
       shallowPitWorks: shallowPitWorks,
       age: json['age']?.toString() ?? '',
+      agePublic:
+          json['agePublic'] == null ||
+          json['agePublic'] == true ||
+          json['agePublic'] == 1,
       regions: (json['regions'] as List<dynamic>? ?? const [])
           .map((item) => item.toString())
           .where((item) => item.isNotEmpty)
@@ -117,6 +129,7 @@ class UserProfile {
       'deepPitWorkIds': deepPitWorks.map((work) => work.id).toList(),
       'shallowPitWorkIds': shallowPitWorks.map((work) => work.id).toList(),
       'age': age,
+      'agePublic': agePublic,
       'regions': regions,
       'travelRegions': travelRegions,
       'travelSameRegion': travelSameRegion,
@@ -141,6 +154,7 @@ class UserProfile {
     List<WorkTag>? deepPitWorks,
     List<WorkTag>? shallowPitWorks,
     String? age,
+    bool? agePublic,
     List<String>? regions,
     List<String>? travelRegions,
     bool? travelSameRegion,
@@ -167,6 +181,7 @@ class UserProfile {
       deepPitWorks: nextDeepPitWorks,
       shallowPitWorks: nextShallowPitWorks,
       age: age ?? this.age,
+      agePublic: agePublic ?? this.agePublic,
       regions: regions ?? this.regions,
       travelRegions: travelRegions ?? this.travelRegions,
       travelSameRegion: travelSameRegion ?? this.travelSameRegion,
