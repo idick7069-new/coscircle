@@ -1,4 +1,5 @@
-export const eventListQuery = `SELECT events.id, events.category, events.name,
+import {visibleRow} from './release-security.js';
+export function eventListQuery() { return `SELECT events.id, events.category, events.name,
               DATE_FORMAT(events.start_date, '%Y-%m-%d') AS startDate,
               DATE_FORMAT(events.end_date, '%Y-%m-%d') AS endDate,
               events.venue, events.detailed_address AS detailedAddress,
@@ -39,7 +40,7 @@ export const eventListQuery = `SELECT events.id, events.category, events.name,
               LEFT JOIN user_blocks AS their_blocks
                 ON their_blocks.blocker_user_id = event_bookings.user_id
                AND their_blocks.blocked_user_id = ?
-            WHERE event_bookings.user_id <> ?
+            WHERE ${visibleRow('booking_users')} AND event_bookings.user_id <> ?
               AND my_blocks.blocked_user_id IS NULL
               AND their_blocks.blocker_user_id IS NULL
               AND (
@@ -74,7 +75,7 @@ export const eventListQuery = `SELECT events.id, events.category, events.name,
              LEFT JOIN user_blocks AS their_blocks
                ON their_blocks.blocker_user_id = event_bookings.user_id
               AND their_blocks.blocked_user_id = ?
-            WHERE event_bookings.user_id <> ?
+            WHERE ${visibleRow('booking_users')} AND event_bookings.user_id <> ?
               AND booking_users.booking_visibility IN ('public', 'circle')
               AND my_blocks.blocked_user_id IS NULL
               AND their_blocks.blocker_user_id IS NULL
@@ -86,7 +87,7 @@ export const eventListQuery = `SELECT events.id, events.category, events.name,
              FROM event_bookings b INNER JOIN users u ON u.id=b.user_id
              INNER JOIN friendships f ON f.user_low_id=LEAST(b.user_id, ?) AND f.user_high_id=GREATEST(b.user_id, ?)
                AND f.status='accepted'
-            WHERE b.user_id<>? AND u.account_status='active'
+            WHERE ${visibleRow('u')} AND b.user_id<>? AND u.account_status='active'
               AND NOT EXISTS (SELECT 1 FROM user_blocks blocks WHERE
                 (blocks.blocker_user_id=? AND blocks.blocked_user_id=b.user_id)
                 OR (blocks.blocker_user_id=b.user_id AND blocks.blocked_user_id=?))
@@ -95,5 +96,5 @@ export const eventListQuery = `SELECT events.id, events.category, events.name,
                   AND theirs.user_id=b.user_id WHERE mine.user_id=?))
             GROUP BY b.event_id
          ) AS friend_bookings ON friend_bookings.event_id=events.id
-        WHERE events.status = 'approved'
-        ORDER BY events.start_date ASC`;
+        WHERE events.status = 'approved' AND ${visibleRow('events','event')}
+        ORDER BY events.start_date ASC`; }

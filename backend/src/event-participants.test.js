@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
+import {visibleRow} from './release-security.js';
 import {DatabaseSync} from 'node:sqlite';
 
 // Exercise the route's actual SQL without starting a server or accessing production.
 const source = fs.readFileSync(new URL('./server.js', import.meta.url), 'utf8');
 const route = source.split("app.get('/api/events/:eventId/participants'")[1]
   .split("app.post('/api/users/:userId/follow'")[0];
-const query = route.match(/`(SELECT[\s\S]*?)`/)[1];
+const query = new Function('visibleRow', 'return `'+route.match(/`(SELECT[\s\S]*?)`/)[1]+'`')(visibleRow);
 const bindings = route.match(/\[\s*(req\.userId,[\s\S]*?)\]/)[1]
   .split(',').map((value) => value.trim()).filter(Boolean);
 
@@ -15,7 +16,7 @@ function fixture() {
   const db = new DatabaseSync(':memory:');
   db.exec(`
     CREATE TABLE users(id INTEGER, public_code TEXT, nickname TEXT, avatar_url TEXT,
-      facebook_url TEXT, bio TEXT, booking_visibility TEXT, account_status TEXT DEFAULT 'active');
+      facebook_url TEXT, bio TEXT, booking_visibility TEXT, is_test_account INTEGER DEFAULT 0, account_status TEXT DEFAULT 'active');
     CREATE TABLE event_bookings(event_id INTEGER, user_id INTEGER, day_index INTEGER,
       role TEXT, work_id INTEGER, character_name TEXT, outfit_image_url TEXT,
       interaction_tags TEXT, available_time TEXT, presence_status TEXT, message TEXT,

@@ -767,3 +767,35 @@ test('migration and exported startup table definitions are identical', async () 
   await ensureAccountDeletionTables({execute: async sql => {executed.push(sql);}});
   assert.deepEqual(executed, accountDeletionTableSql);
 });
+
+test('Apple reauthentication must match the linked subject and revoke before deletion', async () => {
+  let revoked = false;
+  const f = fixture({
+    fetchAppleProfile: async (_body, context) => {
+      assert.equal(context.purpose, 'delete');
+      assert.equal(String(context.userId), '1');
+      assert.equal(context.sessionToken, 'session-1');
+      return {id: 'APPLE-1'};
+    },
+    revokeAppleIdentity: async (_db, id) => { assert.equal(Number(id), 1); revoked = true; },
+  });
+  try {
+    f.db.exec("INSERT INTO user_auth_identities (user_id,provider,provider_user_id) VALUES (1,'apple','APPLE-1')");
+    await f.delete({password: undefined, appleCredential: {challengeId: 'server-challenge'}});
+    assert(revoked);assert.equal(f.user(1), undefined);assert.ok(f.user(2));
+  } finally {f.db.close();}
+});
+
+test('Apple subject mismatch or revocation failure retains the account and data', async () => {
+  for (const match of [false, true]) {
+    const f = fixture({
+      fetchAppleProfile: async () => ({id: match ? 'APPLE-1' : 'OTHER-APPLE'}),
+      revokeAppleIdentity: async () => {throw Object.assign(new Error('provider unavailable'),{code:'apple_revocation_unavailable'});},
+    });
+    try {
+      f.db.exec("INSERT INTO user_auth_identities (user_id,provider,provider_user_id) VALUES (1,'apple','APPLE-1')");
+      await assert.rejects(f.delete({password: undefined, appleCredential: {challengeId: 'server-challenge'}}),{code: match ? 'apple_revocation_unavailable' : 'apple_reauthentication_required'});
+      assert.ok(f.user(1));assert.equal(f.unlinked.length, 0);
+    } finally {f.db.close();}
+  }
+});

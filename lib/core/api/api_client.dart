@@ -5,6 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_state.dart';
+import '../services/token_store.dart';
+import 'cookie_transport_stub.dart'
+    if (dart.library.html) 'cookie_transport_web.dart';
+import 'package:flutter/painting.dart';
 
 final apiClientProvider = Provider<ApiClient>((ref) {
   return ApiClient(baseUrl: _validatedConfiguredBaseUrl());
@@ -57,7 +61,9 @@ class ApiClient {
           receiveTimeout: const Duration(seconds: 10),
         ),
       ) {
+    configureCookieTransport(_dio);
     if (adapter != null) _dio.httpClientAdapter = adapter;
+    mediaClient = this;
     if (kDebugMode) {
       debugPrint('[ApiClient] baseUrl=${_dio.options.baseUrl}');
     }
@@ -85,15 +91,17 @@ class ApiClient {
               );
               return;
             }
-            options.headers['Authorization'] = 'Bearer ${session._token}';
+            if (!kIsWeb) {
+              options.headers['Authorization'] = 'Bearer ${session._token}';
+            }
             handler.next(options);
             return;
           }
           if (_authToken == null && !options.path.startsWith('/auth/')) {
             final version = _sessionVersion;
-            final prefs = await SharedPreferences.getInstance();
+            final stored = await _tokenStore.read();
             if (_sessionVersion == version && !_tokenInitialized) {
-              _authToken = prefs.getString('auth_token');
+              _authToken = stored;
               _tokenInitialized = true;
             }
           }
@@ -107,7 +115,7 @@ class ApiClient {
             return;
           }
           final token = _authToken;
-          if (token != null && token.isNotEmpty) {
+          if (!kIsWeb && token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
           handler.next(options);
@@ -131,8 +139,9 @@ class ApiClient {
               !error.requestOptions.path.startsWith('/auth/') &&
               error.requestOptions.extra['sessionVersion'] == _sessionVersion &&
               _authToken != null &&
-              error.requestOptions.headers['Authorization'] ==
-                  'Bearer $_authToken') {
+              (kIsWeb ||
+                  error.requestOptions.headers['Authorization'] ==
+                      'Bearer $_authToken')) {
             // Cancelling this request here would replace its 401 with a cancel error.
             _sessions.remove(error.requestOptions.extra['session']);
             final cleared = persistAuthToken(null);
@@ -146,11 +155,14 @@ class ApiClient {
     );
   }
 
+  static ApiClient? mediaClient;
+  final TokenStore _tokenStore = TokenStore();
   final String baseUrl;
   final Dio _dio;
   String? _authToken;
   bool _tokenInitialized = false;
   int _sessionVersion = 0;
+  int? _lastRestorationVersion;
   final ValueNotifier<int> _sessionChanges = ValueNotifier(0);
   final Set<ApiSession> _sessions = {};
   Future<void> _tokenWrites = Future.value();
@@ -161,22 +173,50 @@ class ApiClient {
   Future<String?> restoreAuthToken() async {
     if (_tokenInitialized) return _authToken;
     final version = _sessionVersion;
-    final prefs = await SharedPreferences.getInstance();
+    String? token;
+    if (kIsWeb) {
+      final preferences = await SharedPreferences.getInstance();
+      if (preferences.getBool('web_signed_out') != true) {
+        final legacy = preferences.getString('auth_token');
+        try {
+          if (legacy != null) {
+            await _dio.post(
+              '/auth/session/migrate',
+              options: Options(headers: {'Authorization': 'Bearer $legacy'}),
+            );
+            await preferences.remove('auth_token');
+          }
+          await _dio.get('/auth/session');
+          token = 'cookie-session';
+        } on DioException catch (error) {
+          if (error.response?.statusCode != 401) rethrow;
+          await preferences.remove('auth_token');
+        }
+      }
+    } else {
+      token = await _tokenStore.read();
+    }
     if (_sessionVersion != version || _tokenInitialized) return _authToken;
-    final token = prefs.getString('auth_token');
     setAuthToken(token == null || token.isEmpty ? null : token);
+    _lastRestorationVersion = _sessionVersion;
     return _authToken;
+  }
+
+  Future<ApiSession> restoreSession() async {
+    if (_tokenInitialized) return captureSession();
+    final version = _sessionVersion;
+    await restoreAuthToken();
+    if (_sessionVersion != version + 1 ||
+        _lastRestorationVersion != _sessionVersion) {
+      throw StateError('Session changed during restoration');
+    }
+    return captureSession();
   }
 
   Future<void> persistAuthToken(String? token) {
     setAuthToken(token);
     final write = _tokenWrites.then((_) async {
-      final prefs = await SharedPreferences.getInstance();
-      if (token == null) {
-        await prefs.remove('auth_token');
-      } else {
-        await prefs.setString('auth_token', token);
-      }
+      await _tokenStore.write(token);
     });
     _tokenWrites = write.catchError((Object _) {});
     return write;
@@ -198,6 +238,8 @@ class ApiClient {
   }
 
   void setAuthToken(String? token) {
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
     cancelSessionOperations();
     _tokenInitialized = true;
     _authToken = token;

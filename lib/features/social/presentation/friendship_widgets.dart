@@ -1,8 +1,9 @@
+import '../../../core/repositories/feed_repository.dart';
+import '../../../core/api/api_client.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/models/event_day_item.dart';
 import '../../../core/models/friendship.dart';
@@ -23,6 +24,7 @@ import 'social_page.dart';
 
 /// Refresh relationship-dependent views after a successful social mutation.
 void refreshFriendships(WidgetRef ref) {
+  ref.invalidate(feedRevisionProvider);
   ref.invalidate(followingProvider);
   ref.invalidate(circlesProvider);
   ref.invalidate(blockedUsersProvider);
@@ -245,9 +247,7 @@ class _ProfileFriendshipActionsState
   }
 
   Future<void> _loadAuthentication() async {
-    final token = (await SharedPreferences.getInstance()).getString(
-      'auth_token',
-    );
+    final token = await ref.read(apiClientProvider).restoreAuthToken();
     if (mounted) {
       setState(() {
         _loaded = true;

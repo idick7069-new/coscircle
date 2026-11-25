@@ -47,6 +47,11 @@ class EventDetailPage extends ConsumerWidget {
         title: const Text('活動詳細'),
         actions: [
           IconButton(
+            tooltip: '本場動態',
+            onPressed: () => context.push('/events/$eventId/feed'),
+            icon: const Icon(Icons.dynamic_feed_outlined),
+          ),
+          IconButton(
             tooltip: '重新整理',
             onPressed: () {
               ref.invalidate(eventDetailProvider(eventId));

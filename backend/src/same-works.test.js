@@ -20,6 +20,7 @@ function fixture() {
       (2,100,'shallow'),(2,200,'deep'),(3,100,'deep'),(4,200,'shallow'),
       (5,100,'deep'),(6,300,'shallow'),(7,100,'deep'),(8,200,'deep');
     INSERT INTO user_blocks VALUES (1,3),(4,1);`);
+  db.exec("ALTER TABLE users ADD COLUMN is_test_account INTEGER DEFAULT 0; ALTER TABLE works ADD COLUMN is_test_work INTEGER DEFAULT 0;");
   const pool = {execute: async (sql, params) => [db.prepare(sql).all(...params)]};
   return {db, pool};
 }

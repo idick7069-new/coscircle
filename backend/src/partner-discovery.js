@@ -1,5 +1,6 @@
-const eligibleUser = `u.id <> ?
-  AND u.account_status = 'active'
+import {visibleRow} from './release-security.js';
+const eligibleUser = () => `u.id <> ?
+  AND u.account_status = 'active' AND ${visibleRow('u')}
   AND u.public_code IS NOT NULL AND u.public_code <> ''
   AND NOT EXISTS (
     SELECT 1 FROM user_blocks b
@@ -47,11 +48,11 @@ export async function listPartnerWorks(pool, viewerId, query = {}) {
     LEFT JOIN (
       SELECT p.work_id, COUNT(DISTINCT u.id) AS partnerCount
       FROM user_pit_works p INNER JOIN users u ON u.id = p.user_id
-      WHERE ${eligibleUser}
+      WHERE ${eligibleUser()}
       GROUP BY p.work_id
     ) partners ON partners.work_id = w.id
     WHERE ${scope === 'mine' ? mine : 'COALESCE(partners.partnerCount, 0) > 0'}
-      AND w.name LIKE ? ESCAPE '!'
+      AND ${visibleRow('w','work')} AND w.name LIKE ? ESCAPE '!'
     ORDER BY w.name ASC, w.id ASC LIMIT ? OFFSET ?`;
   const params = [viewerId, viewerId, viewerId, viewerId];
   if (scope === 'mine') params.push(viewerId);
@@ -68,7 +69,7 @@ export async function listWorkPartners(pool, viewerId, workId, query = {}) {
   const [rows] = await pool.execute(`SELECT u.id AS userId, u.public_code AS publicCode,
       u.nickname, u.avatar_url AS avatarUrl, u.bio
     FROM users u
-    WHERE ${eligibleUser}
+    WHERE ${eligibleUser()}
       AND EXISTS (SELECT 1 FROM user_pit_works p
         INNER JOIN works w ON w.id = p.work_id
         WHERE p.user_id = u.id AND p.work_id = ?)

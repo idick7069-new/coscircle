@@ -1,0 +1,171 @@
+--- server-before.js
++++ server-after.js
+@@ -1,6 +1,5 @@
+ import 'dotenv/config';
+ import crypto from 'node:crypto';
+-import fs from 'node:fs/promises';
+ import path from 'node:path';
+ import { fileURLToPath } from 'node:url';
+ import { promisify } from 'node:util';
+@@ -25,11 +24,19 @@
+ import {createMailService} from './mail-service.js';
+ import {createEmailAccountService, emailActionTableSql, registerEmailAccountRoutes, normalizeAccountEmail} from './email-account-service.js';
+ 
++import {registerReportRoutes, registerReportAdminRoutes, eraseReportPersonalData, purgeExpiredReportEvidence} from './content-reports.js';
++import {createAccountDeletionService, registerAccountDeletionRoutes} from './account-deletion.js';
++
+ const __dirname = path.dirname(fileURLToPath(import.meta.url));
+ const uploadDir = path.resolve(__dirname, '..', 'uploads');
+ const app = express();
+ app.set('trust proxy', 'loopback');
+ const pool = createPool();
++const accountDeletionService = createAccountDeletionService(pool, {
++  verifyPassword, fetchLineProfile, uploadDir,
++  publicUploadOrigins: ['https://coscircle.app', 'https://34.187.168.222'],
++  deleteAdditionalUserData: eraseReportPersonalData,
++});
+ const eventNotifications = createEventNotifications(pool, {sendMeetupPush, sendRecognitionReplyPush});
+ const devUserId = 1;
+ const scrypt = promisify(crypto.scrypt);
+@@ -398,6 +405,10 @@
+ });
+ 
+ registerLegalRoutes(app, createLegalService(pool));
++app.use('/api/me/delete-account', createRateLimiter({windowMs: 15 * 60 * 1000, max: 5}));
++registerAccountDeletionRoutes(app, accountDeletionService, {production: isProduction});
++app.use('/api/reports', createRateLimiter({windowMs: 60 * 60 * 1000, max: 20}));
++registerReportRoutes(app, pool);
+ 
+ app.get('/api/me', async (req, res, next) => {
+   try {
+@@ -623,9 +634,9 @@
+       return;
+     }
+ 
+-    await fs.mkdir(uploadDir, { recursive: true });
+-    const fileName = `${crypto.randomUUID()}.${extension}`;
+-    await fs.writeFile(path.join(uploadDir, fileName), bytes);
++    const {fileName} = await accountDeletionService.storeUpload({
++      userId: req.userId, bytes, extension,
++    });
+     res.status(201).json({ url: publicUploadUrl(req, fileName) });
+   } catch (error) {
+     next(error);
+@@ -685,6 +696,7 @@
+ });
+ 
+ app.use('/api/admin', requireAdmin);
++registerReportAdminRoutes(app, pool);
+ 
+ app.get('/api/admin/stats', async (_req, res, next) => {
+   try {
+@@ -1064,17 +1076,9 @@
+       res.status(400).json({ error: 'cannot_suspend_self' });
+       return;
+     }
+-    const [result] = await pool.execute(
+-      `UPDATE users
+-          SET account_status = ?,
+-              session_token = CASE WHEN ? = 'suspended' THEN NULL ELSE session_token END
+-        WHERE id = ?`,
+-      [status, status, userId],
+-    );
+-    if (result.affectedRows === 0) {
+-      res.status(404).json({ error: 'user_not_found' });
+-      return;
+-    }
++    await accountDeletionService.updateAdminAccount({
++      userId, adminUserId: req.userId, sessionToken: bearerToken(req), status,
++    });
+     await recordAdminAction(req, `user.${status}`, userId);
+     res.status(204).end();
+   } catch (error) {
+@@ -1089,21 +1093,17 @@
+       res.status(400).json({ error: 'invalid_user_id' });
+       return;
+     }
++    if (![true, false, 0, 1].includes(req.body.isAdmin)) {
++      return res.status(400).json({error: 'invalid_account_update'});
++    }
+     const isAdmin = req.body.isAdmin === true || req.body.isAdmin === 1;
+     if (userId === Number(req.userId) && !isAdmin) {
+       res.status(400).json({ error: 'cannot_revoke_self_admin' });
+       return;
+     }
+-    const [result] = await pool.execute(
+-      `UPDATE users
+-          SET is_admin = ?
+-        WHERE id = ?`,
+-      [isAdmin, userId],
+-    );
+-    if (result.affectedRows === 0) {
+-      res.status(404).json({ error: 'user_not_found' });
+-      return;
+-    }
++    await accountDeletionService.updateAdminAccount({
++      userId, adminUserId: req.userId, sessionToken: bearerToken(req), isAdmin,
++    });
+     await recordAdminAction(
+       req,
+       isAdmin ? 'user.grant_admin' : 'user.revoke_admin',
+@@ -1126,13 +1126,9 @@
+       res.status(400).json({ error: 'cannot_delete_self' });
+       return;
+     }
+-    const [result] = await pool.execute('DELETE FROM users WHERE id = ?', [
+-      userId,
+-    ]);
+-    if (result.affectedRows === 0) {
+-      res.status(404).json({ error: 'user_not_found' });
+-      return;
+-    }
++    await accountDeletionService.adminDelete({
++      userId, adminUserId: req.userId, sessionToken: bearerToken(req),
++    });
+     await recordAdminAction(req, 'user.delete', userId);
+     res.status(204).end();
+   } catch (error) {
+@@ -2359,13 +2355,17 @@
+ });
+ 
+ app.use((error, _req, res, _next) => {
+-  if (error.code === 'invalid_age_public') return res.status(400).json({error: error.code});
++  if (['last_admin', 'cannot_delete_self', 'cannot_suspend_self', 'cannot_revoke_self_admin',
++    'invalid_user_id', 'invalid_account_update', 'invalid_account_status', 'invalid_age_public',
++    'authentication_required', 'admin_required', 'user_not_found'].includes(error.code)) {
++    return res.status(error.status ?? 400).json({error: error.code});
++  }
+   if (error.code === 'event_sync_busy') return res.status(409).json({error: 'event_sync_busy'});
+   if (error?.message === 'cors_origin_not_allowed') {
+     res.status(403).json({ error: 'cors_origin_not_allowed' });
+     return;
+   }
+-  console.error(error);
++  console.error('[api] request failed', {code: error.code ?? 'unknown', method: _req.method});
+   res.status(500).json({ error: 'internal_server_error' });
+ });
+ 
+@@ -2378,6 +2378,23 @@
+ await ensureAuthIdentities(pool);
+ await pool.execute(emailActionTableSql);
+ await ensureFriendships(pool);
++for (const table of ['account_uploads', 'account_upload_cleanup', 'account_legacy_upload_review', 'user_legal_consents',
++  'content_reports', 'content_report_reviews']) {
++  await pool.query(`SELECT 1 FROM ${table} LIMIT 0`);
++}
++async function maintainAccountSafety() {
++  await accountDeletionService.cleanupUploads();
++  await purgeExpiredReportEvidence(pool);
++}
++await maintainAccountSafety();
++let maintainingAccountSafety = false;
++setInterval(async () => {
++  if (maintainingAccountSafety) return;
++  maintainingAccountSafety = true;
++  try { await maintainAccountSafety(); }
++  catch { console.warn('[account-safety] cleanup needs retry'); }
++  finally { maintainingAccountSafety = false; }
++}, 10 * 60 * 1000).unref();
+ await eventSyncService.initialize();
+ if (eventScraperEnabled) scheduleDailyEventImport();
+ 

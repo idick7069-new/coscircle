@@ -141,7 +141,7 @@ class PushNotificationService with WidgetsBindingObserver {
       final token =
           _registration.registeredToken ??
           (_isSupportedPlatform && _messagingReady
-              ? await _messaging.getToken()
+              ? await _deviceToken(session: session)
               : null);
       session?.checkActive();
       if (token != null && token.isNotEmpty) {
@@ -296,7 +296,7 @@ class PushNotificationService with WidgetsBindingObserver {
       session.checkActive();
       if (settings.authorizationStatus == AuthorizationStatus.authorized ||
           settings.authorizationStatus == AuthorizationStatus.provisional) {
-        final token = await messaging.getToken();
+        final token = await _deviceToken(session: session);
         session.checkActive();
         await _syncToken(token, session: session);
       } else {
@@ -349,7 +349,7 @@ class PushNotificationService with WidgetsBindingObserver {
     session.checkActive();
     _notificationsEnabled = true;
     try {
-      final token = await _messaging.getToken();
+      final token = await _deviceToken(session: session);
       session.checkActive();
       await _syncToken(token, session: session, required: true);
       session.checkActive();
@@ -399,6 +399,18 @@ class PushNotificationService with WidgetsBindingObserver {
     }
   }
 
+  Future<String?> _deviceToken({ApiSession? session}) async {
+    // FCM cannot register an Apple device before APNs has registered it.
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      final apnsToken = await _messaging.getAPNSToken();
+      session?.checkActive();
+      if (apnsToken == null || apnsToken.isEmpty) return null;
+    }
+    final token = await _messaging.getToken();
+    session?.checkActive();
+    return token;
+  }
+
   Future<void> _syncToken(
     String? token, {
     required ApiSession session,
@@ -410,7 +422,13 @@ class PushNotificationService with WidgetsBindingObserver {
       _registration.clear();
       activeNotifications.value = false;
       _scheduleRetry(session);
-      if (required) throw Exception('無法取得通知識別碼，請稍後再試');
+      if (required) {
+        throw Exception(
+          !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+              ? 'iOS 推播尚未完成註冊，請稍後再試'
+              : '無法取得通知識別碼，請稍後再試',
+        );
+      }
       return;
     }
     try {
@@ -448,7 +466,7 @@ class PushNotificationService with WidgetsBindingObserver {
   }
 
   String get _platformName {
-    if (!kIsWeb && Platform.isIOS) return 'ios';
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) return 'ios';
     return 'android';
   }
 

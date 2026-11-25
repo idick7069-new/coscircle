@@ -1,0 +1,33 @@
+--- server-before.js
++++ server-after.js
+@@ -17,7 +17,7 @@
+ import { sharedLocationsQuery, updateLocationCoordinatesQuery } from './location-queries.js';
+ import { createEventSyncService } from './event-sync-service.js';
+ import { fetchLineProfile } from './line-auth.js';
+-import {createLineWebLogin, registerLineWebRoutes} from './line-web-login.js';
++import {createLineWebLogin, registerLineWebRoutes, registerLineWebLinkRoutes} from './line-web-login.js';
+ import { ensureAuthIdentities, linkLineIdentity, authIdentityUserQuery } from './auth-identities.js';
+ import { inTransaction } from './db-transaction.js';
+ import { ensureFriendships, registerFriendRoutes } from './friendships.js';
+@@ -175,9 +175,11 @@
+ });
+ 
+ app.use('/api/auth', createRateLimiter({ windowMs: 15 * 60 * 1000, max: 30 }));
+-registerLineWebRoutes(app, createLineWebLogin(pool, {
++const lineWebLogin = createLineWebLogin(pool, {
+   authenticateLine: profile => authenticateSocialProfile('line', profile),
+-}));
++  linkLine: options => linkLineIdentity(pool, {...options, verifyPassword}),
++});
++registerLineWebRoutes(app, lineWebLogin);
+ registerEmailAccountRoutes(app, emailAccountService, {production: isProduction});
+ app.use('/api/uploads', createRateLimiter({ windowMs: 60 * 60 * 1000, max: 80 }));
+ app.use('/api/events/submissions', createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20 }));
+@@ -438,6 +440,7 @@
+ });
+ 
+ app.use('/api/me/auth-identities', createRateLimiter({windowMs: 15 * 60 * 1000, max: 30}));
++registerLineWebLinkRoutes(app, lineWebLogin);
+ app.post('/api/me/auth-identities/line', async (req, res, next) => {
+   try {
+     if (isProduction && !req.secure) return res.status(426).json({error: 'secure_transport_required'});

@@ -29,10 +29,23 @@ class AccountSafetyRepository {
     return identifier.isEmpty ? name : '$name（$identifier）';
   }
 
+  Future<Map<String, dynamic>> appleDeletionChallenge(
+    ApiSession session,
+  ) async {
+    final response = await api.post(
+      '/me/auth-identities/apple/challenge',
+      session: session,
+      data: {'purpose': 'delete'},
+    );
+    session.checkActive();
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
   Future<void> deleteAccount({
     required ApiSession session,
     String? password,
     String? lineAccessToken,
+    Map<String, String>? appleCredential,
   }) async {
     await api.post(
       '/me/delete-account',
@@ -41,6 +54,7 @@ class AccountSafetyRepository {
         'confirmation': 'DELETE',
         if (password != null) 'password': password,
         if (lineAccessToken != null) 'lineAccessToken': lineAccessToken,
+        if (appleCredential != null) 'appleCredential': appleCredential,
       },
       receiveTimeout: const Duration(seconds: 30),
     );

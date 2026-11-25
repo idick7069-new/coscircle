@@ -1,0 +1,95 @@
+--- server-before.js
++++ server-after.js
+@@ -17,6 +17,7 @@
+ import { sharedLocationsQuery, updateLocationCoordinatesQuery } from './location-queries.js';
+ import { createEventSyncService } from './event-sync-service.js';
+ import { fetchLineProfile } from './line-auth.js';
++import {createLineWebLogin, registerLineWebRoutes} from './line-web-login.js';
+ import { ensureAuthIdentities, linkLineIdentity, authIdentityUserQuery } from './auth-identities.js';
+ import { inTransaction } from './db-transaction.js';
+ import { ensureFriendships, registerFriendRoutes } from './friendships.js';
+@@ -174,6 +175,9 @@
+ });
+ 
+ app.use('/api/auth', createRateLimiter({ windowMs: 15 * 60 * 1000, max: 30 }));
++registerLineWebRoutes(app, createLineWebLogin(pool, {
++  authenticateLine: profile => authenticateSocialProfile('line', profile),
++}));
+ registerEmailAccountRoutes(app, emailAccountService, {production: isProduction});
+ app.use('/api/uploads', createRateLimiter({ windowMs: 60 * 60 * 1000, max: 80 }));
+ app.use('/api/events/submissions', createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20 }));
+@@ -303,24 +307,7 @@
+   }
+ });
+ 
+-app.post('/api/auth/social', async (req, res, next) => {
+-  try {
+-    const provider = String(req.body.provider ?? '').trim().toLowerCase();
+-    const accessToken = String(req.body.accessToken ?? '').trim();
+-    if (provider === 'line' && isProduction && !req.secure) {
+-      return res.status(426).json({error: 'secure_transport_required'});
+-    }
+-    if (!['facebook', 'line'].includes(provider) || accessToken.length < 12) {
+-      res.status(400).json({ error: 'invalid_social_login' });
+-      return;
+-    }
+-
+-    const socialProfile = await fetchSocialProfile(provider, accessToken);
+-    if (!socialProfile?.id) {
+-      res.status(401).json({ error: 'invalid_social_token' });
+-      return;
+-    }
+-
++async function authenticateSocialProfile(provider, socialProfile) {
+     const sessionToken = createSessionToken();
+     let userId;
+     let isNewUser = false;
+@@ -368,11 +355,28 @@
+           VALUES (?,?,?,UTC_TIMESTAMP())`, [userId, provider, socialProfile.id]);
+       }
+     });
+-    res.json({
+-      token: sessionToken,
+-      user: await fetchUserProfile(userId),
+-      isNewUser,
+-    });
++    return {token: sessionToken, user: await fetchUserProfile(userId), isNewUser};
++}
++
++app.post('/api/auth/social', async (req, res, next) => {
++  try {
++    const provider = String(req.body.provider ?? '').trim().toLowerCase();
++    const accessToken = String(req.body.accessToken ?? '').trim();
++    if (provider === 'line' && isProduction && !req.secure) {
++      return res.status(426).json({error: 'secure_transport_required'});
++    }
++    if (!['facebook', 'line'].includes(provider) || accessToken.length < 12) {
++      res.status(400).json({ error: 'invalid_social_login' });
++      return;
++    }
++
++    const socialProfile = await fetchSocialProfile(provider, accessToken);
++    if (!socialProfile?.id) {
++      res.status(401).json({ error: 'invalid_social_token' });
++      return;
++    }
++
++    res.json(await authenticateSocialProfile(provider, socialProfile));
+   } catch (error) {
+     if (error.code === 'account_suspended') return res.status(403).json({error: error.code});
+     if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({error: 'social_identity_conflict'});
+@@ -2379,12 +2383,13 @@
+ await pool.execute(emailActionTableSql);
+ await ensureFriendships(pool);
+ for (const table of ['account_uploads', 'account_upload_cleanup', 'account_legacy_upload_review', 'user_legal_consents',
+-  'content_reports', 'content_report_reviews']) {
++  'content_reports', 'content_report_reviews', 'line_web_logins']) {
+   await pool.query(`SELECT 1 FROM ${table} LIMIT 0`);
+ }
+ async function maintainAccountSafety() {
+   await accountDeletionService.cleanupUploads();
+   await purgeExpiredReportEvidence(pool);
++  await pool.execute('DELETE FROM line_web_logins WHERE expires_at<=UTC_TIMESTAMP()');
+ }
+ await maintainAccountSafety();
+ let maintainingAccountSafety = false;

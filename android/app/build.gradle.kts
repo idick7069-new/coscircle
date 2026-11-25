@@ -22,7 +22,7 @@ val isReleaseTask = gradle.startParameter.taskNames.any {
 }
 
 android {
-    namespace = "com.coscircle.coscircle"
+    namespace = "com.hikakineame.coscircle"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -34,7 +34,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.coscircle.coscircle"
+        applicationId = "com.hikakineame.coscircle"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = maxOf(flutter.minSdkVersion, 24)
@@ -58,8 +58,18 @@ android {
 
     buildTypes {
         debug {
+            // Opt-in local device QA can update the installed app without erasing its data.
+            if (project.findProperty("coscircleQaSigning") == "true") {
+                if (!keystorePropertiesFile.exists()) {
+                    throw GradleException("Device QA requires the existing upload keystore")
+                }
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
         release {
+            if (isReleaseTask && !keystorePropertiesFile.exists()) {
+                throw GradleException("Release builds require android/key.properties and the upload keystore")
+            }
             if (isReleaseTask && googleMapsApiKey.isNullOrBlank()) {
                 throw GradleException(
                     "Release builds require -PGOOGLE_MAPS_API_KEY=your_google_maps_key"

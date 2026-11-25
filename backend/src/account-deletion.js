@@ -34,6 +34,8 @@ const errors = new Map([
   ['invalid_account_status', 400], ['cannot_delete_self', 400], ['cannot_suspend_self', 400],
   ['cannot_revoke_self_admin', 400], ['authentication_required', 401],
   ['reauthentication_required', 403], ['admin_required', 403], ['user_not_found', 404],
+  ['apple_reauthentication_required', 403], ['apple_login_unavailable', 503],
+  ['apple_login_not_configured', 503], ['apple_revocation_unavailable', 503],
   ['last_admin', 409], ['line_login_unavailable', 503], ['line_login_not_configured', 503],
 ]);
 function fail(code) {
@@ -54,7 +56,7 @@ function activeAdmin(user) {
 }
 
 export function createAccountDeletionService(pool, {
-  verifyPassword, fetchLineProfile, uploadDir,
+  verifyPassword, fetchLineProfile, fetchAppleProfile, revokeAppleIdentity, uploadDir,
   publicUploadOrigins = [], deleteAdditionalUserData = async () => {}, fileSystem = fs, now = Date.now,
 } = {}) {
   const directory = uploadDir ? path.resolve(uploadDir) : null;
@@ -164,6 +166,10 @@ export function createAccountDeletionService(pool, {
     return result;
   }
   async function eraseUser(db, user) {
+    if (revokeAppleIdentity) {
+      const [[apple]] = await db.execute("SELECT id FROM user_auth_identities WHERE user_id=? AND provider='apple'", [user.id]);
+      if (apple) await revokeAppleIdentity(db, user.id);
+    }
     const legacyUploads = await prepareUploads(db, user);
     // SET NULL on submissions retains personal text. Delete these explicitly.
     await db.execute('DELETE FROM event_submissions WHERE submitter_user_id=?', [user.id]);
@@ -207,13 +213,27 @@ export function createAccountDeletionService(pool, {
     // A committed deletion remains successful when disk cleanup needs a retry.
     try { await cleanupUploads(); } catch { /* The durable queue survives restarts. */ }
   }
-  async function deleteAccount({sessionToken, confirmation, password, lineAccessToken} = {}) {
+  async function deleteAccount({sessionToken, confirmation, password, lineAccessToken, appleCredential} = {}) {
     if (confirmation !== 'DELETE') fail('invalid_confirmation');
     if (typeof sessionToken !== 'string' || !sessionToken || sessionToken.length > 191) fail('authentication_required');
     const hasPassword = typeof password === 'string' && password.length > 0 && password.length <= 1024;
     const hasLine = typeof lineAccessToken === 'string' && lineAccessToken.length >= 12 && lineAccessToken.length <= 4096;
-    if (hasPassword === hasLine || (password != null && !hasPassword) || (lineAccessToken != null && !hasLine)) {
+    const hasApple = appleCredential != null && typeof appleCredential === 'object' && !Array.isArray(appleCredential);
+    if ([hasPassword, hasLine, hasApple].filter(Boolean).length !== 1 || (appleCredential != null && !hasApple) || (password != null && !hasPassword) || (lineAccessToken != null && !hasLine)) {
       fail('reauthentication_required');
+    }
+    let appleSubject;
+    if (hasApple) {
+      if (!fetchAppleProfile) fail('apple_reauthentication_required');
+      const [[current]] = await pool.execute('SELECT id FROM users WHERE session_token=?', [sessionToken]);
+      if (!current) fail('authentication_required');
+      try {
+        const profile = await fetchAppleProfile(appleCredential, {purpose: 'delete', userId: current.id, sessionToken});
+        appleSubject = profile.id;
+      } catch (error) {
+        if (['apple_login_unavailable', 'apple_login_not_configured'].includes(error.code)) fail(error.code);
+        fail('apple_reauthentication_required');
+      }
     }
     let lineSubject;
     if (hasLine) {
@@ -239,6 +259,9 @@ export function createAccountDeletionService(pool, {
         if (!email?.password_hash || !verifyPassword || !await verifyPassword(password, email.password_hash)) {
           fail('reauthentication_required');
         }
+      } else if (hasApple) {
+        const apple = identities.find(identity => identity.provider === 'apple');
+        if (!apple || appleSubject !== apple.provider_user_id) fail('apple_reauthentication_required');
       } else {
         const line = identities.find(identity => identity.provider === 'line');
         if (!line || lineSubject !== line.provider_user_id) fail('reauthentication_required');
@@ -313,10 +336,10 @@ export function registerAccountDeletionRoutes(app, service, {production = false}
     if (production && !req.secure) return res.status(426).json({error: 'secure_transport_required'});
     try {
       const authorization = req.get('authorization');
-      const sessionToken = typeof authorization === 'string' && authorization.startsWith('Bearer ')
-        ? authorization.slice(7) : null;
-      const {confirmation, password, lineAccessToken} = req.body ?? {};
-      await service.deleteAccount({sessionToken, confirmation, password, lineAccessToken});
+      const sessionToken = req.authSessionDigest ?? (typeof authorization === 'string' && authorization.startsWith('Bearer ')
+        ? authorization.slice(7) : null);
+      const {confirmation, password, lineAccessToken, appleCredential} = req.body ?? {};
+      await service.deleteAccount({sessionToken, confirmation, password, lineAccessToken, ...(appleCredential === undefined ? {} : {appleCredential})});
       res.status(204).end();
     } catch (error) {
       if (errors.has(error.code)) return res.status(errors.get(error.code)).json({error: error.code});

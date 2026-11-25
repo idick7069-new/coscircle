@@ -1,3 +1,9 @@
+import {normalizeWorkName} from './work-catalog.js';
+import {createFeedService,registerFeedRoutes,registerFeedAdminRoutes,feedMediaAccess} from './social-feed.js';
+import {browserSessionBoundary,registerBrowserSessions,setSessionCookie} from './browser-session.js';
+import {createPrivateMedia} from './private-media.js';
+import {securityBoundary, sessionDigest, setAudience, currentAudience, visibleRow, audienceGuard, canonicalMediaBoundary} from './release-security.js';
+import {createAppleAuth, registerAppleRoutes, appleAuthTables} from './apple-auth.js';
 import 'dotenv/config';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -16,7 +22,8 @@ import { eventListQuery } from './event-queries.js';
 import { sharedLocationsQuery, updateLocationCoordinatesQuery } from './location-queries.js';
 import { createEventSyncService } from './event-sync-service.js';
 import { fetchLineProfile } from './line-auth.js';
-import { ensureAuthIdentities, linkLineIdentity, authIdentityUserQuery } from './auth-identities.js';
+import {createLineWebLogin, registerLineWebRoutes, registerLineWebLinkRoutes} from './line-web-login.js';
+import { ensureAuthIdentities, linkLineIdentity, unlinkLineIdentity, authIdentityUserQuery } from './auth-identities.js';
 import { inTransaction } from './db-transaction.js';
 import { ensureFriendships, registerFriendRoutes } from './friendships.js';
 import { registerSameWorkRoutes } from './same-works.js';
@@ -33,10 +40,16 @@ const app = express();
 app.set('trust proxy', 'loopback');
 const pool = createPool();
 const legalService = createLegalService(pool);
+const feedService = createFeedService(pool);
+const appleAuth = createAppleAuth(pool, {verifyPassword,
+  authenticateApple: (profile, saveIdentity) => authenticateSocialProfile('apple', profile, {saveIdentity}),
+});
 const accountDeletionService = createAccountDeletionService(pool, {
   verifyPassword, fetchLineProfile, uploadDir,
+  fetchAppleProfile: (body, context) => appleAuth.credential(body, context),
+  revokeAppleIdentity: (db, id) => appleAuth.revoke(db, id),
   publicUploadOrigins: ['https://coscircle.app', 'https://34.187.168.222'],
-  deleteAdditionalUserData: eraseReportPersonalData,
+  deleteAdditionalUserData: async(db,id)=>{await eraseReportPersonalData(db,id);await db.execute('UPDATE social_reports SET evidence_json=NULL,details=\'\' WHERE reporter_id=? OR target_author_id=? OR reviewed_by=?',[id,id,id]);},
 });
 const eventNotifications = createEventNotifications(pool, {sendMeetupPush, sendRecognitionReplyPush});
 const devUserId = 1;
@@ -75,7 +88,12 @@ app.use(
   }),
 );
 app.use(express.json({ limit: '10mb' }));
-app.use('/uploads', express.static(uploadDir));
+app.use(securityBoundary);
+app.use(browserSessionBoundary);
+const privateMedia = createPrivateMedia(pool, {uploadDir,canReadFeedMedia:(url,user)=>feedMediaAccess(pool,url,user)});
+app.use(privateMedia.responseBoundary);
+app.get('/uploads/:file',privateMedia.download);
+app.use(canonicalMediaBoundary);
 
 function encodeInteractionTags(value) {
   if (!Array.isArray(value)) return null;
@@ -174,7 +192,14 @@ app.post('/api/source-ingest/doujin-html', async (req, res, next) => {
   }
 });
 
+registerBrowserSessions(app,pool);
 app.use('/api/auth', createRateLimiter({ windowMs: 15 * 60 * 1000, max: 30 }));
+registerAppleRoutes(app, appleAuth, {production: isProduction});
+const lineWebLogin = createLineWebLogin(pool, {
+  authenticateLine: profile => authenticateSocialProfile('line', profile),
+  linkLine: options => linkLineIdentity(pool, {...options, verifyPassword}),
+});
+registerLineWebRoutes(app, lineWebLogin);
 registerEmailAccountRoutes(app, emailAccountService, {production: isProduction});
 app.use('/api/uploads', createRateLimiter({ windowMs: 60 * 60 * 1000, max: 80 }));
 app.use('/api/events/submissions', createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20 }));
@@ -201,18 +226,18 @@ app.post('/api/auth/register', async (req, res, next) => {
     const result = await inTransaction(pool, async (db) => {
       const [result] = await db.execute(
         `INSERT INTO users (
-           provider, provider_user_id, public_code, email, password_hash, session_token, nickname,
+           provider, provider_user_id, public_code, email, password_hash, session_token, session_expires_at, nickname,
            avatar_url, facebook_url, bio
          )
-         VALUES ('email', ?, ?, ?, ?, ?, ?, '', '', '')`,
-        [email, createPublicCode(), email, passwordHash, sessionToken, nickname],
+         VALUES ('email', ?, ?, ?, ?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 30 DAY), ?, '', '', '')`,
+        [email, createPublicCode(), email, passwordHash, sessionDigest(sessionToken), nickname],
       );
       await db.execute(`INSERT INTO user_auth_identities (user_id,provider,provider_user_id,password_hash)
         VALUES (?,'email',?,?)`, [result.insertId, email, passwordHash]);
       return result;
     });
     const profile = await fetchUserProfile(result.insertId);
-    console.info('[auth/register] success', { email, userId: result.insertId });
+    console.info('[auth/register] success', {userId: result.insertId});
     setImmediate(() => emailAccountService.requestVerification(result.insertId)
       .catch(() => console.warn('[account-mail] registration verification unavailable')));
     res.status(201).json({ token: sessionToken, user: profile, isNewUser: true });
@@ -232,7 +257,7 @@ app.post('/api/auth/login', async (req, res, next) => {
   try {
     const email = normalizeEmail(req.body.email);
     const password = String(req.body.password ?? '');
-    console.info('[auth/login] attempt', { email });
+    console.info('[auth/login] attempt');
     const [rows] = await pool.execute(
       authIdentityUserQuery,
       ['email', email],
@@ -262,16 +287,17 @@ app.post('/api/auth/login', async (req, res, next) => {
       return;
     }
 
-    if (user.accountStatus !== 'active') {
+    if (user.accountStatus !== 'active' || (user.is_test_account && !user.can_view_test_data && !user.is_admin)) {
       return res.status(403).json({error: 'account_suspended'});
     }
 
+    setAudience(user);
     const sessionToken = createSessionToken();
-    await pool.execute('UPDATE users SET session_token = ? WHERE id = ?', [
-      sessionToken,
+    await pool.execute('UPDATE users SET session_token = ?, session_expires_at=DATE_ADD(UTC_TIMESTAMP(), INTERVAL 30 DAY) WHERE id = ?', [
+      sessionDigest(sessionToken),
       user.id,
     ]);
-    console.info('[auth/login] success', { email, userId: user.id });
+    console.info('[auth/login] success', {userId: user.id});
     res.json({
       token: sessionToken,
       user: await fetchUserProfile(user.id),
@@ -280,13 +306,14 @@ app.post('/api/auth/login', async (req, res, next) => {
   } catch (error) {
     console.error('[auth/login] error', {
       email: normalizeEmail(req.body.email),
-      message: error.message,
+      code: error.code ?? 'unknown',
     });
     next(error);
   }
 });
 
 app.post('/api/auth/logout', async (req, res, next) => {
+  setSessionCookie(res,'',true);
   try {
     const token = bearerToken(req);
     if (token) {
@@ -304,6 +331,59 @@ app.post('/api/auth/logout', async (req, res, next) => {
   }
 });
 
+async function authenticateSocialProfile(provider, socialProfile, {saveIdentity = async () => {}} = {}) {
+    const sessionToken = createSessionToken();
+    let userId;
+    let isNewUser = false;
+    await inTransaction(pool, async (db) => {
+      const [existingRows] = await db.execute(
+        `${authIdentityUserQuery} FOR UPDATE`,
+        [provider, socialProfile.id],
+      );
+      userId = existingRows[0]?.id;
+      setAudience(existingRows[0]);
+      if (existingRows[0]?.accountStatus === 'suspended' || (existingRows[0]?.is_test_account && !existingRows[0]?.can_view_test_data && !existingRows[0]?.is_admin)) {
+        throw Object.assign(new Error('account_suspended'), {code: 'account_suspended'});
+      }
+      if (userId) {
+        await db.execute(
+          `UPDATE users
+            SET session_token = ?, session_expires_at=DATE_ADD(UTC_TIMESTAMP(), INTERVAL 30 DAY),
+                email = COALESCE(email, ?),
+                nickname = CASE
+                  WHEN nickname = '' OR nickname = '圈圈新朋友' THEN ?
+                  ELSE nickname
+                END
+          WHERE id = ?`,
+          [sessionDigest(sessionToken), socialProfile.email, socialProfile.nickname, userId],
+        );
+      } else {
+        isNewUser = true;
+        const [result] = await db.execute(
+          `INSERT INTO users (
+           provider, provider_user_id, public_code, email, password_hash, session_token, session_expires_at,
+           nickname, avatar_url, facebook_url, bio
+         )
+         VALUES (?, ?, ?, ?, NULL, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 30 DAY), ?, ?, '', '')`,
+          [
+            provider,
+            socialProfile.id,
+            createPublicCode(),
+            socialProfile.email,
+            sessionDigest(sessionToken),
+            socialProfile.nickname,
+            socialProfile.avatarUrl,
+          ],
+        );
+        userId = result.insertId;
+        await db.execute(`INSERT INTO user_auth_identities (user_id,provider,provider_user_id,verified_at)
+          VALUES (?,?,?,UTC_TIMESTAMP())`, [userId, provider, socialProfile.id]);
+      }
+      await saveIdentity(db, userId);
+    });
+    return {token: sessionToken, user: await fetchUserProfile(userId), isNewUser};
+}
+
 app.post('/api/auth/social', async (req, res, next) => {
   try {
     const provider = String(req.body.provider ?? '').trim().toLowerCase();
@@ -311,7 +391,7 @@ app.post('/api/auth/social', async (req, res, next) => {
     if (provider === 'line' && isProduction && !req.secure) {
       return res.status(426).json({error: 'secure_transport_required'});
     }
-    if (!['facebook', 'line'].includes(provider) || accessToken.length < 12) {
+    if (provider !== 'line' || accessToken.length < 12) {
       res.status(400).json({ error: 'invalid_social_login' });
       return;
     }
@@ -322,58 +402,7 @@ app.post('/api/auth/social', async (req, res, next) => {
       return;
     }
 
-    const sessionToken = createSessionToken();
-    let userId;
-    let isNewUser = false;
-    await inTransaction(pool, async (db) => {
-      const [existingRows] = await db.execute(
-        `${authIdentityUserQuery} FOR UPDATE`,
-        [provider, socialProfile.id],
-      );
-      userId = existingRows[0]?.id;
-      if (existingRows[0]?.accountStatus === 'suspended') {
-        throw Object.assign(new Error('account_suspended'), {code: 'account_suspended'});
-      }
-      if (userId) {
-        await db.execute(
-          `UPDATE users
-            SET session_token = ?,
-                email = COALESCE(email, ?),
-                nickname = CASE
-                  WHEN nickname = '' OR nickname = '圈圈新朋友' THEN ?
-                  ELSE nickname
-                END
-          WHERE id = ?`,
-          [sessionToken, socialProfile.email, socialProfile.nickname, userId],
-        );
-      } else {
-        isNewUser = true;
-        const [result] = await db.execute(
-          `INSERT INTO users (
-           provider, provider_user_id, public_code, email, password_hash, session_token,
-           nickname, avatar_url, facebook_url, bio
-         )
-         VALUES (?, ?, ?, ?, NULL, ?, ?, ?, '', '')`,
-          [
-            provider,
-            socialProfile.id,
-            createPublicCode(),
-            socialProfile.email,
-            sessionToken,
-            socialProfile.nickname,
-            socialProfile.avatarUrl,
-          ],
-        );
-        userId = result.insertId;
-        await db.execute(`INSERT INTO user_auth_identities (user_id,provider,provider_user_id,verified_at)
-          VALUES (?,?,?,UTC_TIMESTAMP())`, [userId, provider, socialProfile.id]);
-      }
-    });
-    res.json({
-      token: sessionToken,
-      user: await fetchUserProfile(userId),
-      isNewUser,
-    });
+    res.json(await authenticateSocialProfile(provider, socialProfile));
   } catch (error) {
     if (error.code === 'account_suspended') return res.status(403).json({error: error.code});
     if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({error: 'social_identity_conflict'});
@@ -388,6 +417,8 @@ app.post('/api/auth/social', async (req, res, next) => {
   }
 });
 
+app.post('/api/media/sign',createRateLimiter({windowMs:15*60*1000,max:300}),async(req,res,next)=>{try{req.userId=await resolveUserId(req);await privateMedia.renew(req,res);}catch(error){next(error);}});
+
 app.use(async (req, _res, next) => {
   try {
     if (req.path.startsWith('/api/profiles/')) {
@@ -399,6 +430,7 @@ app.use(async (req, _res, next) => {
       _res.status(401).json({ error: 'authentication_required' });
       return;
     }
+    await audienceGuard(pool, req);
     next();
   } catch (error) {
     next(error);
@@ -414,6 +446,8 @@ app.get('/api/me', async (req, res, next) => {
 });
 
 registerLegalRoutes(app, legalService);
+app.use('/api/me/auth-identities/apple', createRateLimiter({windowMs: 15 * 60 * 1000, max: 30}));
+registerAppleRoutes(app, appleAuth, {privateRoutes: true, production: isProduction});
 app.use('/api/me/delete-account', createRateLimiter({windowMs: 15 * 60 * 1000, max: 5}));
 registerAccountDeletionRoutes(app, accountDeletionService, {production: isProduction});
 app.use('/api/reports', createRateLimiter({windowMs: 60 * 60 * 1000, max: 20}));
@@ -427,6 +461,10 @@ app.use('/api/friend-invites', createRateLimiter({ windowMs: 60 * 60 * 1000, max
 app.use('/api/friend-requests', createRateLimiter({ windowMs: 15 * 60 * 1000, max: 60 }));
 registerFriendRoutes(app, pool);
 registerSameWorkRoutes(app, pool);
+app.use('/api/feed',createRateLimiter({windowMs:15*60*1000,max:240}));
+const feedReportLimiter=createRateLimiter({windowMs:60*60*1000,max:20});
+app.use('/api/feed',(req,res,next)=>req.method==='POST'&&/^\/[^/]+\/reports$/.test(req.path)?feedReportLimiter(req,res,next):next());
+registerFeedRoutes(app,feedService);
 
 app.get('/api/me/auth-identities', async (req, res, next) => {
   try {
@@ -436,6 +474,7 @@ app.get('/api/me/auth-identities', async (req, res, next) => {
 });
 
 app.use('/api/me/auth-identities', createRateLimiter({windowMs: 15 * 60 * 1000, max: 30}));
+registerLineWebLinkRoutes(app, lineWebLogin);
 app.post('/api/me/auth-identities/line', async (req, res, next) => {
   try {
     if (isProduction && !req.secure) return res.status(426).json({error: 'secure_transport_required'});
@@ -449,6 +488,18 @@ app.post('/api/me/auth-identities/line', async (req, res, next) => {
       const status = ['invalid_social_token', 'reauthentication_required'].includes(error.code)
         ? 403 : (error.status ?? 400);
       return res.status(status).json({error: error.code});
+    }
+    next(error);
+  }
+});
+
+app.delete('/api/me/auth-identities/line', async (req, res, next) => {
+  try {
+    if (isProduction && !req.secure) return res.status(426).json({error: 'secure_transport_required'});
+    res.json(await unlinkLineIdentity(pool, {userId: req.userId, password: req.body.password, verifyPassword}));
+  } catch (error) {
+    if (['account_suspended', 'email_login_required', 'reauthentication_required'].includes(error.code)) {
+      return res.status(error.status).json({error: error.code});
     }
     next(error);
   }
@@ -652,7 +703,7 @@ app.get('/api/works', async (req, res, next) => {
     const [rows] = await pool.execute(
       `SELECT id, name
          FROM works
-        WHERE ? = '' OR name LIKE ?
+        WHERE ${visibleRow('works','work')} AND (? = '' OR name LIKE ? OR EXISTS(SELECT 1 FROM work_aliases wa WHERE wa.work_id=works.id AND wa.normalized_alias LIKE ?))
         ORDER BY
           CASE WHEN name = ? THEN 0
                WHEN name LIKE ? THEN 1
@@ -660,7 +711,7 @@ app.get('/api/works', async (req, res, next) => {
           END,
           name ASC
         LIMIT 20`,
-      [query, like, query, `${query}%`],
+      [query, like, `%${normalizeWorkName(query)}%`, query, `${query}%`],
     );
     res.json(rows);
   } catch (error) {
@@ -675,10 +726,13 @@ app.post('/api/works', async (req, res, next) => {
       res.status(400).json({ error: 'work_name_required' });
       return;
     }
-    await pool.execute('INSERT IGNORE INTO works (name) VALUES (?)', [name]);
-    const [rows] = await pool.execute('SELECT id, name FROM works WHERE name = ?', [
+    const [[alias]]=await pool.execute(`SELECT w.id,w.name FROM work_aliases wa JOIN works w ON w.id=wa.work_id WHERE wa.normalized_alias=? AND ${visibleRow('w','work')}`,[normalizeWorkName(name)]);
+    if(alias)return res.status(200).json(alias);
+    await pool.execute('INSERT IGNORE INTO works (name,is_test_work) VALUES (?,?)', [name,currentAudience().fixtureActor]);
+    const [rows] = await pool.execute(`SELECT id, name FROM works WHERE name = ? AND ${visibleRow('works','work')}`, [
       name,
     ]);
+    if (!rows[0]) return res.status(409).json({error:'work_unavailable'});
     res.status(201).json(rows[0]);
   } catch (error) {
     next(error);
@@ -688,7 +742,7 @@ app.post('/api/works', async (req, res, next) => {
 app.get('/api/events', async (req, res, next) => {
   try {
     const [rows] = await pool.execute(
-      eventListQuery,
+      eventListQuery(),
       Array(16).fill(req.userId),
     );
     res.json(rows);
@@ -699,6 +753,7 @@ app.get('/api/events', async (req, res, next) => {
 
 app.use('/api/admin', requireAdmin);
 registerReportAdminRoutes(app, pool);
+registerFeedAdminRoutes(app,feedService);
 
 app.get('/api/admin/stats', async (_req, res, next) => {
   try {
@@ -1247,12 +1302,12 @@ app.get('/api/circles', async (req, res, next) => {
               circles.invite_code AS inviteCode,
               circles.invite_url AS inviteUrl,
               circles.owner_user_id AS ownerUserId,
-              COUNT(circle_members.user_id) AS memberCount,
+              (SELECT COUNT(*) FROM circle_members count_members JOIN users count_users ON count_users.id=count_members.user_id WHERE count_members.circle_id=circles.id AND ${visibleRow('count_users')}) AS memberCount,
               CASE WHEN circles.owner_user_id = ? THEN TRUE ELSE FALSE END AS isOwner
          FROM circles
          INNER JOIN circle_members
            ON circle_members.circle_id = circles.id
-        WHERE circles.id IN (
+        WHERE ${visibleRow('circles','circle')} AND circles.id IN (
           SELECT my_circles.circle_id
             FROM circle_members AS my_circles
            WHERE my_circles.user_id = ?
@@ -1288,7 +1343,7 @@ app.get('/api/circles', async (req, res, next) => {
           LEFT JOIN user_blocks AS member_blocks
             ON member_blocks.blocker_user_id = users.id
            AND member_blocks.blocked_user_id = ?
-          WHERE circle_members.circle_id IN (${placeholders})
+          WHERE ${visibleRow('users')} AND circle_members.circle_id IN (${placeholders})
             AND (
               users.id = ?
               OR circles.owner_user_id = ?
@@ -1330,9 +1385,9 @@ app.post('/api/circles', async (req, res, next) => {
 
     await connection.beginTransaction();
     const [result] = await connection.execute(
-      `INSERT INTO circles (owner_user_id, name, description, invite_code, invite_url)
-       VALUES (?, ?, ?, ?, ?)`,
-      [req.userId, normalizedName, String(description ?? '').trim() || null, inviteCode, inviteUrl],
+      `INSERT INTO circles (owner_user_id, name, description, invite_code, invite_url,is_test_circle)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [req.userId, normalizedName, String(description ?? '').trim() || null, inviteCode, inviteUrl,currentAudience().fixtureActor],
     );
     await connection.execute(
       `INSERT INTO circle_members (circle_id, user_id)
@@ -1380,7 +1435,7 @@ app.post('/api/circles/join', async (req, res, next) => {
     const { invite } = req.body;
     const inviteCode = extractInviteCode(invite);
     const [circles] = await pool.execute(
-      `SELECT id FROM circles WHERE invite_code = ?`,
+      `SELECT id FROM circles WHERE invite_code = ? AND ${visibleRow('circles','circle')}`,
       [inviteCode],
     );
     const circle = circles[0];
@@ -1481,7 +1536,7 @@ app.get('/api/following', async (req, res, next) => {
          LEFT JOIN user_blocks AS their_blocks
            ON their_blocks.blocker_user_id = users.id
           AND their_blocks.blocked_user_id = ?
-        WHERE follows.follower_user_id = ?
+        WHERE ${visibleRow('users')} AND follows.follower_user_id = ?
           AND users.account_status = 'active'
           AND my_blocks.blocked_user_id IS NULL
           AND their_blocks.blocker_user_id IS NULL
@@ -1505,7 +1560,7 @@ app.get('/api/me/bookings', async (req, res, next) => {
          FROM event_bookings b INNER JOIN users u ON u.id = b.user_id
          INNER JOIN events e ON e.id = b.event_id
          LEFT JOIN works w ON w.id = b.work_id
-        WHERE b.user_id = ? AND e.status = 'approved' ORDER BY e.start_date, b.day_index`, [req.userId]);
+        WHERE b.user_id = ? AND e.status = 'approved' AND ${visibleRow('e','event')} ORDER BY e.start_date, b.day_index`, [req.userId]);
     res.json(rows);
   } catch (error) { next(error); }
 });
@@ -1524,7 +1579,7 @@ app.get('/api/me/booking-followers', async (req, res, next) => {
          INNER JOIN events
            ON events.id = event_bookings.event_id
           AND events.status = 'approved'
-        WHERE event_bookings.user_id = ?
+        WHERE event_bookings.user_id = ? AND ${visibleRow('events','event')}
         ORDER BY events.start_date ASC,
                  event_bookings.day_index ASC`,
       [req.userId],
@@ -1557,7 +1612,7 @@ app.get('/api/me/booking-followers', async (req, res, next) => {
          LEFT JOIN user_blocks AS follower_blocks
            ON follower_blocks.blocker_user_id = users.id
           AND follower_blocks.blocked_user_id = owner.id
-        WHERE event_bookings.id IN (${placeholders})
+        WHERE ${visibleRow('users')} AND event_bookings.id IN (${placeholders})
           AND owner_blocks.blocked_user_id IS NULL
           AND follower_blocks.blocker_user_id IS NULL
           AND (
@@ -1656,6 +1711,7 @@ app.post('/api/events/:eventId/bookings', async (req, res, next) => {
       presenceStatus,
       message,
     } = req.body;
+    if(req.body.shareToFeed!==undefined&&typeof req.body.shareToFeed!=='boolean')return res.status(400).json({error:'invalid_feed_post'});
     const normalizedRole = String(role ?? '').trim();
     if (!['coser', 'photographer', 'manager', 'self'].includes(normalizedRole)) {
       res.status(400).json({ error: 'invalid_booking_role' });
@@ -1687,7 +1743,8 @@ app.post('/api/events/:eventId/bookings', async (req, res, next) => {
       res.status(409).json({ error: 'event_ended' });
       return;
     }
-    await pool.execute(
+    await inTransaction(pool,async connection=>{
+    await connection.execute(
       `INSERT INTO event_bookings (
          event_id, user_id, day_index, role, work_id, character_name, outfit_image_url,
          interaction_tags, available_time, presence_status, message
@@ -1715,8 +1772,12 @@ app.post('/api/events/:eventId/bookings', async (req, res, next) => {
         message ?? null,
       ]
     );
+    if(req.body.shareToFeed===true){await feedService.create(req.userId,{kind:'booking',eventId:req.params.eventId,dayIndex:normalizedDayIndex,body:req.body.feedBody??'',visibility:req.body.feedVisibility??'public',circleId:req.body.feedCircleId??null,preserveExisting:true},connection);}
+    else if(req.body.shareToFeed===false){await connection.execute('UPDATE social_posts SET deleted_at=UTC_TIMESTAMP() WHERE author_id=? AND event_id=? AND day_index=? AND deleted_at IS NULL',[req.userId,req.params.eventId,normalizedDayIndex]);}
+    });
     res.status(204).end();
   } catch (error) {
+    if(error.status)return res.status(error.status).json({error:error.code});
     next(error);
   }
 });
@@ -1793,7 +1854,7 @@ app.get('/api/events/:eventId/participants', async (req, res, next) => {
           AND their_blocks.blocked_user_id = ?
          LEFT JOIN works
            ON works.id = event_bookings.work_id
-        WHERE event_bookings.event_id = ?
+        WHERE ${visibleRow('users')} AND event_bookings.event_id = ?
           AND users.account_status = 'active'
           AND (
             users.id = ?
@@ -1955,7 +2016,7 @@ app.get('/api/blocked-users', async (req, res, next) => {
          FROM user_blocks
          INNER JOIN users
            ON users.id = user_blocks.blocked_user_id
-        WHERE user_blocks.blocker_user_id = ?
+        WHERE ${visibleRow('users')} AND user_blocks.blocker_user_id = ?
         ORDER BY user_blocks.created_at DESC`,
       [req.userId],
     );
@@ -1968,7 +2029,7 @@ app.get('/api/blocked-users', async (req, res, next) => {
 app.get('/api/events/:eventId/locations', async (req, res, next) => {
   try {
     const [rows] = await pool.execute(
-      sharedLocationsQuery,
+      sharedLocationsQuery(),
       [
         req.userId,
         req.userId,
@@ -2094,7 +2155,7 @@ app.get('/api/events/:eventId/meetups', async (req, res, next) => {
          INNER JOIN circle_members
            ON circle_members.circle_id = event_meeting_points.circle_id
           AND circle_members.user_id = ?
-        WHERE event_meeting_points.event_id = ?
+        WHERE ${visibleRow('users')} AND event_meeting_points.event_id = ?
           AND DATE(CONVERT_TZ(event_meeting_points.meet_at, '+00:00', '+08:00')) = DATE(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+08:00'))
           AND NOT EXISTS (
             SELECT 1 FROM user_blocks b
@@ -2256,7 +2317,7 @@ app.get('/api/events/:eventId/recognitions', async (req, res, next) => {
          LEFT JOIN user_blocks AS target_blocks
            ON target_blocks.blocker_user_id = event_recognition_requests.target_user_id
           AND target_blocks.blocked_user_id = event_recognition_requests.requester_user_id
-        WHERE event_recognition_requests.event_id = ?
+        WHERE ${visibleRow('requester')} AND ${visibleRow('target')} AND event_recognition_requests.event_id = ?
           AND event_recognition_requests.day_index = (
             SELECT DATEDIFF(DATE(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+08:00')), start_date) + 1
             FROM events WHERE id = ?
@@ -2368,6 +2429,7 @@ app.use((error, _req, res, _next) => {
     'authentication_required', 'admin_required', 'user_not_found'].includes(error.code)) {
     return res.status(error.status ?? 400).json({error: error.code});
   }
+  if (error.code === 'resource_not_found') return res.status(404).json({error:'resource_not_found'});
   if (error.code === 'event_sync_busy') return res.status(409).json({error: 'event_sync_busy'});
   if (error?.message === 'cors_origin_not_allowed') {
     res.status(403).json({ error: 'cors_origin_not_allowed' });
@@ -2383,16 +2445,20 @@ if (!isProduction) {
 }
 await ensureCollaborationTables();
 await ensureAuthIdentities(pool);
+if (appleAuth.enabled) { for (const sql of appleAuthTables) await pool.execute(sql); }
 await pool.execute(emailActionTableSql);
 await ensureFriendships(pool);
 for (const table of ['account_uploads', 'account_upload_cleanup', 'account_legacy_upload_review', 'user_legal_consents',
-  'content_reports', 'content_report_reviews']) {
+  'content_reports', 'content_report_reviews', 'line_web_logins', 'social_posts', 'social_reports', 'work_aliases']) {
   await pool.query(`SELECT 1 FROM ${table} LIMIT 0`);
 }
 async function maintainAccountSafety() {
   await accountDeletionService.cleanupUploads();
   await purgeExpiredReportEvidence(pool);
+  await pool.execute("UPDATE social_reports SET evidence_json=NULL,details='' WHERE evidence_expires_at<=UTC_TIMESTAMP() AND evidence_json IS NOT NULL");
+  await pool.execute('DELETE FROM line_web_logins WHERE expires_at<=UTC_TIMESTAMP()');
 }
+if (process.env.BACKGROUND_JOBS_ENABLED !== 'false') {
 await maintainAccountSafety();
 let maintainingAccountSafety = false;
 setInterval(async () => {
@@ -2404,8 +2470,9 @@ setInterval(async () => {
 }, 10 * 60 * 1000).unref();
 await eventSyncService.initialize();
 if (eventScraperEnabled) scheduleDailyEventImport();
+}
 
-app.listen(port, () => {
+app.listen(port, process.env.LISTEN_HOST ?? (isProduction ? '127.0.0.1' : '0.0.0.0'), () => {
   console.log(`CosCircle API listening on ${port}`);
 });
 
@@ -2679,20 +2746,6 @@ function createPublicCode() {
 }
 
 async function fetchSocialProfile(provider, accessToken) {
-  if (provider === 'facebook') {
-    const url = new URL('https://graph.facebook.com/me');
-    url.searchParams.set('fields', 'id,name,email,picture.type(large)');
-    url.searchParams.set('access_token', accessToken);
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('invalid_social_token');
-    const data = await response.json();
-    return {
-      id: data.id?.toString() ?? '',
-      email: data.email?.toString() || null,
-      nickname: data.name?.toString() || 'Facebook 使用者',
-      avatarUrl: data.picture?.data?.url?.toString() || '',
-    };
-  }
   if (provider === 'line') {
     return fetchLineProfile(accessToken);
   }
@@ -2790,6 +2843,7 @@ function normalizeDateTimeForSql(value) {
 }
 
 function bearerToken(req) {
+  if (req.authSessionDigest !== undefined) return req.authSessionDigest;
   const header = String(req.headers.authorization ?? '');
   if (!header.toLowerCase().startsWith('bearer ')) return '';
   return header.slice(7).trim();
@@ -2799,9 +2853,10 @@ async function resolveUserId(req) {
   const token = bearerToken(req);
   if (!token) return null;
   const [rows] = await pool.execute(
-    "SELECT id FROM users WHERE session_token = ? AND account_status = 'active' LIMIT 1",
+    "SELECT id,is_admin,is_test_account,can_view_test_data FROM users WHERE session_token = ? AND session_expires_at > UTC_TIMESTAMP() AND account_status = 'active' AND (is_test_account=FALSE OR can_view_test_data=TRUE OR is_admin=TRUE) LIMIT 1",
     [token],
   );
+  setAudience(rows[0]);
   return rows[0]?.id ?? null;
 }
 
@@ -2884,7 +2939,7 @@ async function notifyRecognitionRequest({
     const [tokenRows] = await pool.execute(
       `SELECT t.token
          FROM device_push_tokens t INNER JOIN users u ON u.id = t.user_id
-        WHERE t.user_id = ? AND u.session_token IS NOT NULL AND u.account_status = 'active'`,
+        WHERE t.user_id = ? AND u.session_token IS NOT NULL AND u.session_expires_at>UTC_TIMESTAMP() AND u.account_status = 'active'`,
       [targetUserId],
     );
     const tokens = tokenRows.map((row) => row.token);
@@ -3016,7 +3071,7 @@ async function fetchUserProfileByPublicCode(publicCode, viewerUserId = null) {
        LEFT JOIN follows
          ON follows.follower_user_id = ?
         AND follows.followed_user_id = users.id
-      WHERE users.public_code = ?
+      WHERE ${visibleRow('users')} AND users.public_code = ?
         AND users.account_status = 'active'
       LIMIT 1`,
     [viewerUserId ?? 0, publicCode],
@@ -3051,7 +3106,7 @@ async function fetchUserPitWorks(userId) {
        FROM user_pit_works
        INNER JOIN works
          ON works.id = user_pit_works.work_id
-      WHERE user_pit_works.user_id = ?
+      WHERE user_pit_works.user_id = ? AND ${visibleRow('works','work')}
       ORDER BY user_pit_works.depth ASC, works.name ASC`,
     [userId],
   );

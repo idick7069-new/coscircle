@@ -1,4 +1,5 @@
-export const sharedLocationsQuery = `SELECT shared_locations.user_id AS userId,
+import {visibleRow} from './release-security.js';
+export function sharedLocationsQuery() { return `SELECT shared_locations.user_id AS userId,
               users.public_code AS publicCode,
               users.nickname,
               users.avatar_url AS avatarUrl,
@@ -57,7 +58,7 @@ export const sharedLocationsQuery = `SELECT shared_locations.user_id AS userId,
               AND my_members.user_id = ?
          ) AS circle_members ON circle_members.user_id = shared_locations.user_id
         WHERE shared_locations.event_id = ?
-          AND users.account_status = 'active'
+          AND users.account_status = 'active' AND ${visibleRow('users')}
           AND (
             shared_locations.expires_at IS NULL
             OR shared_locations.expires_at > CURRENT_TIMESTAMP
@@ -83,7 +84,7 @@ export const sharedLocationsQuery = `SELECT shared_locations.user_id AS userId,
               )
             )
           )
-        ORDER BY shared_locations.shared_at DESC`;
+        ORDER BY shared_locations.shared_at DESC`; }
 
 export const updateLocationCoordinatesQuery = `UPDATE shared_locations SET latitude=?, longitude=?, shared_at=CURRENT_TIMESTAMP
   WHERE event_id=? AND user_id=? AND day_index=?

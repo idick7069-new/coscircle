@@ -11,7 +11,7 @@ privacy, Android release safety, backend security, and repeatable validation.
 - Android signing keystore in `android/key.properties`.
 - Google Maps Android API key passed with `-PGOOGLE_MAPS_API_KEY=...`.
 - Browser origins allowed to call the API in `CORS_ORIGINS`.
-- Firebase project `coscircle`, Android app `com.coscircle.coscircle`, and
+- Firebase project `coscircle`, Android app `com.hikakineame.coscircle`, and
   backend Firebase Admin credentials.
 
 Do not use the development LAN API, sample MySQL password, or a debug APK for
@@ -178,3 +178,11 @@ Manual smoke checklist:
 - Deploy backend and database changes before distributing the Android build.
 - If privacy/location behavior fails, disable public distribution, restore the
   database backup if needed, and redeploy the previous backend image.
+
+## 2026-11-24：1.0.1 (6) 安全更新
+
+正式 GCP API、Web 與管理頁已部署並驗證，備份與隔離清單見 [部署紀錄](release-security-2026-11-24.md)。Android AAB 與 iOS IPA 已建立並驗證；Android 已安裝啟動。TestFlight 因 Xcode 帳號授權過期未上傳，Google Play 因瀏覽器選檔工具逾時停留在已儲存草稿。完成重新驗證及檔案上傳前，不可視為商店已更新。
+
+## 動態牆與作品庫（2026-11-24）
+
+新版本需先備份 DB，套用 `migrate_social_feed.sql`、`migrate_work_aliases.sql`，再部署後端與配套 Web。使用 `install-social-feed-on-vm.sh` 執行候選／正式 QA 並保留原 release。作品匯入僅新增／重用，不合併舊 ID；`seed-work-catalog.mjs --apply` 必須有受限完整 DB 備份。詳細實作與驗證見 [動態牆規格](../features/social-feed.md)。

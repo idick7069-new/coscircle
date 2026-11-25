@@ -1,0 +1,82 @@
+CREATE TABLE IF NOT EXISTS social_posts (
+ id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+ author_id BIGINT UNSIGNED NOT NULL,
+ kind ENUM('booking','general') NOT NULL,
+ body TEXT NOT NULL,
+ visibility ENUM('public','friends','circle') NOT NULL DEFAULT 'public',
+ circle_id BIGINT UNSIGNED NULL,
+ event_id BIGINT UNSIGNED NULL,
+ day_index INT UNSIGNED NULL,
+ work_id BIGINT UNSIGNED NULL,
+ comments_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+ deleted_at DATETIME NULL,
+ created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ UNIQUE KEY uq_social_booking(author_id,event_id,day_index),
+ KEY idx_social_feed(deleted_at,id),
+ FOREIGN KEY(author_id) REFERENCES users(id) ON DELETE CASCADE,
+ FOREIGN KEY(circle_id) REFERENCES circles(id) ON DELETE CASCADE,
+ FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE,
+ FOREIGN KEY(work_id) REFERENCES works(id) ON DELETE SET NULL
+);
+CREATE TABLE IF NOT EXISTS social_post_media (
+ post_id BIGINT UNSIGNED NOT NULL,
+ url VARCHAR(255) NOT NULL,
+ ordinal INT UNSIGNED NOT NULL,
+ PRIMARY KEY(post_id,ordinal),
+ KEY idx_social_media_url(url),
+ FOREIGN KEY(post_id) REFERENCES social_posts(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS social_comments (
+ id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+ post_id BIGINT UNSIGNED NOT NULL,
+ author_id BIGINT UNSIGNED NOT NULL,
+ parent_id BIGINT UNSIGNED NULL,
+ body TEXT NOT NULL,
+ deleted_at DATETIME NULL,
+ created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ KEY idx_social_comments(post_id,id),
+ FOREIGN KEY(post_id) REFERENCES social_posts(id) ON DELETE CASCADE,
+ FOREIGN KEY(author_id) REFERENCES users(id) ON DELETE CASCADE,
+ FOREIGN KEY(parent_id) REFERENCES social_comments(id) ON DELETE SET NULL
+);
+CREATE TABLE IF NOT EXISTS social_likes (
+ post_id BIGINT UNSIGNED NOT NULL,
+ user_id BIGINT UNSIGNED NOT NULL,
+ created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ PRIMARY KEY(post_id,user_id),
+ FOREIGN KEY(post_id) REFERENCES social_posts(id) ON DELETE CASCADE,
+ FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS social_notifications (
+ id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+ recipient_id BIGINT UNSIGNED NOT NULL,
+ post_id BIGINT UNSIGNED NOT NULL,
+ kind ENUM('like','comment','reply') NOT NULL,
+ is_read BOOLEAN NOT NULL DEFAULT FALSE,
+ updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ UNIQUE KEY uq_social_notification(recipient_id,post_id,kind),
+ FOREIGN KEY(recipient_id) REFERENCES users(id) ON DELETE CASCADE,
+ FOREIGN KEY(post_id) REFERENCES social_posts(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS social_reports (
+ id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+ reporter_id BIGINT UNSIGNED NULL,
+ post_id BIGINT UNSIGNED NOT NULL,
+ comment_id BIGINT UNSIGNED NULL,
+ target_author_id BIGINT UNSIGNED NULL,
+ reason VARCHAR(40) NOT NULL,
+ details VARCHAR(1000) NOT NULL DEFAULT '',
+ evidence_json JSON NULL,
+ evidence_expires_at DATETIME NOT NULL,
+ status ENUM('pending','resolved','dismissed') NOT NULL DEFAULT 'pending',
+ reviewed_by BIGINT UNSIGNED NULL,
+ reviewed_at DATETIME NULL,
+ created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ KEY idx_social_reports(status,id),
+ FOREIGN KEY(reporter_id) REFERENCES users(id) ON DELETE SET NULL,
+ FOREIGN KEY(post_id) REFERENCES social_posts(id) ON DELETE CASCADE,
+ FOREIGN KEY(comment_id) REFERENCES social_comments(id) ON DELETE SET NULL,
+ FOREIGN KEY(target_author_id) REFERENCES users(id) ON DELETE SET NULL,
+ FOREIGN KEY(reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+);

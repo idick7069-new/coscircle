@@ -34,6 +34,7 @@ function fixture(t) {
       (6,810,'shallow'),(6,900,'shallow'),(6,910,'deep');
     INSERT INTO user_blocks VALUES (1,3),(4,1);`);
   const calls = [];
+  db.exec("ALTER TABLE users ADD COLUMN is_test_account INTEGER DEFAULT 0; ALTER TABLE works ADD COLUMN is_test_work INTEGER DEFAULT 0;");
   const pool = {execute: async (sql, params) => {
     calls.push({sql, params});
     return [db.prepare(sql).all(...params)];

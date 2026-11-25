@@ -3,7 +3,6 @@ import '../../../shared/widgets/mimi_mascot.dart';
 import '../../../core/config/app_environment.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/api/api_client.dart';
@@ -66,25 +65,17 @@ class _LegalAcceptanceGateState extends ConsumerState<LegalAcceptanceGate>
   Future<void> _bootstrap() async {
     final operation = ++_operation;
     try {
-      final preferences = await SharedPreferences.getInstance();
-      if (!mounted || operation != _operation) return;
       if (_api.sessionVersion != _initialVersion) {
         throw StateError('Session changed before restoration');
       }
-      final expectedToken = preferences.getString(AuthRepository.tokenKey);
-      final token = await _api.restoreAuthToken();
-      if (!mounted || operation != _operation) return;
-      // Initial restoration may advance the version once; a login must not rebind this gate.
-      if (token == null ||
-          token.isEmpty ||
-          token != expectedToken ||
-          (_api.sessionVersion != _initialVersion &&
-              _api.sessionVersion != _initialVersion + 1)) {
-        throw StateError('Session changed during restoration');
+      final session = await _api.restoreSession();
+      if (!mounted || operation != _operation) {
+        session.cancel();
+        return;
       }
+      session.checkActive();
       _sessionVersion = _api.sessionVersion;
-      _session = _api.captureSession();
-      _session!.checkActive();
+      _session = session;
       await _load();
     } catch (error) {
       _failed(operation, error);
@@ -262,7 +253,10 @@ class _LegalAcceptanceGateState extends ConsumerState<LegalAcceptanceGate>
           return const Scaffold(
             body: SafeArea(
               child: Center(
-                child: MimiLoading(scene: MimiScene.reading, label: '正在確認同意狀態…'),
+                child: MimiLoading(
+                  scene: MimiScene.reading,
+                  label: '正在確認同意狀態…',
+                ),
               ),
             ),
           );

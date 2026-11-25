@@ -13,7 +13,9 @@ Future<void> main() async {
   await initializeDateFormatting('zh_TW');
   try {
     await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
+      options: !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+          ? null // Apple SDK reads the bundled GoogleService-Info.plist.
+          : DefaultFirebaseOptions.currentPlatform,
     );
   } catch (error) {
     if (kDebugMode) {

@@ -12,6 +12,10 @@ class EventBooking {
     this.availableTime = '',
     this.presenceStatus = 'open',
     this.message = '',
+    this.shareToFeed,
+    this.feedVisibility = 'public',
+    this.feedCircleId,
+    this.feedBody = '',
   });
 
   final String eventId;
@@ -24,4 +28,8 @@ class EventBooking {
   final String availableTime;
   final String presenceStatus;
   final String message;
+  final bool? shareToFeed;
+  final String feedVisibility;
+  final String? feedCircleId;
+  final String feedBody;
 }

@@ -1,3 +1,4 @@
+import '../../feed/presentation/feed_reports_page.dart';
 import 'package:flutter/material.dart';
 import '../../../core/config/app_environment.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -84,6 +85,13 @@ class AdminDashboardPage extends ConsumerWidget {
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: '動態檢舉',
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const FeedReportsPage())),
+            icon: const Icon(Icons.forum_outlined),
+          ),
           if (accountSafetyEnabled)
             IconButton(
               tooltip: '檢舉審核',

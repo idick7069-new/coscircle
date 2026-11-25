@@ -22,6 +22,7 @@ function fixture() {
     CREATE TABLE follows(follower_user_id INTEGER,followed_user_id INTEGER);
     INSERT INTO events(id,name,start_date,end_date,status) VALUES(10,'CCF','2026-10-09','2026-10-11','approved');
     INSERT INTO event_bookings VALUES(10,2,2);`);
+  db.exec("ALTER TABLE users ADD COLUMN is_test_account INTEGER DEFAULT 0; ALTER TABLE events ADD COLUMN is_test_event INTEGER DEFAULT 0;");
   const calls = [];
   const connection = {
     async beginTransaction() { db.exec('BEGIN'); },
@@ -143,7 +144,7 @@ test('removing friendship leaves follows intact; blocks hide even existing relat
 test('event friend days are accepted-only, D2-specific and respect blocks and circle privacy', async () => {
   const {db,pool} = fixture();
   try {
-    const sql = eventListQuery.replaceAll("GROUP_CONCAT(day_index ORDER BY day_index SEPARATOR ',')", 'GROUP_CONCAT(day_index)')
+    const sql = eventListQuery().replaceAll("GROUP_CONCAT(day_index ORDER BY day_index SEPARATOR ',')", 'GROUP_CONCAT(day_index)')
       .replace(/GROUP_CONCAT\(DISTINCT ([\w.]+) ORDER BY [\w.]+\)/g, 'GROUP_CONCAT(DISTINCT $1)');
     const read = () => db.prepare(sql).get(...Array(16).fill(1));
     await requestFriend(pool,1,2,invite);

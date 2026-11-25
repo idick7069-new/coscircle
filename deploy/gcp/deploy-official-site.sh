@@ -10,7 +10,9 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/site/official"
 cp -R "$root/web/official/." "$work/site/official/"
-cp "$root/web/official/index.html" "$root/web/official/android-testing.html" "$work/site/"
+for file in index.html android-testing.html privacy.html terms.html child-safety.html delete-account.html delete-account.js legal.css; do
+  cp "$root/web/official/$file" "$work/site/$file"
+done
 archive="coscircle-official-${release_id}.tar.gz"
 COPYFILE_DISABLE=1 tar -C "$work/site" -czf "$work/$archive" .
 gcloud compute scp "$work/$archive" "$vm:/tmp/$archive" --zone "$zone" --project "$GCP_PROJECT" --account "$GCP_ACCOUNT"

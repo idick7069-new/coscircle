@@ -6,6 +6,7 @@ import 'package:coscircle/core/services/push_notification_service.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -75,6 +76,10 @@ class _Settings implements NotificationSettings {
 
 class _Messaging implements FirebaseMessaging {
   String? token = 'device-token';
+  String? apnsToken = 'apns-token';
+  int tokenReads = 0;
+  @override
+  Future<String?> getAPNSToken() async => apnsToken;
   final refresh = StreamController<String>.broadcast(sync: true);
 
   @override
@@ -87,7 +92,11 @@ class _Messaging implements FirebaseMessaging {
   Future<String?> getToken({
     String? vapidKey,
     String? serviceWorkerScriptPath,
-  }) async => token;
+  }) async {
+    tokenReads++;
+    return token;
+  }
+
   @override
   Future<void> deleteToken() async {}
 
@@ -460,4 +469,81 @@ void main() {
       }
     },
   );
+  testWidgets(
+    'iOS waits for APNs before reading FCM and can register after APNs is ready',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final api = _RegistrationApi()..setAuthToken('ios-account');
+      final messaging = _Messaging()..apnsToken = null;
+      final push = PushNotificationService.forTesting(
+        apiClient: api,
+        messaging: messaging,
+      );
+      try {
+        await _finishPhase(
+          tester,
+          'wait for APNs',
+          push.initializeForAuthenticatedUser(),
+        );
+        expect(messaging.tokenReads, 0);
+        expect(api.registrations, 0);
+        expect(push.activeNotifications.value, false);
+        messaging.apnsToken = 'ready-apns-token';
+        await _finishPhase(
+          tester,
+          'APNs ready',
+          push.initializeForAuthenticatedUser(),
+        );
+        expect(messaging.tokenReads, 1);
+        expect(api.registrations, 1);
+        expect(push.activeNotifications.value, true);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+        await _finishPhase(tester, 'iOS cleanup', push.dispose());
+        await _finishPhase(
+          tester,
+          'iOS refresh cleanup',
+          messaging.refresh.close(),
+        );
+      }
+    },
+  );
+
+  testWidgets('iOS can turn off notifications while APNs is unavailable', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final api = _RegistrationApi()..setAuthToken('ios-account');
+    final messaging = _Messaging()..apnsToken = null;
+    final push = PushNotificationService.forTesting(
+      apiClient: api,
+      messaging: messaging,
+    );
+    try {
+      await _finishPhase(
+        tester,
+        'disable before APNs',
+        push.setNotificationsEnabled(false),
+      );
+      expect(messaging.tokenReads, 0);
+      expect(api.registrations, 0);
+      expect(push.activeNotifications.value, false);
+      expect(
+        (await SharedPreferences.getInstance()).getBool(
+          'recognition_notifications_enabled',
+        ),
+        false,
+      );
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+      await _finishPhase(tester, 'iOS disable cleanup', push.dispose());
+      await _finishPhase(
+        tester,
+        'iOS disable refresh cleanup',
+        messaging.refresh.close(),
+      );
+    }
+  });
 }

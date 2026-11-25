@@ -18,7 +18,7 @@ export const legacyIdentityBackfillSql = `INSERT IGNORE INTO user_auth_identitie
   SELECT id, provider, provider_user_id, CASE WHEN provider='email' THEN password_hash ELSE NULL END
   FROM users`;
 
-export const authIdentityUserQuery = `SELECT users.id, identities.password_hash AS passwordHash,
+export const authIdentityUserQuery = `SELECT users.id, users.is_admin, users.is_test_account, users.can_view_test_data, identities.password_hash AS passwordHash,
   users.account_status AS accountStatus FROM users
   INNER JOIN user_auth_identities AS identities ON identities.user_id=users.id
   WHERE identities.provider=? AND identities.provider_user_id=? LIMIT 1`;
@@ -57,4 +57,25 @@ export async function linkLineIdentity(pool, {userId, lineUserId, password, veri
     if (error.code === 'ER_DUP_ENTRY') fail('line_identity_already_linked', 409);
     throw error;
   }
+}
+
+export async function unlinkLineIdentity(pool, {userId, password, verifyPassword}) {
+  return inTransaction(pool, async (db) => {
+    const [[user]] = await db.execute(
+      'SELECT id, provider, account_status AS accountStatus FROM users WHERE id=? FOR UPDATE', [userId]);
+    if (!user || user.accountStatus !== 'active') fail('account_suspended', 403);
+    const [[email]] = await db.execute(`SELECT provider_user_id AS email, password_hash AS passwordHash
+      FROM user_auth_identities WHERE user_id=? AND provider='email'`, [userId]);
+    if (!email?.email || !email.passwordHash) fail('email_login_required', 409);
+    if (typeof password !== 'string' || !password || password.length > 1024 ||
+      !await verifyPassword(password, email.passwordHash)) fail('reauthentication_required', 403);
+    // Keep startup's legacy identity backfill from restoring the removed LINE.
+    if (user.provider === 'line') {
+      await db.execute(`UPDATE users SET provider='email', provider_user_id=?, password_hash=?
+        WHERE id=?`, [email.email, email.passwordHash, userId]);
+    }
+    await db.execute("DELETE FROM user_auth_identities WHERE user_id=? AND provider='line'", [userId]);
+    await db.execute("DELETE FROM line_web_logins WHERE link_user_id=? AND purpose='link'", [userId]);
+    return {unlinked: true};
+  });
 }

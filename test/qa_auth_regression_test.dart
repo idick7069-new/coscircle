@@ -1,3 +1,4 @@
+import 'package:coscircle/core/services/token_store.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -210,10 +211,7 @@ void main() {
     await rejected;
     await client.get('/new');
     expect(adapter.requests.last.headers['Authorization'], 'Bearer B');
-    expect(
-      (await SharedPreferences.getInstance()).getString('auth_token'),
-      'B',
-    );
+    expect(await TokenStore().read(), 'B');
     expect(sessionExpired.value, isFalse);
   });
 
@@ -239,10 +237,7 @@ void main() {
       await rejected;
       expect(sessionB.isActive, isTrue);
       expect(adapter.requests, hasLength(1));
-      expect(
-        (await SharedPreferences.getInstance()).getString('auth_token'),
-        'B',
-      );
+      expect(await TokenStore().read(), 'B');
       sessionB.cancel();
     },
   );
@@ -265,10 +260,7 @@ void main() {
         await client.persistAuthToken(replacement);
         client.release.complete();
         await rejected;
-        expect(
-          (await SharedPreferences.getInstance()).getString('auth_token'),
-          replacement,
-        );
+        expect(await TokenStore().read(), replacement);
       },
     );
   }
@@ -278,10 +270,7 @@ void main() {
     final client = ApiClient(baseUrl: 'https://api.test', adapter: adapter);
     await client.persistAuthToken('A');
     await expectLater(client.get('/me'), throwsA(isA<DioException>()));
-    expect(
-      (await SharedPreferences.getInstance()).getString('auth_token'),
-      isNull,
-    );
+    expect(await TokenStore().read(), isNull);
     expect(sessionExpired.value, isTrue);
     expect(() => client.captureSession(), throwsStateError);
   });
@@ -295,10 +284,7 @@ void main() {
       final otherOperation = client.captureSession();
       expect(await AuthRepository(apiClient: client).restoreToken(), isNull);
       expect(otherOperation.isActive, isFalse);
-      expect(
-        (await SharedPreferences.getInstance()).getString('auth_token'),
-        isNull,
-      );
+      expect(await TokenStore().read(), isNull);
       expect(sessionExpired.value, isTrue);
     },
   );
@@ -310,10 +296,7 @@ void main() {
       client.persistAuthToken(null),
       client.persistAuthToken('B'),
     ]);
-    expect(
-      (await SharedPreferences.getInstance()).getString('auth_token'),
-      'B',
-    );
+    expect(await TokenStore().read(), 'B');
     final operation = client.captureSession();
     expect(operation.isActive, isTrue);
     operation.cancel();
@@ -338,10 +321,7 @@ void main() {
     await logout;
     await client.get('/me');
     expect(adapter.requests.last.headers['Authorization'], 'Bearer B');
-    expect(
-      (await SharedPreferences.getInstance()).getString('auth_token'),
-      'B',
-    );
+    expect(await TokenStore().read(), 'B');
   });
 
   test(
@@ -355,10 +335,7 @@ void main() {
       await saving;
       expect(restored, 'B');
       expect(adapter.requests.single.headers['Authorization'], 'Bearer B');
-      expect(
-        (await SharedPreferences.getInstance()).getString('auth_token'),
-        'B',
-      );
+      expect(await TokenStore().read(), 'B');
     },
   );
 
@@ -385,10 +362,7 @@ void main() {
     await rejected;
     await client.get('/me');
     expect(adapter.requests.last.headers['Authorization'], 'Bearer B');
-    expect(
-      (await SharedPreferences.getInstance()).getString('auth_token'),
-      'B',
-    );
+    expect(await TokenStore().read(), 'B');
   });
 
   test(
@@ -409,10 +383,7 @@ void main() {
       );
       await client.get('/me');
       expect(adapter.requests.last.headers['Authorization'], 'Bearer A');
-      expect(
-        (await SharedPreferences.getInstance()).getString('auth_token'),
-        'A',
-      );
+      expect(await TokenStore().read(), 'A');
       expect(sessionExpired.value, isFalse);
     },
   );

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/repositories/report_repository.dart';
+import '../../../core/utils/picked_image_provider.dart';
 import '../../../shared/widgets/cos_ui.dart';
 
 class ReportManagementPage extends ConsumerStatefulWidget {
@@ -365,8 +366,8 @@ class _EvidencePhoto extends StatelessWidget {
       child: Icon(Icons.broken_image_outlined, semanticLabel: '照片無法載入'),
     );
     if (!isSafeReportPhotoUrl(url)) return fallback;
-    return Image.network(
-      url,
+    return Image(
+      image: pickedImageProvider(url)!,
       width: double.infinity,
       height: double.infinity,
       fit: fit,

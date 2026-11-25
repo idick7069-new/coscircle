@@ -87,6 +87,12 @@ class ApiEventRepository implements EventRepository {
         'availableTime': booking.availableTime,
         'presenceStatus': booking.presenceStatus,
         'message': booking.message,
+        if (booking.shareToFeed != null) ...{
+          'shareToFeed': booking.shareToFeed,
+          'feedVisibility': booking.feedVisibility,
+          'feedCircleId': booking.feedCircleId,
+          'feedBody': booking.feedBody,
+        },
       },
     );
   }
@@ -151,6 +157,12 @@ class InMemoryEventRepository implements EventRepository {
               'availableTime': booking.availableTime,
               'presenceStatus': booking.presenceStatus,
               'message': booking.message,
+              if (booking.shareToFeed != null) ...{
+                'shareToFeed': booking.shareToFeed,
+                'feedVisibility': booking.feedVisibility,
+                'feedCircleId': booking.feedCircleId,
+                'feedBody': booking.feedBody,
+              },
             }),
           );
     }

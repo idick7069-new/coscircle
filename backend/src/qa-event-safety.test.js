@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import {visibleRow} from './release-security.js';
 import test from 'node:test';
 import {DatabaseSync} from 'node:sqlite';
 import {createEventNotifications} from './event-notifications.js';
@@ -11,7 +12,7 @@ function route(method, path, dependencies) {
   assert.notEqual(start, -1);
   const bodyStart = source.indexOf('async (req, res, next) => {', start);
   const end = source.indexOf('\n});', bodyStart);
-  return vm.runInNewContext(`(${source.slice(bodyStart, end + 2)})`, dependencies);
+  return vm.runInNewContext(`(${source.slice(bodyStart, end + 2)})`, {visibleRow, ...dependencies});
 }
 function response() {
   return {code: 200, body: null, status(code) {this.code = code; return this;},
@@ -48,6 +49,7 @@ function fixture() {
     INSERT INTO event_meeting_points VALUES (1,10,1,2,25.1,121.2,'meet','2026-10-27 04:00:00','2026-10-27 03:00:00'),
       (2,10,1,2,25.2,121.3,'old','2026-10-26 04:00:00','2026-10-26 03:00:00');
     INSERT INTO device_push_tokens VALUES (1,'owner-token'),(2,'peer-token'),(3,'outsider-token');`);
+  db.exec("ALTER TABLE users ADD COLUMN is_test_account INTEGER DEFAULT 0; ALTER TABLE users ADD COLUMN session_expires_at TEXT DEFAULT '2099-01-01';");
   return db;
 }
 
@@ -74,7 +76,8 @@ test('circle owner keeps removal target without gaining blocked profile data', (
   const db = fixture();
   try {
     const block = source.split("app.get('/api/circles',")[1].split("app.post('/api/circles',")[0];
-    const query = [...block.matchAll(/`(SELECT[\s\S]*?)`/g)][1][1].replace('${placeholders}', '?');
+    const raw = [...block.matchAll(/`(SELECT[\s\S]*?)`/g)][1][1];
+    const query = new Function('visibleRow','placeholders','return `'+raw+'`')(visibleRow, '?');
     for (const [blocker, blocked] of [[1, 2], [2, 1]]) {
       db.exec('DELETE FROM user_blocks');
       db.prepare('INSERT INTO user_blocks VALUES (?,?)').run(blocker, blocked);

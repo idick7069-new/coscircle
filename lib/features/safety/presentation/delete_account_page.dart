@@ -1,3 +1,4 @@
+import '../../../core/services/apple_login_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -84,11 +85,11 @@ class _DeleteAccountPageState extends ConsumerState<DeleteAccountPage> {
     super.dispose();
   }
 
-  Future<void> _delete({required bool useLine}) async {
+  Future<void> _delete({required bool useLine, bool useApple = false}) async {
     final session = _session;
     if (session == null) return;
     if (_busy || !_understood || _confirmation.text.trim() != 'DELETE') return;
-    if (!useLine && _password.text.isEmpty) {
+    if (!useLine && !useApple && _password.text.isEmpty) {
       setState(() => _error = '請輸入目前帳號的登入密碼');
       return;
     }
@@ -98,6 +99,18 @@ class _DeleteAccountPageState extends ConsumerState<DeleteAccountPage> {
     });
     try {
       session.checkActive();
+      Map<String, String>? appleCredential;
+      if (useApple) {
+        final challenge = await ref
+            .read(accountSafetyRepositoryProvider)
+            .appleDeletionChallenge(session);
+        if (!mounted || !session.isActive) return;
+        appleCredential = await ref
+            .read(appleLoginServiceProvider)
+            .authorize(challenge);
+        if (appleCredential == null) return;
+        session.checkActive();
+      }
       String? lineToken;
       if (useLine) {
         lineToken = await ref.read(lineLoginServiceProvider).authorize();
@@ -108,8 +121,9 @@ class _DeleteAccountPageState extends ConsumerState<DeleteAccountPage> {
           .read(accountSafetyRepositoryProvider)
           .deleteAccount(
             session: session,
-            password: useLine ? null : _password.text,
+            password: useLine || useApple ? null : _password.text,
             lineAccessToken: lineToken,
+            appleCredential: appleCredential,
           );
       if (!mounted || !session.isActive) return;
       try {
@@ -144,6 +158,9 @@ class _DeleteAccountPageState extends ConsumerState<DeleteAccountPage> {
         methods?.contains('line') == true &&
         ref.watch(lineLoginEnabledProvider) &&
         ref.watch(lineLoginServiceProvider).supported;
+    final appleAvailable =
+        methods?.contains('apple') == true &&
+        ref.watch(appleLoginServiceProvider).supported;
     final canDelete =
         !_busy &&
         _understood &&
@@ -233,7 +250,8 @@ class _DeleteAccountPageState extends ConsumerState<DeleteAccountPage> {
               ),
               if (methods != null &&
                   !methods.contains('email') &&
-                  !lineAvailable)
+                  !lineAvailable &&
+                  !appleAvailable)
                 TextButton.icon(
                   onPressed: () => launchUrl(
                     Uri.parse('https://coscircle.app/delete-account.html'),
@@ -261,6 +279,14 @@ class _DeleteAccountPageState extends ConsumerState<DeleteAccountPage> {
                     onPressed: canDelete ? () => _delete(useLine: false) : null,
                     icon: const Icon(Icons.delete_forever_outlined),
                     label: const Text('永久刪除帳號'),
+                  ),
+                if (appleAvailable)
+                  OutlinedButton.icon(
+                    onPressed: canDelete
+                        ? () => _delete(useLine: false, useApple: true)
+                        : null,
+                    icon: const Icon(Icons.apple),
+                    label: const Text('使用 Apple 驗證並刪除'),
                   ),
                 if (lineAvailable)
                   OutlinedButton.icon(

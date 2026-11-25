@@ -68,8 +68,6 @@ class AuthEmailStatus {
 class AuthRepository {
   AuthRepository({required ApiClient apiClient}) : _apiClient = apiClient;
 
-  static const tokenKey = 'auth_token';
-
   final ApiClient _apiClient;
 
   Future<String?> restoreToken() async {
@@ -153,6 +151,50 @@ class AuthRepository {
     return session;
   }
 
+  Future<Map<String, dynamic>> appleChallenge({
+    String purpose = 'login',
+  }) async {
+    final response = await _apiClient.post(
+      purpose == 'login'
+          ? '/auth/apple/challenge'
+          : '/me/auth-identities/apple/challenge',
+      data: purpose == 'login' ? {} : {'purpose': purpose},
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<AuthSession> appleLogin(Map<String, String> credential) async {
+    final version = _apiClient.sessionVersion;
+    final session = await _authenticate('/auth/apple', data: credential);
+    await _saveToken(session.token, version);
+    return session;
+  }
+
+  Future<void> linkApple(
+    Map<String, String> credential,
+    String password,
+  ) async {
+    await _apiClient.post(
+      '/me/auth-identities/apple',
+      data: {...credential, 'password': password},
+    );
+  }
+
+  Future<String> startLineWebLogin({required String returnPath}) async {
+    final response = await _apiClient.post(
+      '/auth/line/web/start',
+      data: {'returnPath': returnPath},
+    );
+    return (response.data as Map)['url'] as String;
+  }
+
+  Future<AuthSession> completeLineWebLogin() async {
+    final version = _apiClient.sessionVersion;
+    final session = await _authenticate('/auth/line/web/complete', data: {});
+    await _saveToken(session.token, version);
+    return session;
+  }
+
   Future<bool> logout({String? pushToken}) async {
     _apiClient.cancelSessionOperations();
     final version = _apiClient.sessionVersion;
@@ -209,6 +251,30 @@ class AuthRepository {
   Future<void> clearLocalSession() async {
     await _apiClient.persistAuthToken(null);
     sessionExpired.value = false;
+  }
+
+  Future<String> startLineWebLink() async {
+    final response = await _apiClient.post(
+      '/me/auth-identities/line/web/start',
+    );
+    return (response.data as Map)['url'] as String;
+  }
+
+  Future<void> completeLineWebLink({required String password}) async {
+    await _apiClient.post(
+      '/me/auth-identities/line/web/complete',
+      data: {'password': password},
+    );
+  }
+
+  Future<void> unlinkLine({required String password}) async {
+    if (!Uri.parse(_apiClient.baseUrl).isScheme('https')) {
+      throw Exception('解綁 LINE 需要 HTTPS 連線');
+    }
+    await _apiClient.deleteWithData(
+      '/me/auth-identities/line',
+      data: {'password': password},
+    );
   }
 
   Future<void> linkLine({

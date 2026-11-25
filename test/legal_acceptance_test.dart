@@ -1,3 +1,4 @@
+import 'package:coscircle/core/services/token_store.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -44,6 +45,19 @@ ResponseBody _legal(
   },
 );
 
+class _DelayedRestoreClient extends ApiClient {
+  _DelayedRestoreClient(_Adapter adapter)
+    : super(baseUrl: 'https://api.invalid/api', adapter: adapter);
+  final entered = Completer<void>();
+  final release = Completer<void>();
+  @override
+  Future<String?> restoreAuthToken() async {
+    if (!entered.isCompleted) entered.complete();
+    await release.future;
+    return super.restoreAuthToken();
+  }
+}
+
 class _Content extends StatefulWidget {
   const _Content(this.onMount);
   final VoidCallback onMount;
@@ -73,8 +87,13 @@ void main() {
     _Adapter adapter, {
     VoidCallback? mount,
     bool pending = false,
+    String? cachedToken,
+    ApiClient? client,
   }) async {
-    final api = ApiClient(baseUrl: 'https://api.invalid/api', adapter: adapter);
+    final api =
+        client ??
+        ApiClient(baseUrl: 'https://api.invalid/api', adapter: adapter);
+    if (cachedToken != null) api.setAuthToken(cachedToken);
     final router = GoRouter(
       routes: [
         GoRoute(
@@ -108,6 +127,71 @@ void main() {
     }
     return api;
   }
+
+  for (final cached in [false, true]) {
+    testWidgets(
+      'consent remains clickable after secure token migration with cached=$cached',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        await TokenStore().write('A');
+        final adapter = _Adapter((r) => _legal(r.method == 'POST'));
+        await open(tester, adapter, cachedToken: cached ? 'A' : null);
+        final checkbox = find.byType(CheckboxListTile);
+        expect(tester.widget<CheckboxListTile>(checkbox).onChanged, isNotNull);
+        await tester.ensureVisible(checkbox);
+        await tester.tap(checkbox);
+        await tester.pump();
+        await tester.ensureVisible(find.text('同意並繼續'));
+        await tester.tap(find.text('同意並繼續'));
+        await tester.pumpAndSettle();
+        expect(find.text('社群內容'), findsOneWidget);
+        expect(adapter.requests.map((r) => r.method), ['GET', 'POST']);
+        expect(
+          (await SharedPreferences.getInstance()).getString('auth_token'),
+          isNull,
+        );
+      },
+    );
+  }
+
+  testWidgets(
+    'cached browser cookie session enables consent without a legacy preference',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final adapter = _Adapter((r) => _legal(r.method == 'POST'));
+      await open(tester, adapter, cachedToken: 'cookie-session');
+      expect(
+        tester
+            .widget<CheckboxListTile>(find.byType(CheckboxListTile))
+            .onChanged,
+        isNotNull,
+      );
+    },
+  );
+
+  testWidgets(
+    'replacement login during secure restoration cannot rebind the consent gate',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await TokenStore().write('A');
+      final adapter = _Adapter((_) => _legal(true));
+      final api = _DelayedRestoreClient(adapter);
+      await open(tester, adapter, client: api, pending: true);
+      await api.entered.future;
+      await api.persistAuthToken('B');
+      api.release.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('社群內容'), findsNothing);
+      expect(
+        tester
+            .widget<CheckboxListTile>(find.byType(CheckboxListTile))
+            .onChanged,
+        isNull,
+      );
+      expect(adapter.requests, isEmpty);
+      expect(await TokenStore().read(), 'B');
+    },
+  );
 
   for (final accepted in [true, false]) {
     testWidgets(

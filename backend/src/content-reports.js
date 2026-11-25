@@ -346,7 +346,7 @@ export function registerReportRoutes(app, pool) {
 
 // Register after app.use('/api/admin', requireAdmin). Each operation rechecks privileges.
 export function registerReportAdminRoutes(app, pool) {
-  const sessionToken = req => /^Bearer ([^\s]+)$/i.exec(req.get('authorization') ?? '')?.[1];
+  const sessionToken = req => req.authSessionDigest ?? /^Bearer ([^\s]+)$/i.exec(req.get('authorization') ?? '')?.[1];
   app.get('/api/admin/reports', route(async (req, res) => {
     res.json(await listReports(pool, req.userId, req.query, sessionToken(req)));
   }));

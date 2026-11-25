@@ -1,3 +1,4 @@
+import '../../../core/repositories/feed_repository.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -165,6 +166,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     subtitle: '在場次裡，讓彼此更好認',
                     leading: const CosIconBubble(icon: Icons.badge_outlined),
                     actions: [
+                      IconButton(
+                        tooltip: '設定',
+                        onPressed: () => context.push('/settings'),
+                        icon: const Icon(Icons.settings_outlined),
+                      ),
                       IconButton.filledTonal(
                         tooltip: '分享個人資訊',
                         onPressed: () => _showShareSheet(context, profile),
@@ -433,6 +439,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         ),
       );
       if (!mounted) return;
+      ref.invalidate(feedRevisionProvider);
       ref.invalidate(sameWorkUsersProvider);
       ref.invalidate(partnerWorksProvider);
       ref.invalidate(partnerWorkUsersProvider);

@@ -1,3 +1,5 @@
+import 'package:go_router/go_router.dart';
+import 'package:coscircle/features/settings/presentation/login_methods_page.dart';
 import 'dart:async';
 
 import 'package:coscircle/core/api/api_client.dart';
@@ -111,7 +113,20 @@ void main() {
           if (push != null)
             pushNotificationServiceProvider.overrideWithValue(push),
         ],
-        child: const MaterialApp(home: Scaffold(body: SettingsPage())),
+        child: MaterialApp.router(
+          routerConfig: GoRouter(
+            routes: [
+              GoRoute(
+                path: '/',
+                builder: (_, _) => const Scaffold(body: SettingsPage()),
+              ),
+              GoRoute(
+                path: '/login-methods',
+                builder: (_, _) => const LoginMethodsPage(),
+              ),
+            ],
+          ),
+        ),
       ),
     );
     await tester.pumpAndSettle();

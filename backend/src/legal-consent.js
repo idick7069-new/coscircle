@@ -57,6 +57,7 @@ export function createLegalService(pool) {
 }
 
 function bearerToken(req) {
+  if (req.authSessionDigest !== undefined) return req.authSessionDigest;
   const header = req.get('authorization');
   if (typeof header !== 'string') return '';
   return /^Bearer ([^\s]+)$/i.exec(header)?.[1] ?? '';

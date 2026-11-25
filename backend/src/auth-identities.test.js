@@ -37,6 +37,7 @@ test('Email and bound LINE login resolve the same user; same subject from anothe
       INSERT INTO users VALUES (5,'active'),(7,'active');
       INSERT INTO user_auth_identities VALUES (5,'email','qa@example.invalid','hash'),
         (5,'line','LINE-5',NULL),(7,'facebook','LINE-5',NULL);`);
+    db.exec('ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0; ALTER TABLE users ADD COLUMN is_test_account INTEGER DEFAULT 0; ALTER TABLE users ADD COLUMN can_view_test_data INTEGER DEFAULT 0;');
     const query = db.prepare(authIdentityUserQuery);
     assert.equal(query.get('email', 'qa@example.invalid').id, 5);
     assert.equal(query.get('line', 'LINE-5').id, 5);

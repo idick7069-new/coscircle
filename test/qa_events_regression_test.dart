@@ -1,3 +1,4 @@
+import 'package:coscircle/core/utils/secure_media_image.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -197,7 +198,11 @@ void main() {
           native.pickedImageProvider('$origin$path'),
           web.pickedImageProvider('$origin$path'),
         ]) {
-          expect((image! as NetworkImage).url, 'https://coscircle.app$path');
+          expect(image, isA<SecureMediaImage>());
+          expect(
+            (image! as SecureMediaImage).url,
+            'https://coscircle.app$path',
+          );
         }
       }
     },

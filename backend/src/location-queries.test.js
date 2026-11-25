@@ -21,13 +21,14 @@ function fixture() {
     INSERT INTO shared_locations VALUES (10,2,2,25,121,'circle','2026-01-01 00:00:00','2099-01-01 00:00:00');
     INSERT INTO event_bookings(event_id,user_id,day_index) VALUES (10,1,2),(10,2,2);
     INSERT INTO circle_members VALUES (1,1),(1,2),(2,1),(2,2);`);
+  db.exec("ALTER TABLE users ADD COLUMN is_test_account INTEGER DEFAULT 0");
   return db;
 }
 
 test('two shared circles still produce exactly one location per peer/day', () => {
   const db = fixture();
   try {
-    const rows = db.prepare(sharedLocationsQuery).all(1,1,1,1,1,1,1,1,10,1);
+    const rows = db.prepare(sharedLocationsQuery()).all(1,1,1,1,1,1,1,1,10,1);
     assert.equal(rows.length, 1);
     assert.equal(rows[0].userId, 2);
     assert.equal(rows[0].dayIndex, 2);
@@ -37,9 +38,9 @@ test('two shared circles still produce exactly one location per peer/day', () =>
 test('suspended accounts no longer appear on the live map', () => {
   const db = fixture();
   try {
-    assert.equal(db.prepare(sharedLocationsQuery).all(1,1,1,1,1,1,1,1,10,1).length, 1);
+    assert.equal(db.prepare(sharedLocationsQuery()).all(1,1,1,1,1,1,1,1,10,1).length, 1);
     db.exec("UPDATE users SET account_status='suspended' WHERE id=2");
-    assert.equal(db.prepare(sharedLocationsQuery).all(1,1,1,1,1,1,1,1,10,1).length, 0);
+    assert.equal(db.prepare(sharedLocationsQuery()).all(1,1,1,1,1,1,1,1,10,1).length, 0);
   } finally { db.close(); }
 });
 
@@ -47,9 +48,9 @@ test('blocks and public-location same-day attendance remain enforced', () => {
   const db = fixture();
   try {
     db.exec("UPDATE shared_locations SET visibility='public'; DELETE FROM event_bookings WHERE user_id=1;");
-    assert.equal(db.prepare(sharedLocationsQuery).all(1,1,1,1,1,1,1,1,10,1).length, 0);
+    assert.equal(db.prepare(sharedLocationsQuery()).all(1,1,1,1,1,1,1,1,10,1).length, 0);
     db.exec('INSERT INTO event_bookings(event_id,user_id,day_index) VALUES(10,1,2); INSERT INTO user_blocks VALUES(2,1);');
-    assert.equal(db.prepare(sharedLocationsQuery).all(1,1,1,1,1,1,1,1,10,1).length, 0);
+    assert.equal(db.prepare(sharedLocationsQuery()).all(1,1,1,1,1,1,1,1,10,1).length, 0);
   } finally {db.close();}
 });
 
@@ -57,7 +58,7 @@ test('friend filter metadata never grants private circle or followed visibility'
   const db = fixture();
   try {
     db.exec("INSERT INTO friendships VALUES(1,2,'accepted'); DELETE FROM circle_members;");
-    const read = () => db.prepare(sharedLocationsQuery).all(1,1,1,1,1,1,1,1,10,1);
+    const read = () => db.prepare(sharedLocationsQuery()).all(1,1,1,1,1,1,1,1,10,1);
     assert.equal(read().length, 0);
     db.exec("UPDATE shared_locations SET visibility='followed'");
     assert.equal(read().length, 0);

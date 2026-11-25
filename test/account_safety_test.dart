@@ -1,3 +1,4 @@
+import 'package:coscircle/core/services/token_store.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -85,7 +86,10 @@ void main() {
 
   test('admin cleanup statistics remain compatible with an older response', () {
     expect(AdminStats.fromJson({}).uploadCleanup, 0);
-    final stats = AdminStats.fromJson({'uploadCleanup': 2, 'legacyUploadReview': '3'});
+    final stats = AdminStats.fromJson({
+      'uploadCleanup': 2,
+      'legacyUploadReview': '3',
+    });
     expect(stats.uploadCleanup, 2);
     expect(stats.legacyUploadReview, 3);
   });
@@ -136,10 +140,7 @@ void main() {
     pending.complete(_json({}, 204));
     await result;
     expect(await api.restoreAuthToken(), 'B');
-    expect(
-      (await SharedPreferences.getInstance()).getString('auth_token'),
-      'B',
-    );
+    expect(await TokenStore().read(), 'B');
   });
 
   Future<(ApiClient, _Adapter, _Push)> open(
@@ -236,10 +237,7 @@ void main() {
       expect(find.text('登入完成清理'), findsOneWidget);
       expect(push.disposals, 1);
       expect(await api.restoreAuthToken(), isNull);
-      expect(
-        (await SharedPreferences.getInstance()).getString('auth_token'),
-        isNull,
-      );
+      expect(await TokenStore().read(), isNull);
       expect(tester.takeException(), isNull);
     },
   );

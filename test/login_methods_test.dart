@@ -54,6 +54,7 @@ void main() {
         overrides: [
           authRepositoryProvider.overrideWithValue(repo),
           lineLoginEnabledProvider.overrideWithValue(true),
+          lineLoginAvailabilityProvider.overrideWith((ref) async => true),
           lineLoginServiceProvider.overrideWithValue(line),
         ],
         child: const MaterialApp(home: LoginMethodsPage()),

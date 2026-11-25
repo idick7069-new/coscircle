@@ -25,7 +25,6 @@ import '../../../shared/widgets/app_page.dart';
 import '../../../shared/widgets/cos_ui.dart';
 import '../../admin/presentation/admin_dashboard_page.dart';
 import 'theme_settings_page.dart';
-import 'login_methods_page.dart';
 import '../../safety/presentation/delete_account_page.dart';
 
 const _bugReportUrl = String.fromEnvironment('BUG_REPORT_URL');
@@ -222,9 +221,7 @@ class SettingsPage extends ConsumerWidget {
               subtitle: ref.watch(lineLoginEnabledProvider)
                   ? 'Email／密碼與 LINE'
                   : 'Email／密碼與信箱驗證',
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const LoginMethodsPage()),
-              ),
+              onTap: () => context.push('/login-methods'),
             ),
             if (accountSafetyEnabled)
               _SettingsAction(

@@ -1,6 +1,7 @@
+import {visibleRow} from './release-security.js';
 import {registerPartnerDiscoveryRoutes} from './partner-discovery.js';
 
-export const sameWorkUsersQuery = `
+export function sameWorkUsersQuery() { return `
   SELECT u.id AS userId, u.public_code AS publicCode, u.nickname,
          u.avatar_url AS avatarUrl, u.bio,
          COUNT(DISTINCT mine.work_id) AS commonWorkCount
@@ -9,7 +10,7 @@ export const sameWorkUsersQuery = `
       AND theirs.user_id <> mine.user_id
     INNER JOIN users u ON u.id = theirs.user_id
    WHERE mine.user_id = ?
-     AND u.account_status = 'active'
+     AND u.account_status = 'active' AND ${visibleRow('u')}
      AND u.public_code IS NOT NULL AND u.public_code <> ''
      AND NOT EXISTS (
        SELECT 1 FROM user_blocks b
@@ -18,7 +19,7 @@ export const sameWorkUsersQuery = `
      )
    GROUP BY u.id, u.public_code, u.nickname, u.avatar_url, u.bio
    ORDER BY commonWorkCount DESC, u.id ASC
-   LIMIT ? OFFSET ?`;
+   LIMIT ? OFFSET ?`; }
 
 export function sameWorksQuery(userCount) {
   return `SELECT DISTINCT theirs.user_id AS userId, w.id, w.name
@@ -44,7 +45,7 @@ function pageNumber(value, fallback, max, minimum) {
 export async function listSameWorkUsers(pool, viewerId, query = {}) {
   const limit = pageNumber(query.limit, 20, 50, 1);
   const offset = pageNumber(query.offset, 0, 100000, 0);
-  const [rows] = await pool.execute(sameWorkUsersQuery, [viewerId, viewerId, viewerId, limit + 1, offset]);
+  const [rows] = await pool.execute(sameWorkUsersQuery(), [viewerId, viewerId, viewerId, limit + 1, offset]);
   const selected = rows.slice(0, limit);
   const hasMore = rows.length > limit;
   if (!selected.length) return {items: [], hasMore: false, nextOffset: null};

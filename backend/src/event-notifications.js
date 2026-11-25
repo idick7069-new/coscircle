@@ -22,7 +22,7 @@ export function createEventNotifications(pool, {sendMeetupPush, sendRecognitionR
     return deliver(`SELECT DISTINCT t.token FROM device_push_tokens t
       INNER JOIN users u ON u.id=t.user_id
       INNER JOIN circle_members cm ON cm.user_id=t.user_id AND cm.circle_id=?
-      WHERE t.user_id<>? AND u.session_token IS NOT NULL AND u.account_status='active'
+      WHERE t.user_id<>? AND u.session_token IS NOT NULL AND u.session_expires_at>UTC_TIMESTAMP() AND u.account_status='active'
         AND NOT EXISTS (SELECT 1 FROM user_blocks b
           WHERE (b.blocker_user_id=? AND b.blocked_user_id=t.user_id)
              OR (b.blocker_user_id=t.user_id AND b.blocked_user_id=?))`,
@@ -37,7 +37,7 @@ export function createEventNotifications(pool, {sendMeetupPush, sendRecognitionR
       WHERE r.id=? AND r.target_user_id=? AND r.status=?`, [requestId, targetUserId, status]);
     if (!request) return {sent: 0, failed: 0};
     return deliver(`SELECT t.token FROM device_push_tokens t INNER JOIN users u ON u.id=t.user_id
-      WHERE t.user_id=? AND u.session_token IS NOT NULL AND u.account_status='active'
+      WHERE t.user_id=? AND u.session_token IS NOT NULL AND u.session_expires_at>UTC_TIMESTAMP() AND u.account_status='active'
         AND NOT EXISTS (SELECT 1 FROM user_blocks b
           WHERE (b.blocker_user_id=? AND b.blocked_user_id=?)
              OR (b.blocker_user_id=? AND b.blocked_user_id=?))`,

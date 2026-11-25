@@ -1,0 +1,720 @@
+{
+  "version": "2026-11-24",
+  "description": "人工整理之 Cosplay 常見作品候選；非人氣排名。不含第三方圖片或作品介紹。",
+  "references": [
+    "https://www.hoyoverse.com/zh-tw/about-us",
+    "https://www.crunchyroll.com/zh-tw/series/GG5H5XQX4/frieren-beyond-journeys-end"
+  ],
+  "works": [
+    {
+      "name": "原神",
+      "aliases": [
+        "Genshin Impact"
+      ]
+    },
+    {
+      "name": "崩壞：星穹鐵道",
+      "aliases": [
+        "崩壞星穹鐵道",
+        "Honkai Star Rail",
+        "星鐵"
+      ]
+    },
+    {
+      "name": "絕區零",
+      "aliases": [
+        "Zenless Zone Zero",
+        "ZZZ"
+      ]
+    },
+    {
+      "name": "崩壞3rd",
+      "aliases": [
+        "Honkai Impact 3rd",
+        "崩壞3"
+      ]
+    },
+    {
+      "name": "未定事件簿",
+      "aliases": [
+        "Tears of Themis"
+      ]
+    },
+    {
+      "name": "戀與深空",
+      "aliases": [
+        "Love and Deepspace"
+      ]
+    },
+    {
+      "name": "戀與製作人",
+      "aliases": [
+        "Mr Love"
+      ]
+    },
+    {
+      "name": "光與夜之戀",
+      "aliases": [
+        "Light and Night"
+      ]
+    },
+    {
+      "name": "明日方舟",
+      "aliases": [
+        "Arknights"
+      ]
+    },
+    {
+      "name": "碧藍航線",
+      "aliases": [
+        "Azur Lane"
+      ]
+    },
+    {
+      "name": "碧藍幻想",
+      "aliases": [
+        "Granblue Fantasy"
+      ]
+    },
+    {
+      "name": "蔚藍檔案",
+      "aliases": [
+        "Blue Archive",
+        "碧藍檔案"
+      ]
+    },
+    {
+      "name": "勝利女神：妮姬",
+      "aliases": [
+        "NIKKE",
+        "勝利女神妮姬"
+      ]
+    },
+    {
+      "name": "Fate/Grand Order",
+      "aliases": [
+        "FGO",
+        "命運冠位指定"
+      ]
+    },
+    {
+      "name": "Fate/stay night",
+      "aliases": [
+        "命運停駐之夜"
+      ]
+    },
+    {
+      "name": "東方Project",
+      "aliases": [
+        "東方Project系列",
+        "Touhou Project"
+      ]
+    },
+    {
+      "name": "VOCALOID",
+      "aliases": [
+        "初音未來",
+        "Hatsune Miku"
+      ]
+    },
+    {
+      "name": "世界計畫 繽紛舞台！feat. 初音未來",
+      "aliases": [
+        "Project SEKAI",
+        "世界計畫",
+        "プロセカ"
+      ]
+    },
+    {
+      "name": "偶像夢幻祭！！",
+      "aliases": [
+        "Ensemble Stars",
+        "偶像夢幻祭"
+      ]
+    },
+    {
+      "name": "IDOLiSH7",
+      "aliases": [
+        "偶像星願"
+      ]
+    },
+    {
+      "name": "刀劍亂舞",
+      "aliases": [
+        "Touken Ranbu"
+      ]
+    },
+    {
+      "name": "迪士尼 扭曲仙境",
+      "aliases": [
+        "Twisted Wonderland",
+        "扭曲仙境"
+      ]
+    },
+    {
+      "name": "催眠麥克風",
+      "aliases": [
+        "Hypnosis Mic"
+      ]
+    },
+    {
+      "name": "A3!",
+      "aliases": [
+        "A3滿開劇團",
+        "滿開劇團"
+      ]
+    },
+    {
+      "name": "夢王國與沉睡中的100位王子殿下",
+      "aliases": [
+        "夢100"
+      ]
+    },
+    {
+      "name": "食物語",
+      "aliases": [
+        "The Tale of Food"
+      ]
+    },
+    {
+      "name": "陰陽師",
+      "aliases": [
+        "Onmyoji"
+      ]
+    },
+    {
+      "name": "第五人格",
+      "aliases": [
+        "Identity V"
+      ]
+    },
+    {
+      "name": "劍俠情緣叁",
+      "aliases": [
+        "劍網3",
+        "劍俠情緣3"
+      ]
+    },
+    {
+      "name": "天涯明月刀",
+      "aliases": [
+        "Moonlight Blade"
+      ]
+    },
+    {
+      "name": "FINAL FANTASY XIV",
+      "aliases": [
+        "FF14",
+        "FFXIV",
+        "最終幻想14"
+      ]
+    },
+    {
+      "name": "NieR:Automata",
+      "aliases": [
+        "尼爾自動人形",
+        "尼爾：自動人形"
+      ]
+    },
+    {
+      "name": "女神異聞錄5",
+      "aliases": [
+        "Persona 5",
+        "P5"
+      ]
+    },
+    {
+      "name": "英雄聯盟",
+      "aliases": [
+        "League of Legends",
+        "LOL"
+      ]
+    },
+    {
+      "name": "特戰英豪",
+      "aliases": [
+        "VALORANT"
+      ]
+    },
+    {
+      "name": "鬥陣特攻2",
+      "aliases": [
+        "Overwatch 2",
+        "鬥陣特攻"
+      ]
+    },
+    {
+      "name": "魔獸世界",
+      "aliases": [
+        "World of Warcraft",
+        "WOW"
+      ]
+    },
+    {
+      "name": "暗黑破壞神IV",
+      "aliases": [
+        "Diablo IV",
+        "暗黑破壞神4"
+      ]
+    },
+    {
+      "name": "魔物獵人",
+      "aliases": [
+        "Monster Hunter"
+      ]
+    },
+    {
+      "name": "寶可夢",
+      "aliases": [
+        "Pokémon",
+        "Pokemon",
+        "神奇寶貝"
+      ]
+    },
+    {
+      "name": "薩爾達傳說",
+      "aliases": [
+        "The Legend of Zelda"
+      ]
+    },
+    {
+      "name": "超級瑪利歐",
+      "aliases": [
+        "Super Mario"
+      ]
+    },
+    {
+      "name": "斯普拉遁",
+      "aliases": [
+        "Splatoon",
+        "漆彈大作戰"
+      ]
+    },
+    {
+      "name": "集合啦！動物森友會",
+      "aliases": [
+        "Animal Crossing New Horizons",
+        "動物森友會"
+      ]
+    },
+    {
+      "name": "薑餅人王國",
+      "aliases": [
+        "Cookie Run Kingdom"
+      ]
+    },
+    {
+      "name": "鳴潮",
+      "aliases": [
+        "Wuthering Waves"
+      ]
+    },
+    {
+      "name": "重返未來：1999",
+      "aliases": [
+        "Reverse 1999"
+      ]
+    },
+    {
+      "name": "無期迷途",
+      "aliases": [
+        "Path to Nowhere"
+      ]
+    },
+    {
+      "name": "星露谷物語",
+      "aliases": [
+        "Stardew Valley"
+      ]
+    },
+    {
+      "name": "UNDERTALE",
+      "aliases": [
+        "傳說之下"
+      ]
+    },
+    {
+      "name": "鬼滅之刃",
+      "aliases": [
+        "Demon Slayer",
+        "Kimetsu no Yaiba"
+      ]
+    },
+    {
+      "name": "咒術迴戰",
+      "aliases": [
+        "Jujutsu Kaisen"
+      ]
+    },
+    {
+      "name": "進擊的巨人",
+      "aliases": [
+        "Attack on Titan"
+      ]
+    },
+    {
+      "name": "鏈鋸人",
+      "aliases": [
+        "Chainsaw Man",
+        "電鋸人"
+      ]
+    },
+    {
+      "name": "SPY×FAMILY 間諜家家酒",
+      "aliases": [
+        "SPY FAMILY",
+        "間諜家家酒"
+      ]
+    },
+    {
+      "name": "葬送的芙莉蓮",
+      "aliases": [
+        "Frieren Beyond Journeys End"
+      ]
+    },
+    {
+      "name": "藥師少女的獨語",
+      "aliases": [
+        "The Apothecary Diaries",
+        "藥屋少女的呢喃"
+      ]
+    },
+    {
+      "name": "【我推的孩子】",
+      "aliases": [
+        "Oshi no Ko",
+        "我推的孩子"
+      ]
+    },
+    {
+      "name": "孤獨搖滾！",
+      "aliases": [
+        "Bocchi the Rock",
+        "孤獨搖滾"
+      ]
+    },
+    {
+      "name": "BanG Dream!",
+      "aliases": [
+        "邦邦"
+      ]
+    },
+    {
+      "name": "BanG Dream! It's MyGO!!!!!",
+      "aliases": [
+        "MyGO",
+        "迷途之子"
+      ]
+    },
+    {
+      "name": "BanG Dream! Ave Mujica",
+      "aliases": [
+        "Ave Mujica"
+      ]
+    },
+    {
+      "name": "Love Live!",
+      "aliases": [
+        "LoveLive",
+        "Love Live系列"
+      ]
+    },
+    {
+      "name": "偶像大師",
+      "aliases": [
+        "THE IDOLM@STER",
+        "Idolmaster"
+      ]
+    },
+    {
+      "name": "K-ON！輕音部",
+      "aliases": [
+        "K-ON",
+        "輕音少女"
+      ]
+    },
+    {
+      "name": "莉可麗絲",
+      "aliases": [
+        "Lycoris Recoil"
+      ]
+    },
+    {
+      "name": "不時輕聲地以俄語遮羞的鄰座艾莉同學",
+      "aliases": [
+        "俄語艾莉"
+      ]
+    },
+    {
+      "name": "敗北女角太多了！",
+      "aliases": [
+        "敗北女角太多了"
+      ]
+    },
+    {
+      "name": "膽大黨",
+      "aliases": [
+        "Dandadan"
+      ]
+    },
+    {
+      "name": "怪獸8號",
+      "aliases": [
+        "Kaiju No 8"
+      ]
+    },
+    {
+      "name": "排球少年！！",
+      "aliases": [
+        "Haikyu",
+        "排球少年"
+      ]
+    },
+    {
+      "name": "BLUE LOCK 藍色監獄",
+      "aliases": [
+        "Blue Lock",
+        "藍色監獄"
+      ]
+    },
+    {
+      "name": "我的英雄學院",
+      "aliases": [
+        "My Hero Academia",
+        "我英"
+      ]
+    },
+    {
+      "name": "文豪Stray Dogs",
+      "aliases": [
+        "Bungo Stray Dogs",
+        "文豪野犬"
+      ]
+    },
+    {
+      "name": "黑執事",
+      "aliases": [
+        "Black Butler"
+      ]
+    },
+    {
+      "name": "地縛少年花子君",
+      "aliases": [
+        "Toilet Bound Hanako kun"
+      ]
+    },
+    {
+      "name": "WIND BREAKER—防風少年—",
+      "aliases": [
+        "WIND BREAKER",
+        "防風少年"
+      ]
+    },
+    {
+      "name": "東京復仇者",
+      "aliases": [
+        "Tokyo Revengers"
+      ]
+    },
+    {
+      "name": "航海王",
+      "aliases": [
+        "ONE PIECE",
+        "海賊王"
+      ]
+    },
+    {
+      "name": "火影忍者",
+      "aliases": [
+        "Naruto"
+      ]
+    },
+    {
+      "name": "BLEACH 死神",
+      "aliases": [
+        "BLEACH",
+        "死神"
+      ]
+    },
+    {
+      "name": "獵人",
+      "aliases": [
+        "HUNTER×HUNTER",
+        "Hunter x Hunter"
+      ]
+    },
+    {
+      "name": "鋼之鍊金術師",
+      "aliases": [
+        "Fullmetal Alchemist"
+      ]
+    },
+    {
+      "name": "銀魂",
+      "aliases": [
+        "Gintama"
+      ]
+    },
+    {
+      "name": "家庭教師HITMAN REBORN!",
+      "aliases": [
+        "家庭教師",
+        "REBORN"
+      ]
+    },
+    {
+      "name": "庫洛魔法使",
+      "aliases": [
+        "Cardcaptor Sakura",
+        "百變小櫻"
+      ]
+    },
+    {
+      "name": "美少女戰士",
+      "aliases": [
+        "Sailor Moon"
+      ]
+    },
+    {
+      "name": "魔法少女小圓",
+      "aliases": [
+        "Puella Magi Madoka Magica"
+      ]
+    },
+    {
+      "name": "新世紀福音戰士",
+      "aliases": [
+        "Neon Genesis Evangelion",
+        "EVA"
+      ]
+    },
+    {
+      "name": "機動戰士鋼彈 水星的魔女",
+      "aliases": [
+        "水星的魔女",
+        "Gundam Witch from Mercury"
+      ]
+    },
+    {
+      "name": "機動戰士鋼彈SEED",
+      "aliases": [
+        "Gundam SEED"
+      ]
+    },
+    {
+      "name": "Re:從零開始的異世界生活",
+      "aliases": [
+        "Re Zero",
+        "Re從零",
+        "re0"
+      ]
+    },
+    {
+      "name": "刀劍神域",
+      "aliases": [
+        "Sword Art Online",
+        "SAO"
+      ]
+    },
+    {
+      "name": "關於我轉生變成史萊姆這檔事",
+      "aliases": [
+        "轉生史萊姆"
+      ]
+    },
+    {
+      "name": "為美好的世界獻上祝福！",
+      "aliases": [
+        "KonoSuba",
+        "為美好的世界獻上祝福"
+      ]
+    },
+    {
+      "name": "OVERLORD",
+      "aliases": [
+        "不死者之王"
+      ]
+    },
+    {
+      "name": "NO GAME NO LIFE 遊戲人生",
+      "aliases": [
+        "遊戲人生"
+      ]
+    },
+    {
+      "name": "86—不存在的戰區—",
+      "aliases": [
+        "86不存在的戰區"
+      ]
+    },
+    {
+      "name": "夏目友人帳",
+      "aliases": [
+        "Natsumes Book of Friends"
+      ]
+    },
+    {
+      "name": "夏日重現",
+      "aliases": [
+        "Summer Time Rendering"
+      ]
+    },
+    {
+      "name": "無頭騎士異聞錄 DuRaRaRa!!",
+      "aliases": [
+        "Durarara",
+        "無頭騎士異聞錄"
+      ]
+    },
+    {
+      "name": "天官賜福",
+      "aliases": [
+        "Heaven Officials Blessing"
+      ]
+    },
+    {
+      "name": "魔道祖師",
+      "aliases": [
+        "Grandmaster of Demonic Cultivation"
+      ]
+    },
+    {
+      "name": "時光代理人",
+      "aliases": [
+        "Link Click"
+      ]
+    },
+    {
+      "name": "賽馬娘 Pretty Derby",
+      "aliases": [
+        "賽馬娘",
+        "Uma Musume"
+      ]
+    },
+    {
+      "name": "BEASTARS",
+      "aliases": [
+        "動物狂想曲"
+      ]
+    },
+    {
+      "name": "賽博龐克：邊緣行者",
+      "aliases": [
+        "Cyberpunk Edgerunners",
+        "電馭叛客邊緣行者"
+      ]
+    },
+    {
+      "name": "地獄旅館",
+      "aliases": [
+        "Hazbin Hotel"
+      ]
+    },
+    {
+      "name": "無職轉生",
+      "aliases": [
+        "Mushoku Tensei"
+      ]
+    }
+  ]
+}

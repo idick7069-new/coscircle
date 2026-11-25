@@ -1,3 +1,4 @@
+import {visibleRow} from './release-security.js';
 import fs from 'node:fs/promises';
 import { inTransaction } from './db-transaction.js';
 
@@ -34,7 +35,7 @@ export function validateFriendInvite(body) {
 
 async function lockPair(db, pair) {
   // Invitations, replies and blocks acquire the same user locks in ID order.
-  const [users] = await db.execute('SELECT id, account_status FROM users WHERE id IN (?, ?) ORDER BY id FOR UPDATE', pair);
+  const [users] = await db.execute(`SELECT id, account_status FROM users WHERE id IN (?, ?) AND ${visibleRow('users')} ORDER BY id FOR UPDATE`, pair);
   if (users.length !== 2 || users.some((user) => user.account_status !== 'active')) fail('user_unavailable', 404);
   const [blocks] = await db.execute(`SELECT 1 FROM user_blocks
     WHERE (blocker_user_id=? AND blocked_user_id=?) OR (blocker_user_id=? AND blocked_user_id=?) LIMIT 1`,
@@ -103,12 +104,13 @@ export async function listFriends(pool, viewerId) {
   const [rows] = await pool.execute(`SELECT f.id, u.id AS userId, u.public_code AS publicCode,
     u.nickname, u.avatar_url AS avatarUrl, f.requester_id AS requesterId,
     CASE WHEN f.status='accepted' THEN 'accepted' WHEN f.requester_id=? THEN 'pending' ELSE 'incoming' END AS status,
-    f.introduction, f.event_id AS eventId, f.day_index AS dayIndex, f.event_name AS eventName,
-    DATE_FORMAT(f.event_date, '%Y-%m-%d') AS eventDate,
+    f.introduction, CASE WHEN ${visibleRow('friend_event','event')} THEN f.event_id ELSE NULL END AS eventId, CASE WHEN ${visibleRow('friend_event','event')} THEN f.day_index ELSE NULL END AS dayIndex, CASE WHEN ${visibleRow('friend_event','event')} THEN f.event_name ELSE NULL END AS eventName,
+    CASE WHEN ${visibleRow('friend_event','event')} THEN DATE_FORMAT(f.event_date, '%Y-%m-%d') ELSE NULL END AS eventDate,
     DATE_FORMAT(f.created_at, '%Y-%m-%dT%H:%i:%s') AS createdAt,
     DATE_FORMAT(f.accepted_at, '%Y-%m-%dT%H:%i:%s') AS acceptedAt
     FROM friendships f INNER JOIN users u ON u.id=IF(f.requester_id=?, f.recipient_id, f.requester_id)
-    WHERE (f.requester_id=? OR f.recipient_id=?) AND u.account_status='active'
+    LEFT JOIN events friend_event ON friend_event.id=f.event_id
+    WHERE (f.requester_id=? OR f.recipient_id=?) AND u.account_status='active' AND ${visibleRow('u')}
       AND (f.status<>'ignored' OR f.requester_id=?)
       AND NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
         (b.blocker_user_id=? AND b.blocked_user_id=u.id) OR (b.blocker_user_id=u.id AND b.blocked_user_id=?))

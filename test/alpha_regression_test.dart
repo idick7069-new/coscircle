@@ -1,3 +1,4 @@
+import 'package:coscircle/core/services/token_store.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -212,6 +213,17 @@ Future<void> screenshot(WidgetTester tester, String name) async {
 }
 
 void main() {
+  testWidgets('back from activities opens the new feed home before exit confirmation',(tester)async{
+    await tester.pumpWidget(host(const HomeShellPage(initialIndex:1)));
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();await tester.pumpAndSettle();
+    expect(find.text('同坑動態'),findsOneWidget);
+    expect(find.text('離開 CosCircle？'),findsNothing);
+    await tester.binding.handlePopRoute();await tester.pumpAndSettle();
+    expect(find.text('離開 CosCircle？'),findsOneWidget);
+    await tester.tap(find.text('取消'));await tester.pumpAndSettle();
+  });
+
   for (final size in [const Size(320, 640), const Size(640, 320)]) {
     for (final scale in [1.0, 2.0]) {
       testWidgets('personal QR fits $size text=$scale', (tester) async {
@@ -366,7 +378,7 @@ void main() {
         await expectLater(auth.restoreToken(), throwsA(isA<DioException>()));
       }
       expect(
-        (await SharedPreferences.getInstance()).getString('auth_token'),
+        await TokenStore().read(),
         status == 401 ? isNull : 'synthetic-qa-token',
       );
     }
@@ -499,7 +511,7 @@ void main() {
   testWidgets('tab changes preserve unsaved profile text', (tester) async {
     await tester.pumpWidget(host(const HomeShellPage()));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('名片'));
+    await tester.tap(find.text('我的'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('編輯'));
     await tester.pumpAndSettle();
@@ -510,7 +522,7 @@ void main() {
     await tester.enterText(nickname, 'draft nickname');
     await tester.tap(find.text('活動').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('名片'));
+    await tester.tap(find.text('我的'));
     await tester.pumpAndSettle();
     expect(
       tester.widget<TextField>(nickname).controller!.text,

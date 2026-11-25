@@ -1,6 +1,10 @@
 import {requireLegalAcceptance} from './legal-consent.js';
 
 const contentMutations = [
+  ['POST', /^\/api\/feed$/],
+  ['PUT', /^\/api\/feed\/[^/]+(?:\/like)?$/],
+  ['POST', /^\/api\/feed\/[^/]+\/comments$/],
+  ['POST', /^\/api\/events\/[^/]+\/recognitions$/],
   ['PUT', /^\/api\/me$/],
   ['POST', /^\/api\/uploads\/image$/],
   ['POST', /^\/api\/works$/],

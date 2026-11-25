@@ -7,6 +7,9 @@ CREATE TABLE users (
   email VARCHAR(191) NULL,
   password_hash TEXT NULL,
   session_token VARCHAR(191) NULL,
+  session_expires_at DATETIME NULL,
+  is_test_account BOOLEAN NOT NULL DEFAULT FALSE,
+  can_view_test_data BOOLEAN NOT NULL DEFAULT FALSE,
   is_admin BOOLEAN NOT NULL DEFAULT FALSE,
   account_status ENUM('active','suspended') NOT NULL DEFAULT 'active',
   nickname VARCHAR(80) NOT NULL,
@@ -45,6 +48,7 @@ CREATE TABLE user_auth_identities (
 );
 
 CREATE TABLE works (
+  is_test_work BOOLEAN NOT NULL DEFAULT FALSE,
   id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   name VARCHAR(255) NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -65,6 +69,7 @@ CREATE TABLE user_pit_works (
 CREATE TABLE events (
   id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   source_key VARCHAR(191) UNIQUE NULL,
+  is_test_event BOOLEAN NOT NULL DEFAULT FALSE,
   source_type TINYINT UNSIGNED NOT NULL DEFAULT 1,
   source_name VARCHAR(80) NOT NULL DEFAULT '同人誌中心',
   source_url TEXT NULL,
@@ -147,6 +152,7 @@ CREATE TABLE user_blocks (
 );
 
 CREATE TABLE circles (
+  is_test_circle BOOLEAN NOT NULL DEFAULT FALSE,
   id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   owner_user_id BIGINT UNSIGNED NOT NULL,
   name VARCHAR(120) NOT NULL,
@@ -361,4 +367,124 @@ CREATE TABLE IF NOT EXISTS content_report_reviews (
   KEY idx_content_report_reviews_report (report_id, id),
   CONSTRAINT fk_content_report_reviews_report FOREIGN KEY (report_id) REFERENCES content_reports(id) ON DELETE CASCADE,
   CONSTRAINT fk_content_report_reviews_admin FOREIGN KEY (admin_user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS line_web_logins (
+  id CHAR(64) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
+  state_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  browser_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  verifier VARCHAR(128) CHARACTER SET ascii NULL,
+  nonce VARCHAR(128) CHARACTER SET ascii NULL,
+  return_path VARCHAR(1024) NOT NULL DEFAULT '/',
+  purpose ENUM('login','link') NOT NULL DEFAULT 'login',
+  link_user_id BIGINT UNSIGNED NULL,
+  link_session_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  phase ENUM('pending','exchanging','complete','failed') NOT NULL DEFAULT 'pending',
+  profile_json JSON NULL,
+  expires_at DATETIME NOT NULL,
+  KEY idx_line_web_expiry (expires_at)
+) ENGINE=InnoDB;
+
+-- Native iOS Sign in with Apple; encrypted refresh tokens, never raw credentials.
+CREATE TABLE IF NOT EXISTS apple_auth_challenges (
+    id CHAR(64) PRIMARY KEY, nonce CHAR(64) NOT NULL, purpose VARCHAR(16) NOT NULL,
+    user_id BIGINT UNSIGNED NULL, session_hash CHAR(64) NULL, expires_at DATETIME NOT NULL,
+    KEY idx_apple_challenge_expiry (expires_at),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS apple_auth_tokens (
+    user_id BIGINT UNSIGNED PRIMARY KEY, refresh_token TEXT NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS social_posts (
+ id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+ author_id BIGINT UNSIGNED NOT NULL,
+ kind ENUM('booking','general') NOT NULL,
+ body TEXT NOT NULL,
+ visibility ENUM('public','friends','circle') NOT NULL DEFAULT 'public',
+ circle_id BIGINT UNSIGNED NULL,
+ event_id BIGINT UNSIGNED NULL,
+ day_index INT UNSIGNED NULL,
+ work_id BIGINT UNSIGNED NULL,
+ comments_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+ deleted_at DATETIME NULL,
+ created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ UNIQUE KEY uq_social_booking(author_id,event_id,day_index),
+ KEY idx_social_feed(deleted_at,id),
+ FOREIGN KEY(author_id) REFERENCES users(id) ON DELETE CASCADE,
+ FOREIGN KEY(circle_id) REFERENCES circles(id) ON DELETE CASCADE,
+ FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE,
+ FOREIGN KEY(work_id) REFERENCES works(id) ON DELETE SET NULL
+);
+CREATE TABLE IF NOT EXISTS social_post_media (
+ post_id BIGINT UNSIGNED NOT NULL,
+ url VARCHAR(255) NOT NULL,
+ ordinal INT UNSIGNED NOT NULL,
+ PRIMARY KEY(post_id,ordinal),
+ KEY idx_social_media_url(url),
+ FOREIGN KEY(post_id) REFERENCES social_posts(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS social_comments (
+ id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+ post_id BIGINT UNSIGNED NOT NULL,
+ author_id BIGINT UNSIGNED NOT NULL,
+ parent_id BIGINT UNSIGNED NULL,
+ body TEXT NOT NULL,
+ deleted_at DATETIME NULL,
+ created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ KEY idx_social_comments(post_id,id),
+ FOREIGN KEY(post_id) REFERENCES social_posts(id) ON DELETE CASCADE,
+ FOREIGN KEY(author_id) REFERENCES users(id) ON DELETE CASCADE,
+ FOREIGN KEY(parent_id) REFERENCES social_comments(id) ON DELETE SET NULL
+);
+CREATE TABLE IF NOT EXISTS social_likes (
+ post_id BIGINT UNSIGNED NOT NULL,
+ user_id BIGINT UNSIGNED NOT NULL,
+ created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ PRIMARY KEY(post_id,user_id),
+ FOREIGN KEY(post_id) REFERENCES social_posts(id) ON DELETE CASCADE,
+ FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS social_notifications (
+ id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+ recipient_id BIGINT UNSIGNED NOT NULL,
+ post_id BIGINT UNSIGNED NOT NULL,
+ kind ENUM('like','comment','reply') NOT NULL,
+ is_read BOOLEAN NOT NULL DEFAULT FALSE,
+ updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ UNIQUE KEY uq_social_notification(recipient_id,post_id,kind),
+ FOREIGN KEY(recipient_id) REFERENCES users(id) ON DELETE CASCADE,
+ FOREIGN KEY(post_id) REFERENCES social_posts(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS social_reports (
+ id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+ reporter_id BIGINT UNSIGNED NULL,
+ post_id BIGINT UNSIGNED NOT NULL,
+ comment_id BIGINT UNSIGNED NULL,
+ target_author_id BIGINT UNSIGNED NULL,
+ reason VARCHAR(40) NOT NULL,
+ details VARCHAR(1000) NOT NULL DEFAULT '',
+ evidence_json JSON NULL,
+ evidence_expires_at DATETIME NOT NULL,
+ status ENUM('pending','resolved','dismissed') NOT NULL DEFAULT 'pending',
+ reviewed_by BIGINT UNSIGNED NULL,
+ reviewed_at DATETIME NULL,
+ created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ KEY idx_social_reports(status,id),
+ FOREIGN KEY(reporter_id) REFERENCES users(id) ON DELETE SET NULL,
+ FOREIGN KEY(post_id) REFERENCES social_posts(id) ON DELETE CASCADE,
+ FOREIGN KEY(comment_id) REFERENCES social_comments(id) ON DELETE SET NULL,
+ FOREIGN KEY(target_author_id) REFERENCES users(id) ON DELETE SET NULL,
+ FOREIGN KEY(reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS work_aliases (
+ normalized_alias VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin PRIMARY KEY,
+ alias_name VARCHAR(191) NOT NULL,
+ work_id BIGINT UNSIGNED NOT NULL,
+ KEY idx_work_alias_owner(work_id),
+ FOREIGN KEY(work_id) REFERENCES works(id) ON DELETE CASCADE
 );

@@ -1,4 +1,7 @@
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import '../../../core/services/apple_login_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -6,6 +9,7 @@ import '../../../core/repositories/auth_repository.dart';
 import '../../../core/repositories/profile_repository.dart';
 import '../../../core/services/auth_state.dart';
 import '../../../core/services/line_login_service.dart';
+import '../../../core/services/line_web_navigation.dart';
 import '../../../core/services/push_notification_service.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../shared/widgets/app_page.dart';
@@ -116,12 +120,22 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             onSubmit: _submit,
           ),
           const SizedBox(height: 16),
-          if (ref.watch(lineLoginEnabledProvider) &&
-              ref.watch(lineLoginServiceProvider).supported)
+          if (ref.watch(lineLoginAvailabilityProvider).asData?.value == true &&
+              (kIsWeb || ref.watch(lineLoginServiceProvider).supported))
             OutlinedButton.icon(
               onPressed: _loading ? null : _lineLogin,
               icon: const Icon(Icons.login),
               label: const Text('使用 LINE 登入'),
+            ),
+          if (ref.watch(appleLoginAvailabilityProvider).asData?.value == true)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: SignInWithAppleButton(
+                text: '使用 Apple 登入',
+                onPressed: () {
+                  if (!_loading) _appleLogin();
+                },
+              ),
             ),
           if (const bool.fromEnvironment('ENABLE_SOCIAL_TOKEN_LOGIN'))
             _SocialLoginPanel(
@@ -159,6 +173,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           _restoreFailed = false;
           _errorText = null;
         });
+      }
+      final lineResult = pendingLineWebResult();
+      if (lineResult != null) {
+        clearLineWebResult();
+        if (lineResult != 'complete') throw StateError('LINE 授權未完成，請重新登入');
+        final session = await ref
+            .read(authRepositoryProvider)
+            .completeLineWebLogin();
+        if (!mounted) return;
+        await _goAfterAuth(session);
+        navigating = true;
+        return;
       }
       final token = await ref.read(authRepositoryProvider).restoreToken();
       if (!mounted || token == null || token.isEmpty) return;
@@ -238,6 +264,31 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     await _socialLogin(provider, token.trim());
   }
 
+  Future<void> _appleLogin() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _errorText = null;
+    });
+    try {
+      final repository = ref.read(authRepositoryProvider);
+      final challenge = await repository.appleChallenge();
+      if (!mounted) return;
+      final credential = await ref
+          .read(appleLoginServiceProvider)
+          .authorize(challenge);
+      if (!mounted || credential == null) return;
+      final session = await repository.appleLogin(credential);
+      if (mounted) await _goAfterAuth(session);
+    } catch (error) {
+      if (mounted) {
+        setState(() => _errorText = 'Apple 登入失敗：${userFacingError(error)}');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   Future<void> _lineLogin() async {
     if (_loading) return;
     setState(() {
@@ -245,6 +296,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       _errorText = null;
     });
     try {
+      if (kIsWeb) {
+        final url = await ref
+            .read(authRepositoryProvider)
+            .startLineWebLogin(
+              returnPath: safeReturnPath(
+                GoRouterState.of(context).uri.queryParameters['next'],
+              ),
+            );
+        if (mounted) redirectToLine(url);
+        return;
+      }
       final token = await ref.read(lineLoginServiceProvider).authorize();
       if (!mounted || token == null) return;
       final session = await ref

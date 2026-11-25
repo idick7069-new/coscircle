@@ -1,0 +1,30 @@
+--- server-before.js
++++ server-after.js
+@@ -18,7 +18,7 @@
+ import { createEventSyncService } from './event-sync-service.js';
+ import { fetchLineProfile } from './line-auth.js';
+ import {createLineWebLogin, registerLineWebRoutes, registerLineWebLinkRoutes} from './line-web-login.js';
+-import { ensureAuthIdentities, linkLineIdentity, authIdentityUserQuery } from './auth-identities.js';
++import { ensureAuthIdentities, linkLineIdentity, unlinkLineIdentity, authIdentityUserQuery } from './auth-identities.js';
+ import { inTransaction } from './db-transaction.js';
+ import { ensureFriendships, registerFriendRoutes } from './friendships.js';
+ import { registerSameWorkRoutes } from './same-works.js';
+@@ -454,6 +454,18 @@
+       const status = ['invalid_social_token', 'reauthentication_required'].includes(error.code)
+         ? 403 : (error.status ?? 400);
+       return res.status(status).json({error: error.code});
++    }
++    next(error);
++  }
++});
++
++app.delete('/api/me/auth-identities/line', async (req, res, next) => {
++  try {
++    if (isProduction && !req.secure) return res.status(426).json({error: 'secure_transport_required'});
++    res.json(await unlinkLineIdentity(pool, {userId: req.userId, password: req.body.password, verifyPassword}));
++  } catch (error) {
++    if (['account_suspended', 'email_login_required', 'reauthentication_required'].includes(error.code)) {
++      return res.status(error.status).json({error: error.code});
+     }
+     next(error);
+   }

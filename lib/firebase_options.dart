@@ -26,10 +26,10 @@ class DefaultFirebaseOptions {
       case TargetPlatform.android:
         return android;
       case TargetPlatform.iOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for ios - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        if (const String.fromEnvironment('FIREBASE_IOS_APP_ID').isEmpty) {
+          throw UnsupportedError('Firebase iOS configuration is not set.');
+        }
+        return ios;
       case TargetPlatform.macOS:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for macos - '
@@ -52,9 +52,19 @@ class DefaultFirebaseOptions {
     }
   }
 
+  // Supplied by tools/ios/build_app_store.py from the matching Firebase iOS plist.
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: String.fromEnvironment('FIREBASE_IOS_API_KEY'),
+    appId: String.fromEnvironment('FIREBASE_IOS_APP_ID'),
+    messagingSenderId: String.fromEnvironment('FIREBASE_IOS_SENDER_ID'),
+    projectId: String.fromEnvironment('FIREBASE_IOS_PROJECT_ID'),
+    storageBucket: String.fromEnvironment('FIREBASE_IOS_STORAGE_BUCKET'),
+    iosBundleId: 'com.hikakineame.coscircle',
+  );
+
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyCVzT0By8tZ30oJhZs46pd_Boghl6SBseA',
-    appId: '1:659745646640:android:56c84f99794238de8965f5',
+    appId: '1:659745646640:android:52b306d98ca4f99b8965f5',
     messagingSenderId: '659745646640',
     projectId: 'coscircle',
     storageBucket: 'coscircle.firebasestorage.app',

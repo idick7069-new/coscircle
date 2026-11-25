@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/user_action.dart';
 
 import '../../../core/config/app_environment.dart';
@@ -325,9 +324,10 @@ class _PublicProfileContent extends ConsumerWidget {
   }
 
   Future<bool> _requireLogin(BuildContext context) async {
-    final token = (await SharedPreferences.getInstance()).getString(
-      'auth_token',
-    );
+    final token = await ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(apiClientProvider).restoreAuthToken();
     if (token != null && token.isNotEmpty) return true;
     if (context.mounted) {
       context.go(

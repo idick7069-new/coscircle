@@ -32,3 +32,11 @@ Runner/GeneratedPluginRegistrant.*
 !default.mode2v3
 !default.pbxuser
 !default.perspectivev3
+
+# Generated locally by the App Store build helper.
+Flutter/StoreSecrets.xcconfig
+
+# Firebase client configuration downloaded for local iOS builds.
+Runner/GoogleService-Info.plist
+
+Flutter/StoreSigning.xcconfig

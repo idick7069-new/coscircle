@@ -1,3 +1,6 @@
+import '../../../core/repositories/feed_repository.dart';
+import '../../../core/repositories/social_repository.dart';
+import '../../../core/models/circle.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -91,13 +94,23 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
   WorkTag? _selectedWork;
   int _dayIndex = 1;
   bool _submitting = false;
+  bool _shareToFeed = false,
+      _feedLoaded = false,
+      _feedTouched = false,
+      _feedRestricted = false;
+  String _feedVisibility = 'public';
+  String? _feedCircleId;
+  String _feedBody = '';
+  List<CircleGroup> _feedCircles = [];
+  Object? _feedError;
   bool _allowClose = false;
   bool _confirmingDiscard = false;
 
   bool get _hasChanges {
     final initial = widget.initialParticipant;
     final tags = initial?.interactionTags ?? const <String>[];
-    return _dayIndex != (initial?.dayIndex ?? widget.initialDayIndex) ||
+    return _feedTouched ||
+        _dayIndex != (initial?.dayIndex ?? widget.initialDayIndex) ||
         _role.name != (initial?.role ?? 'coser') ||
         _characterController.text != (initial?.characterName ?? '') ||
         _messageController.text != (initial?.message ?? '') ||
@@ -133,6 +146,7 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
         );
       }
     }
+    _loadFeedSettings();
     for (final controller in [
       _characterController,
       _availableTimeController,
@@ -142,6 +156,97 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
         if (mounted) setState(() {});
       });
     }
+  }
+
+  Future<void> _loadFeedSettings() async {
+    final day = _dayIndex;
+    try {
+      final shared = await ref
+          .read(feedRepositoryProvider)
+          .bookingShare(widget.event.id, _dayIndex);
+      final circles = await ref.read(socialRepositoryProvider).fetchCircles();
+      final me = await ref.read(profileRepositoryProvider).currentProfile();
+      if (!mounted || _dayIndex != day) return;
+      setState(() {
+        _shareToFeed = shared != null;
+        _feedVisibility = shared?['visibility']?.toString() ?? 'public';
+        _feedCircleId = shared?['circleId']?.toString();
+        _feedBody = shared?['body']?.toString() ?? '';
+        _feedRestricted = me?.bookingVisibility == 'circle';
+        if (_feedRestricted) _feedVisibility = 'circle';
+        _feedCircles = circles;
+        _feedLoaded = true;
+        _feedError = null;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _feedError = e);
+    }
+  }
+
+  Widget _feedSharing() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('同步分享到動態牆'),
+          subtitle: const Text('讓同好可以在你的預定下留言互動'),
+          value: _shareToFeed,
+          onChanged: !_feedLoaded
+              ? null
+              : (v) => setState(() {
+                  _shareToFeed = v;
+                  _feedTouched = true;
+                }),
+        ),
+        if (_feedError != null)
+          TextButton(
+            onPressed: _loadFeedSettings,
+            child: const Text('分享設定載入失敗，點此重試；仍可儲存預定'),
+          ),
+        if (_shareToFeed) ...[
+          DropdownButtonFormField<String>(
+            initialValue: _feedVisibility,
+            decoration: const InputDecoration(labelText: '動態可見範圍'),
+            items: [
+              if (!_feedRestricted) ...[
+                const DropdownMenuItem(value: 'public', child: Text('公開')),
+                const DropdownMenuItem(value: 'friends', child: Text('戳友限定')),
+              ],
+              const DropdownMenuItem(value: 'circle', child: Text('指定小圈圈')),
+            ],
+            onChanged: (v) {
+              if (v != null) {
+                setState(() {
+                  _feedVisibility = v;
+                  _feedTouched = true;
+                });
+              }
+            },
+          ),
+          if (_feedVisibility == 'circle')
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: DropdownButtonFormField<String>(
+                initialValue: _feedCircleId,
+                decoration: const InputDecoration(labelText: '選擇小圈圈'),
+                items: [
+                  for (final c in _feedCircles)
+                    DropdownMenuItem(value: c.id, child: Text(c.name)),
+                ],
+                onChanged: (v) => setState(() {
+                  _feedCircleId = v;
+                  _feedTouched = true;
+                }),
+              ),
+            ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Text('修改預定會同步更新動態卡片；取消出席後，討論會保留並標示已取消。'),
+          ),
+        ],
+      ],
+    );
   }
 
   @override
@@ -247,6 +352,8 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  _feedSharing(),
+                  const SizedBox(height: 16),
                   _BookingSection(
                     title: '日期與身份',
                     subtitle: '先決定這張名片代表哪一天、你在現場的角色',
@@ -275,7 +382,15 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
                                 selected: _dayIndex == index,
                                 enabled: false,
                                 icon: Icons.calendar_today_outlined,
-                                onTap: () => setState(() => _dayIndex = index),
+                                onTap: () {
+                                  setState(() {
+                                    _dayIndex = index;
+                                    _feedLoaded = false;
+                                    _feedTouched = false;
+                                    _shareToFeed = false;
+                                  });
+                                  _loadFeedSettings();
+                                },
                               ),
                           ],
                         ),
@@ -301,7 +416,8 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
                             onChanged: (work) =>
                                 setState(() => _selectedWork = work),
                           ),
-                          if (_selectedWork != null && _selectedWork!.id.isNotEmpty) ...[
+                          if (_selectedWork != null &&
+                              _selectedWork!.id.isNotEmpty) ...[
                             const SizedBox(height: 10),
                             SameWorkCoserNotice(
                               eventId: widget.event.id,
@@ -481,6 +597,15 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
             EventStatus.ended) {
       return;
     }
+    if (_shareToFeed &&
+        _feedTouched &&
+        _feedVisibility == 'circle' &&
+        _feedCircleId == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('請選擇分享的小圈圈')));
+      return;
+    }
     setState(() => _submitting = true);
     try {
       var outfitImageUrl = _outfitImagePath;
@@ -511,6 +636,10 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
               availableTime: _availableTimeController.text.trim(),
               presenceStatus: _presenceStatus,
               message: _messageController.text,
+              shareToFeed: _feedTouched ? _shareToFeed : null,
+              feedVisibility: _feedVisibility,
+              feedCircleId: _feedVisibility == 'circle' ? _feedCircleId : null,
+              feedBody: _feedBody,
             ),
           );
       await _refreshAfterAttendanceChanged(event.id);
@@ -591,6 +720,7 @@ class _BookingSheetState extends ConsumerState<BookingSheet> {
   }
 
   Future<void> _refreshAfterAttendanceChanged(String eventId) async {
+    ref.invalidate(feedRevisionProvider);
     ref.invalidate(eventParticipantsProvider(eventId));
     ref.invalidate(eventsProvider);
   }

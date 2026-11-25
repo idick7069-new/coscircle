@@ -7,13 +7,14 @@ import '../../../core/providers/friendship_providers.dart';
 import '../../current_event/presentation/current_event_page.dart';
 import '../../events/presentation/event_list_page.dart';
 import '../../profile/presentation/profile_page.dart';
-import '../../settings/presentation/settings_page.dart';
+import '../../feed/presentation/feed_page.dart';
 import '../../social/presentation/social_page.dart';
 import '../../../shared/widgets/cos_ui.dart';
 import '../../../shared/widgets/pixel_icon.dart';
 
 class HomeShellPage extends ConsumerStatefulWidget {
-  const HomeShellPage({super.key});
+  const HomeShellPage({super.key, this.initialIndex = 0});
+  final int initialIndex;
 
   @override
   ConsumerState<HomeShellPage> createState() => _HomeShellPageState();
@@ -21,13 +22,15 @@ class HomeShellPage extends ConsumerStatefulWidget {
 
 class _HomeShellPageState extends ConsumerState<HomeShellPage>
     with WidgetsBindingObserver {
-  int _index = 1;
-  final Set<int> _visited = {1};
+  int _index = 0;
+  final Set<int> _visited = {};
   bool _showingExitConfirm = false;
 
   @override
   void initState() {
     super.initState();
+    _index = widget.initialIndex;
+    _visited.add(_index);
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -46,9 +49,9 @@ class _HomeShellPageState extends ConsumerState<HomeShellPage>
 
   static const _destinations = [
     _HomeNavDestination(
-      icon: Icons.badge_outlined,
-      selectedIcon: Icons.badge,
-      label: '名片',
+      icon: Icons.dynamic_feed_outlined,
+      selectedIcon: Icons.dynamic_feed,
+      label: '動態',
     ),
     _HomeNavDestination(
       icon: Icons.event_note_outlined,
@@ -66,9 +69,9 @@ class _HomeShellPageState extends ConsumerState<HomeShellPage>
       label: '同好',
     ),
     _HomeNavDestination(
-      icon: Icons.tune_outlined,
-      selectedIcon: Icons.tune,
-      label: '設定',
+      icon: Icons.badge_outlined,
+      selectedIcon: Icons.badge,
+      label: '我的',
     ),
   ];
 
@@ -78,7 +81,7 @@ class _HomeShellPageState extends ConsumerState<HomeShellPage>
       selectedCurrentEventTargetProvider,
     );
     final pages = [
-      ProfilePage(isVisible: _index == 0),
+      FeedPage(isVisible: _index == 0),
       EventListPage(
         isVisible: _index == 1,
         onOpenCurrentEvent: (item) {
@@ -98,7 +101,7 @@ class _HomeShellPageState extends ConsumerState<HomeShellPage>
         onOpenEvents: () => setState(() => _index = 1),
       ),
       const SocialPage(),
-      const SettingsPage(),
+      ProfilePage(isVisible: _index == 4),
     ];
 
     final scheme = Theme.of(context).colorScheme;
@@ -168,8 +171,11 @@ class _HomeShellPageState extends ConsumerState<HomeShellPage>
   }
 
   Future<void> _handleBackPressed() async {
-    if (_index != 1) {
-      setState(() => _index = 1);
+    if (_index != 0) {
+      setState(() {
+        _visited.add(0);
+        _index = 0;
+      });
       return;
     }
     if (_showingExitConfirm) return;

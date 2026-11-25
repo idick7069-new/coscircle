@@ -1,6 +1,11 @@
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/material.dart';
+import '../api/api_client.dart';
+import '../../features/settings/presentation/settings_page.dart';
+import '../../features/feed/presentation/feed_page.dart';
 import '../services/auth_state.dart';
+import '../../features/settings/presentation/login_methods_page.dart';
 import '../config/app_environment.dart';
 import '../../features/social/presentation/join_circle_page.dart';
 
@@ -33,9 +38,9 @@ final appRouter = GoRouter(
         ].contains(state.uri.path) ||
         state.uri.path.startsWith('/profiles/');
     if (publicRoute) return null;
-    final token = (await SharedPreferences.getInstance()).getString(
-      'auth_token',
-    );
+    final token = await ProviderScope.containerOf(
+      context,
+    ).read(apiClientProvider).restoreAuthToken();
     if (sessionExpired.value || token == null || token.isEmpty) {
       return Uri(
         path: '/login',
@@ -46,10 +51,36 @@ final appRouter = GoRouter(
   },
   routes: [
     GoRoute(
+      path: '/feed/:id',
+      builder: (context, state) => LegalAcceptanceGate(
+        child: FeedDetailPage(postId: state.pathParameters['id']!),
+      ),
+    ),
+    GoRoute(
+      path: '/events/:id/feed',
+      builder: (context, state) => LegalAcceptanceGate(
+        child: Scaffold(
+          appBar: AppBar(title: const Text('活動動態')),
+          body: FeedPage(eventId: state.pathParameters['id']!),
+        ),
+      ),
+    ),
+    GoRoute(
+      path: '/settings',
+      builder: (context, state) => Scaffold(
+        appBar: AppBar(title: const Text('設定')),
+        body: const SettingsPage(),
+      ),
+    ),
+    GoRoute(
       path: '/join/:code',
       builder: (context, state) => LegalAcceptanceGate(
         child: JoinCirclePage(inviteCode: state.pathParameters['code']!),
       ),
+    ),
+    GoRoute(
+      path: '/login-methods',
+      builder: (context, state) => const LoginMethodsPage(),
     ),
     GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
     GoRoute(
@@ -99,8 +130,11 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/',
-      builder: (context, state) =>
-          const LegalAcceptanceGate(child: HomeShellPage()),
+      builder: (context, state) => LegalAcceptanceGate(
+        child: HomeShellPage(
+          initialIndex: state.uri.queryParameters['tab'] == 'events' ? 1 : 0,
+        ),
+      ),
     ),
     GoRoute(
       path: '/events/:id',
