@@ -32,6 +32,23 @@ disabled, malformed or unsafe configuration stops Doujin synchronization. No
 DataImpulse, direct Doujin request or local browser fallback remains in the active
 code. COSMOS and acosta continue using direct HTTP.
 
+## Per-source retries (2026-11-27)
+
+Daily retries retain each source's committed success report in `event_sync_jobs.sources_json`.
+Only failed or unfinished source keys are passed to the importer; a successful Doujin
+fetch is not repeated because acosta or COSMOS failed. The retained results survive
+service restarts. Same-day manual retries of a partial result use the same rule.
+A new daily job starts fresh, and the existing 30-minute interval / three-attempt
+limit remains in effect. A newly requested manual refresh after an entirely
+successful job can still fetch all sources (with the existing 60-second reuse guard).
+
+The acosta Taiwan listing currently explicitly states that Taipei and Kaohsiung
+have no scheduled dates. This is a successful zero-event result, not a network
+failure. Acceptance requires the official Taiwan list heading, both known venue
+links with the explicit no-schedule message, and no event links in the main content.
+An unexplained empty page, challenge page, partial empty listing or changed event
+URL structure still fails. A zero-event success never deletes existing events.
+
 ## Credits
 
 The official docs currently list JS + premium proxy at 25 credits per successful

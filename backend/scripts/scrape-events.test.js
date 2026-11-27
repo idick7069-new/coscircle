@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   acostaTaiwanEventUrlsFromHtml,
+  acostaTaiwanHasNoScheduledEvents,
+  scrapeAcostaTaiwanEvents,
   parseAcostaEventFromHtml,
   parseCosmosOenEventFromHtml,
   parseEventsFromHtml,
@@ -80,7 +82,43 @@ test('failed Doujin source preserves records while supplemental events import', 
 });
 
 test('all sources failing is visible rather than a successful empty sync', async () => {
-  await assert.rejects(() => collectEventSources({doujin: async () => {throw new Error('403');}, supplemental: async () => []}), /all_event_sources_unavailable/);
+  const blocked = async () => {throw new Error('403');};
+  await assert.rejects(() => collectEventSources({doujin: blocked, supplemental: blocked}), /all_event_sources_unavailable/);
+});
+
+const emptyAcostaListing = `<main><h1>acosta! 台湾のイベント一覧</h1>
+  <a href="https://acosta.jp/venue/taipei_sccp/">台北 現在予定されている日程はありません 過去の会場実績はこちら</a>
+  <a href="/venue/takao/">高雄 現在予定されている日程はありません 過去の会場実績はこちら</a></main>`;
+
+test('official Taiwan no-scheduled-events listing succeeds with zero events', async () => {
+  assert.equal(acostaTaiwanHasNoScheduledEvents(emptyAcostaListing), true);
+  assert.deepEqual(await scrapeAcostaTaiwanEvents({fetchHtml: async () => emptyAcostaListing}), []);
+});
+
+test('an empty challenge, changed listing or partially empty venue list still fails', async () => {
+  for (const html of ['<main>Just a moment...</main>', '<main>acosta! 台湾のイベント一覧</main>',
+    emptyAcostaListing.replace('台北 現在予定されている日程はありません', '台北 新日程'),
+    emptyAcostaListing.replace('</main>', '<a href="/event/new-format/">新日程</a></main>')]) {
+    assert.equal(acostaTaiwanHasNoScheduledEvents(html), false);
+    await assert.rejects(() => scrapeAcostaTaiwanEvents({fetchHtml: async () => html}), {code: 'acosta_events_parse_empty'});
+  }
+});
+
+test('retry imports only selected acosta source and preserves all stored events', async () => {
+  const reports = [], statements = [];
+  const unexpectedFetch = async () => {throw new Error('Successful source must not be fetched again');};
+  const pool = transactionPool(async (sql) => {statements.push(sql);return [[]];});
+  await importEvents(pool, {sourceKeys: ['acosta-source'], doujin: unexpectedFetch, cosmos: unexpectedFetch,
+    acosta: () => scrapeAcostaTaiwanEvents({fetchHtml: async () => emptyAcostaListing})}, (report) => reports.push(report));
+  assert.deepEqual(reports.map(({sourceKey, status, importedCount}) => ({sourceKey, status, importedCount})),
+    [{sourceKey: 'acosta-source', status: 'success', importedCount: 0}]);
+  assert.ok(!statements.some((sql) => /\b(?:UPDATE|DELETE|INSERT INTO events)\b/.test(sql)));
+});
+
+test('invalid source selection fails before any request', async () => {
+  for (const sourceKeys of [[], ['typo'], 'doujin-source']) {
+    await assert.rejects(() => collectEventSources({sourceKeys}), {code: 'invalid_event_sources'});
+  }
 });
 
 test('all blocked sources still persist three failure reports', async () => {

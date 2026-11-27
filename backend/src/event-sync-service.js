@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { importEvents } from '../scripts/scrape-events.js';
+import { importEvents, eventSourceKeys } from '../scripts/scrape-events.js';
 import { sourceSnapshotsTableSql } from '../scripts/event-snapshot.js';
 
 export const eventSyncJobsTableSql = `CREATE TABLE IF NOT EXISTS event_sync_jobs (
@@ -45,10 +45,12 @@ export function createEventSyncService(pool, {
       connection.release();
     } catch { connection.destroy(); }
   };
-  const executeJob = async (id, connection) => {
-    const sources = [];
+  const executeJob = async (id, connection, previousSources = []) => {
+    const sources = previousSources.filter((source) => source.status === 'success'
+      && eventSourceKeys.includes(source.sourceKey));
+    const sourceKeys = eventSourceKeys.filter((key) => !sources.some((source) => source.sourceKey === key));
     try {
-      await importer(pool, {}, async (report, db = pool) => {
+      if (sourceKeys.length) await importer(pool, {sourceKeys}, async (report, db = pool) => {
         await db.execute(`INSERT INTO source_sync_runs
           (source_key,source_url,status,imported_count,error_code,error_message) VALUES (?,?,?,?,?,?)`,
         [report.sourceKey, report.sourceUrl, report.status, report.importedCount,
@@ -65,9 +67,10 @@ export function createEventSyncService(pool, {
       if (status === 'partial') notifyFailure({id, status, sources});
     } catch (error) {
       const code = String(error.code ?? 'sync_failed').slice(0, 80);
-      await pool.execute(`UPDATE event_sync_jobs SET status='failure', sources_json=?, error_code=?,
-        finished_at=UTC_TIMESTAMP() WHERE id=?`, [JSON.stringify(sources), code, id]);
-      notifyFailure({id, status: 'failure', errorCode: code});
+      const status = sources.some((source) => source.status === 'success') ? 'partial' : 'failure';
+      await pool.execute(`UPDATE event_sync_jobs SET status=?, sources_json=?, error_code=?,
+        finished_at=UTC_TIMESTAMP() WHERE id=?`, [status, JSON.stringify(sources), code, id]);
+      notifyFailure({id, status, errorCode: code});
     } finally { await release(connection); }
   };
   const start = async (date = null) => {
@@ -86,10 +89,15 @@ export function createEventSyncService(pool, {
       await connection.execute(`UPDATE event_sync_jobs SET status='failure', error_code='sync_interrupted',
         finished_at=UTC_TIMESTAMP() WHERE status='running'`);
       let job;
+      let previousSources = [];
       if (!date) {
         const [recent] = await connection.execute(`SELECT *, TIMESTAMPDIFF(SECOND, finished_at, UTC_TIMESTAMP()) AS recent_age
           FROM event_sync_jobs WHERE status IN ('success','partial') ORDER BY finished_at DESC LIMIT 1`);
         if (recent[0] && recent[0].recent_age < 60) return {...formatJob(recent[0]), reused: true};
+        const calendarDate = (value) => new Intl.DateTimeFormat('en-CA', {timeZone}).format(new Date(value));
+        if (recent[0]?.status === 'partial' && calendarDate(recent[0].started_at) === calendarDate(now())) {
+          previousSources = formatJob(recent[0]).sources;
+        }
       }
       if (date) {
         const [rows] = await connection.execute(`SELECT *,
@@ -99,18 +107,21 @@ export function createEventSyncService(pool, {
         if (job && (job.status === 'success' || job.attempts >= maxAttempts || job.retry_age < retrySeconds)) {
           return {...formatJob(job), reused: true};
         }
+        if (job) previousSources = formatJob(job).sources;
       }
+      const retainedSources = previousSources.filter((source) => source.status === 'success'
+        && eventSourceKeys.includes(source.sourceKey));
       const id = job?.id ?? crypto.randomUUID();
       if (job) {
         await connection.execute(`UPDATE event_sync_jobs SET status='running', attempts=attempts+1,
-          sources_json=NULL, error_code=NULL, started_at=UTC_TIMESTAMP(), finished_at=NULL WHERE id=?`, [id]);
+          sources_json=?, error_code=NULL, started_at=UTC_TIMESTAMP(), finished_at=NULL WHERE id=?`, [JSON.stringify(retainedSources), id]);
       } else {
-        await connection.execute(`INSERT INTO event_sync_jobs (id,scheduled_date,status,started_at)
-          VALUES (?,?,'running',UTC_TIMESTAMP())`, [id, date]);
+        await connection.execute(`INSERT INTO event_sync_jobs (id,scheduled_date,status,started_at,sources_json)
+          VALUES (?,?,'running',UTC_TIMESTAMP(),?)`, [id, date, JSON.stringify(retainedSources)]);
       }
       handedOff = true;
-      void executeJob(id, connection).catch((error) => notifyFailure({id, errorCode: error.code ?? 'sync_job_storage_failed'}));
-      return {id, status: 'running', attempts: (job?.attempts ?? 0) + 1, sources: [], reused: false};
+      void executeJob(id, connection, retainedSources).catch((error) => notifyFailure({id, errorCode: error.code ?? 'sync_job_storage_failed'}));
+      return {id, status: 'running', attempts: (job?.attempts ?? 0) + 1, sources: retainedSources, reused: false};
     } finally {
       if (!handedOff) {
         if (ownsLock) await release(connection);

@@ -25,13 +25,13 @@ function memoryPool(clock) {
         retry_age: row.finished_at ? (clock().getTime() - row.finished_at.getTime()) / 1000 : null}))];
     }
     if (sql.startsWith('INSERT INTO event_sync_jobs')) {
-      jobs.set(params[0], {id: params[0], scheduled_date: params[1], status: 'running', attempts: 1, started_at: clock(), finished_at: null});
+      jobs.set(params[0], {id: params[0], scheduled_date: params[1], sources_json: params[2], status: 'running', attempts: 1, started_at: clock(), finished_at: null});
     } else if (sql.includes("WHERE status='running'")) {
       for (const row of jobs.values()) if (row.status === 'running') Object.assign(row, {status: 'failure', error_code: 'sync_interrupted', finished_at: clock()});
     } else if (sql.includes('attempts=attempts+1')) {
-      const row = jobs.get(params[0]);Object.assign(row, {status: 'running', attempts: row.attempts + 1, sources_json: null, error_code: null, finished_at: null});
+      const row = jobs.get(params[1]);Object.assign(row, {status: 'running', attempts: row.attempts + 1, sources_json: params[0], error_code: null, finished_at: null});
     } else if (sql.includes('SET status=?')) {
-      Object.assign(jobs.get(params[2]), {status: params[0], sources_json: params[1], finished_at: clock()});
+      Object.assign(jobs.get(params[sql.includes('error_code=?') ? 3 : 2]), {status: params[0], sources_json: params[1], error_code: sql.includes('error_code=?') ? params[2] : null, finished_at: clock()});
     } else if (sql.includes("SET status='failure', sources_json=?")) {
       Object.assign(jobs.get(params[2]), {status: 'failure', sources_json: params[0], error_code: params[1], finished_at: clock()});
     } else if (sql.includes('SET sources_json=?')) jobs.get(params[1]).sources_json = params[0];
@@ -118,4 +118,72 @@ test('retrying a just-completed manual request reuses the result instead of bill
   const second = await service.startManual();await finished(service, second.id);
   assert.notEqual(second.id, first.id);
   assert.equal(calls, 2);
+});
+
+test('daily retries retain committed successes across restart and never refetch ZenRows', async () => {
+  let time = new Date('2026-10-06T04:00:00Z');
+  const now = () => time, pool = memoryPool(now), calls = [];
+  let acostaAttempts = 0;
+  const options = {now, notifyFailure() {}, importer: async (_pool, {sourceKeys}, report) => {
+    for (const sourceKey of sourceKeys) {
+      calls.push(sourceKey);
+      const failed = sourceKey === 'acosta-source' && ++acostaAttempts < 3;
+      const publish = await report({sourceKey, sourceUrl: 'https://example.com',
+        status: failed ? 'failure' : 'success', importedCount: failed ? 0 : sourceKey === 'acosta-source' ? 0 : 41});
+      publish();
+    }
+  }};
+  let service = createEventSyncService(pool, options);
+  const first = await service.runDueDaily();
+  assert.equal((await finished(service, first.id)).status, 'partial');
+  for (let retry = 0; retry < 2; retry++) {
+    time = new Date(time.getTime() + 1800_000);
+    service = createEventSyncService(pool, options);
+    await service.initialize();
+    await service.runDueDaily();
+    await finished(service, first.id);
+  }
+  const result = await service.readJob(first.id);
+  assert.equal(result.status, 'success');
+  assert.equal(result.sources.length, 3);
+  assert.equal(result.sources.find((source) => source.sourceKey === 'doujin-source').importedCount, 41);
+  assert.deepEqual(calls, ['doujin-source', 'cosmos-source', 'acosta-source', 'acosta-source', 'acosta-source']);
+  assert.equal((await service.runDueDaily()).reused, true);
+  time = new Date('2026-10-07T04:00:00Z');
+  const nextDay = await service.runDueDaily();await finished(service, nextDay.id);
+  assert.deepEqual(calls.slice(-3), ['doujin-source', 'cosmos-source', 'acosta-source']);
+});
+
+test('manual retry of a partial result on the same day fetches only failed sources', async () => {
+  let time = new Date('2026-10-06T04:00:00Z');const now = () => time, pool = memoryPool(now), calls = [];
+  let failAcosta = true;
+  const service = createEventSyncService(pool, {now, notifyFailure() {}, importer: async (_pool, {sourceKeys}, report) => {
+    calls.push([...sourceKeys]);
+    for (const sourceKey of sourceKeys) {
+      const publish = await report({sourceKey, status: sourceKey === 'acosta-source' && failAcosta ? 'failure' : 'success', importedCount: 0});
+      publish();
+    }
+    failAcosta = false;
+  }});
+  const first = await service.startManual();await finished(service, first.id);
+  time = new Date(time.getTime() + 61_000);
+  const second = await service.startManual();
+  assert.equal((await finished(service, second.id)).status, 'success');
+  assert.deepEqual(calls, [['doujin-source', 'cosmos-source', 'acosta-source'], ['acosta-source']]);
+});
+
+test('an interrupted retry keeps successful sources even when remaining fetches throw', async () => {
+  let time = new Date('2026-10-06T04:00:00Z');const now = () => time, pool = memoryPool(now), calls = [];
+  pool.jobs.set('interrupted', {id: 'interrupted', scheduled_date: '2026-10-06', status: 'running',
+    attempts: 1, started_at: time, finished_at: null,
+    sources_json: JSON.stringify([{sourceKey: 'doujin-source', status: 'success', importedCount: 41}])});
+  const service = createEventSyncService(pool, {now, notifyFailure() {}, importer: async (_pool, {sourceKeys}) => {
+    calls.push(sourceKeys);throw Object.assign(new Error('offline'), {code: 'offline'});
+  }});
+  await service.initialize();time = new Date(time.getTime() + 1800_000);
+  await service.runDueDaily();const result = await finished(service, 'interrupted');
+  assert.equal(result.status, 'partial');
+  assert.equal(result.sources[0].sourceKey, 'doujin-source');
+  assert.equal(result.errorCode, 'offline');
+  assert.deepEqual(calls, [['cosmos-source', 'acosta-source']]);
 });

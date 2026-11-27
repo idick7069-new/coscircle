@@ -14,6 +14,7 @@ const cosmosOenEventUrl =
   'https://cosmos.oen.tw/events/3DGSdlOZgTrm1idEZRYTbUp2f4y';
 const acostaTaiwanUrl = 'https://acosta.jp/area/over-sea/taiwan/';
 const acostaOrigin = new URL(acostaTaiwanUrl).origin;
+export const eventSourceKeys = ['doujin-source', 'cosmos-source', 'acosta-source'];
 
 export async function fetchDoujinEventsHtml(url = allEventsSourceUrl) {
   return fetchSourceHtml(url);
@@ -30,14 +31,19 @@ export async function collectEventSources({
   cosmos = scrapeCosmosOenEvents,
   acosta = scrapeAcostaTaiwanEvents,
   supplemental,
+  sourceKeys,
 } = {}) {
+  if (sourceKeys && (!Array.isArray(sourceKeys) || !sourceKeys.length
+      || sourceKeys.some((key) => !eventSourceKeys.includes(key)))) {
+    throw Object.assign(new Error('invalid_event_sources'), {code: 'invalid_event_sources'});
+  }
   const definitions = [
     {sourceKey: 'doujin-source', sourceUrl: allEventsSourceUrl, fetch: doujin},
     ...(supplemental ? [{sourceKey: 'supplemental-source', sourceUrl: '', fetch: supplemental}] : [
       {sourceKey: 'cosmos-source', sourceUrl: cosmosOenEventUrl, fetch: cosmos},
       {sourceKey: 'acosta-source', sourceUrl: acostaTaiwanUrl, fetch: acosta},
     ]),
-  ];
+  ].filter((source) => !sourceKeys || sourceKeys.includes(source.sourceKey));
   const results = await Promise.allSettled(definitions.map((source) => Promise.resolve().then(source.fetch)));
   const sourceResults = results.map((result, index) => ({
     sourceKey: definitions[index].sourceKey,
@@ -48,13 +54,14 @@ export async function collectEventSources({
     errorCode: result.status === 'rejected' ? String(result.reason?.response?.status ?? result.reason?.code ?? 'fetch_failed') : null,
     errorMessage: result.status === 'rejected' ? summarizeHttpError(result.reason) : null,
   }));
-  const doujinSucceeded = results[0].status === 'fulfilled';
-  const doujinEvents = doujinSucceeded ? results[0].value : [];
-  const supplementalEvents = sourceResults.slice(1).flatMap((source) => source.events);
+  const doujinResult = sourceResults.find((source) => source.sourceKey === 'doujin-source');
+  const doujinSucceeded = doujinResult?.status === 'success';
+  const doujinEvents = doujinResult?.events ?? [];
+  const supplementalEvents = sourceResults.filter((source) => source.sourceKey !== 'doujin-source').flatMap((source) => source.events);
   for (const result of results) {
     if (result.status === 'rejected') console.warn('[event-scraper] source failed; existing records preserved', summarizeHttpError(result.reason));
   }
-  if (!doujinEvents.length && !supplementalEvents.length) {
+  if (sourceResults.every((source) => source.status === 'failure')) {
     throw Object.assign(new Error('all_event_sources_unavailable'), {sourceResults});
   }
   return { doujinEvents, supplementalEvents, doujinSucceeded, sourceResults };
@@ -309,20 +316,41 @@ export function parseCosmosOenEventFromHtml(html, eventUrl = cosmosOenEventUrl) 
   };
 }
 
-async function scrapeAcostaTaiwanEvents() {
-  const listHtml = await fetchPublicHtml(acostaTaiwanUrl);
+export async function scrapeAcostaTaiwanEvents({fetchHtml = fetchPublicHtml} = {}) {
+  const listHtml = await fetchHtml(acostaTaiwanUrl);
   const eventUrls = acostaTaiwanEventUrlsFromHtml(listHtml);
-  if (!eventUrls.length) throw new Error('acosta_events_parse_empty');
+  if (!eventUrls.length) {
+    if (acostaTaiwanHasNoScheduledEvents(listHtml)) return [];
+    throw Object.assign(new Error('acosta_events_parse_empty'), {code: 'acosta_events_parse_empty'});
+  }
   const events = [];
 
   for (const eventUrl of eventUrls) {
-    const eventHtml = await fetchPublicHtml(eventUrl);
+    const eventHtml = await fetchHtml(eventUrl);
     const event = parseAcostaEventFromHtml(eventHtml, eventUrl);
     if (!event) throw new Error(`acosta_event_parse_failed: ${eventUrl}`);
     events.push(event);
   }
 
   return events;
+}
+
+export function acostaTaiwanHasNoScheduledEvents(html) {
+  const $ = cheerio.load(html);
+  const main = $('main');
+  if (!/acosta!\s*台湾のイベント一覧/.test(normalize(main.text()))
+      || main.find('a[href*="/event/"]').length) return false;
+  const venues = new Set();
+  let allEmpty = true;
+  main.find('a[href]').each((_index, element) => {
+    const href = absoluteUrl($(element).attr('href'), acostaTaiwanUrl);
+    if (!href) return;
+    const url = new URL(href);
+    if (url.origin !== acostaOrigin || !/^\/venue\/(taipei_sccp|takao)\/$/.test(url.pathname)) return;
+    venues.add(url.pathname);
+    if (!normalize($(element).text()).includes('現在予定されている日程はありません')) allEmpty = false;
+  });
+  return allEmpty && venues.size === 2;
 }
 
 export function acostaTaiwanEventUrlsFromHtml(html) {
