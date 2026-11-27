@@ -1,6 +1,6 @@
 # App Store 商店資料草稿
 
-2026-11-24。尚未提交至 Apple；先保留免費 App 的既有產品定位，實際定價及地區仍須在 App Store Connect 設定。
+2026-11-26。App Store Connect 正式版本 1.0.1（10）已送出 App Review，提交時狀態為「等待審查」。使用者確認免費、僅台灣／香港／澳門發行；發佈方式為審查通過後手動發佈。
 
 ## 名稱
 
@@ -12,7 +12,7 @@ CosCircle｜同坑認親・場次預定
 
 ## 宣傳文字
 
-從出發前的場次預定，到現場的相遇與認親，和喜歡相同作品的朋友一起準備。讓希希陪你整理名片、找到同坑，把下一場留給熟悉的小圈圈。
+找同坑、發預定，讓下一場有熟悉的你。分享場次預定與日常動態，透過留言、戳友及小圈圈保持聯繫；由你決定分享範圍，讓交流回歸共同喜好。
 
 ## 完整介紹
 
@@ -25,6 +25,9 @@ CosCircle 是為 Coser、攝影與喜歡跑場的同好打造的交流 App。整
 
 【安排下一場預定】
 依日期瀏覽活動，記錄參加的日子、作品、角色與互動時段。多日場次可分開安排，再把預定整理成分享圖。
+
+【同坑動態，場前場後都能聊】
+分享圖文動態與場次預定，透過留言、回覆和按讚互動。依需求選擇公開、戳友或指定小圈圈的分享範圍。
 
 【同坑雷達，尋找夥伴】
 查看彼此的共同作品，也能探索大家喜歡什麼，找到可以聊同一個坑的人。
@@ -44,7 +47,15 @@ CosCircle 是為 Coser、攝影與喜歡跑場的同好打造的交流 App。整
 
 ## 第一版版本資訊
 
-首次推出 CosCircle：建立同好名片、瀏覽活動並發佈預定，使用同坑雷達尋找夥伴，透過戳友與小圈圈保持聯繫。提供位置分享、預定分享圖，以及封鎖、檢舉與帳號刪除功能。
+首次推出 CosCircle：建立同好名片、瀏覽活動並發佈預定，使用同坑雷達尋找夥伴，透過戳友與小圈圈保持聯繫。分享圖文動態與場次預定，透過留言、回覆及按讚互動。提供位置分享、預定分享圖，以及封鎖、檢舉與帳號刪除功能。
+
+## 關鍵字
+
+cosplay,coser,攝影,同人,場次,預定,認親,同坑,動漫,角色扮演,名片,小圈圈,活動,動態
+
+## 版權欄位
+
+2026 Wu CHENGKANG
 
 ## 公開網址
 
@@ -55,10 +66,10 @@ CosCircle 是為 Coser、攝影與喜歡跑場的同好打造的交流 App。整
 - 兒童安全：https://coscircle.app/child-safety.html
 - 刪除帳號：https://coscircle.app/delete-account.html
 
-## 審查備註草稿
+## 審查備註
 
-CosCircle is a cosplay/fandom event companion and community app. It is not a dating service. A dedicated review account must be provided in the App Review Information fields; do not reuse a Google Play account currently under review because sessions may invalidate one another.
+CosCircle is a cosplay/fandom event companion and community app. It is not a dating service. A dedicated Apple review account is provided privately in App Review Information. It is separate from the Google Play reviewer account.
 
-Email/password login does not require an SMS code or LINE account. The review account should already have completed onboarding and contain clearly labeled demonstration data. User-generated content can be reported from profiles, event booking cards, and circle menus; blocking and account deletion are available in the app. Location sharing is optional and user-controlled.
+Email/password login does not require an SMS code or LINE account. The review account has completed onboarding and contains clearly labeled, isolated demonstration data. User-generated content can be reported from profiles, event booking cards, and circle menus; blocking and account deletion are available in the app. Location sharing is optional and user-controlled.
 
-Do not submit this draft until native Apple/LINE authorization, Firebase notifications, Maps, signed build, privacy answers and the dedicated account have been verified. Do not copy private credentials into public store metadata.
+App Store version 1.0.1 (10) was submitted on November 26, 2026. Native authorization, notification delivery and other device-dependent behaviors remain part of the physical-device release checklist; do not describe uncompleted checks as passed. Do not copy private credentials into public store metadata.
